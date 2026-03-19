@@ -1,7 +1,7 @@
 # PULSE
 
 
-## Aplicație mobilă pentru medici, cu funcționalități AI
+## Aplicație pentru medici, cu funcționalități AI
 
 
 PULSE este o aplicație mobilă gândită pentru medici, care aduce într-un singur loc articole, știri, cursuri și evenimente profesionale. Scopul aplicației este să ofere acces mai rapid la conținut relevant.
