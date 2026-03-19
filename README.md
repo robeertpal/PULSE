@@ -4,7 +4,7 @@
 ## Aplicație pentru medici, cu funcționalități AI
 
 
-PULSE este o aplicație mobilă gândită pentru medici, care aduce într-un singur loc articole, știri, cursuri și evenimente profesionale. Scopul aplicației este să ofere acces mai rapid la conținut relevant.
+PULSE este o aplicație gândită pentru medici, care aduce într-un singur loc articole, știri, cursuri și evenimente profesionale. Scopul aplicației este să ofere acces mai rapid la conținut relevant.
 
 
 În plus, aplicația integrează două funcționalități AI principale:
