@@ -3,15 +3,54 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 
-class HomeHeader extends StatelessWidget {
+class HomeHeader extends StatefulWidget {
   final String doctorName;
   final String avatarUrl;
+  final int emcPoints;
 
   const HomeHeader({
     super.key,
     required this.doctorName,
     this.avatarUrl = '',
+    this.emcPoints = 142,
   });
+
+  @override
+  State<HomeHeader> createState() => _HomeHeaderState();
+}
+
+class _HomeHeaderState extends State<HomeHeader> with SingleTickerProviderStateMixin {
+  late AnimationController _shimmerController;
+  late Animation<double> _shimmerAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    );
+    _shimmerAnimation = Tween<double>(begin: -1.0, end: 2.0).animate(
+      CurvedAnimation(parent: _shimmerController, curve: Curves.easeInOut),
+    );
+    // Play shimmer once on load
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) _shimmerController.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _shimmerController.dispose();
+    super.dispose();
+  }
+
+  String _getTimeGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Bună dimineața';
+    if (hour < 18) return 'Bună ziua';
+    return 'Bună seara';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,6 +59,7 @@ class HomeHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Top Bar: Menu + Logo | Notification + Avatar ──
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -30,15 +70,15 @@ class HomeHeader extends StatelessWidget {
                 children: [
                   GestureDetector(
                     onTap: () => _showPremiumMenu(context),
-                    behavior: HitTestBehavior.opaque, // Permite click pe zonele transparente din Padding/Container
+                    behavior: HitTestBehavior.opaque,
                     child: Container(
-                      width: 50, // O zonă de 50 de pixeli este uriașă și super ușor de apăsat cu degetul
+                      width: 50,
                       height: 50,
                       alignment: Alignment.centerLeft,
                       child: SvgPicture.asset(
                         'assets/icons/ellipsis.svg',
-                        height: 5,
-                        width: 5,
+                        height: 4,
+                        width: 4,
                         colorFilter: const ColorFilter.mode(
                           PulseTheme.textPrimary,
                           BlendMode.srcIn,
@@ -48,53 +88,183 @@ class HomeHeader extends StatelessWidget {
                   ),
                   Image.asset(
                     'assets/images/in-app-logo.png',
-                    height: 52, // Ajustat ușor să balanseze vizual butonul de meniu
+                    height: 55,
                   ),
                 ],
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SvgPicture.asset(
-                    'assets/icons/bell.svg',
-                    height: 28,
-                    width: 28,
-                    colorFilter: const ColorFilter.mode(
-                      PulseTheme.textPrimary,
-                      BlendMode.srcIn,
+                  // EMC Points Mini Badge
+                  _buildEmcMiniCard(),
+                  const SizedBox(width: 16),
+                  // Notification bell with subtle ring
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: PulseTheme.surface,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: PulseTheme.border, width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: SvgPicture.asset(
+                        'assets/icons/bell.svg',
+                        height: 22,
+                        width: 22,
+                        colorFilter: const ColorFilter.mode(
+                          PulseTheme.textPrimary,
+                          BlendMode.srcIn,
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 20),
-                  SvgPicture.asset(
-                    'assets/icons/people.svg',
-                    width: 28,
-                    height: 28,
-                    colorFilter: const ColorFilter.mode(
-                      PulseTheme.textPrimary,
-                      BlendMode.srcIn,
-                    ),
-                  ),
+                  const SizedBox(width: 10),
+                  // Avatar with gradient ring
+                  _buildAvatarWithRing(),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 28),
+          // ── Greeting Section ──
           Text(
-            'Salut, Dr. $doctorName',
+            '${_getTimeGreeting()},',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontSize: 15,
+              color: PulseTheme.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Dr. ${widget.doctorName}',
             style: Theme.of(context).textTheme.displaySmall,
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Explorează noutățile medicale de azi',
-            style: Theme.of(context).textTheme.bodyMedium,
+          const SizedBox(height: 6),
+          // Shimmer subtitle
+          AnimatedBuilder(
+            animation: _shimmerAnimation,
+            builder: (context, child) {
+              return ShaderMask(
+                shaderCallback: (bounds) {
+                  return LinearGradient(
+                    begin: Alignment(_shimmerAnimation.value - 1, 0),
+                    end: Alignment(_shimmerAnimation.value, 0),
+                    colors: const [
+                      PulseTheme.textSecondary,
+                      PulseTheme.primary,
+                      PulseTheme.textSecondary,
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                  ).createShader(bounds);
+                },
+                child: child!,
+              );
+            },
+            child: Text(
+              'Explorează noutățile medicale de azi.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.white, // ShaderMask needs white text
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
+  Widget _buildEmcMiniCard() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF8B5CF6).withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SvgPicture.asset(
+            'assets/icons/EMC.svg',
+            width: 18,
+            height: 18,
+            colorFilter: const ColorFilter.mode(
+              Colors.white,
+              BlendMode.srcIn,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '${widget.emcPoints}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+              letterSpacing: -0.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvatarWithRing() {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: PulseTheme.avatarRingGradient,
+      ),
+      padding: const EdgeInsets.all(2.5),
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: PulseTheme.surface,
+          border: Border.all(color: PulseTheme.surface, width: 1.5),
+        ),
+        child: ClipOval(
+          child: widget.avatarUrl.isNotEmpty
+              ? Image.network(widget.avatarUrl, fit: BoxFit.cover)
+              : Center(
+                  child: SvgPicture.asset(
+                    'assets/icons/people.svg',
+                    width: 20,
+                    height: 20,
+                    colorFilter: const ColorFilter.mode(
+                      PulseTheme.textSecondary,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+
+  // ────────────────── Premium Menu (preserved from previous) ──────────────────
+
   void _showPremiumMenu(BuildContext context) {
-    int selectedIndex = 0; // Meniul pornește cu prima opțiune activă
+    int selectedIndex = 0;
 
     showModalBottomSheet(
       context: context,
@@ -104,12 +274,12 @@ class HomeHeader extends StatelessWidget {
         return StatefulBuilder(
           builder: (context, setState) {
             return BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10), // Redus pentru un blur mai blând
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Container(
                 height: MediaQuery.of(context).size.height * 0.65,
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 decoration: BoxDecoration(
-                  color: PulseTheme.background.withOpacity(0.75), // Am redus și opacitatea ca să se vadă mai bine efectul de sticlă
+                  color: PulseTheme.background.withOpacity(0.75),
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
                   border: Border.all(color: Colors.white.withOpacity(0.4), width: 1),
                   boxShadow: [
@@ -144,7 +314,6 @@ class HomeHeader extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 32),
-                    // Lista verticală care emulează perfect comportamentul barei de navigație de jos
                     _buildVerticalNavItem(context, 0, selectedIndex, 'Punctele mele EMC', 'assets/icons/EMC.svg', setState),
                     const SizedBox(height: 8),
                     _buildVerticalNavItem(context, 1, selectedIndex, 'Cursurile mele', 'assets/icons/graduation.svg', setState),
@@ -195,9 +364,8 @@ class HomeHeader extends StatelessWidget {
         setState(() {
           selectedIndex = index;
         });
-        // Așteptăm să se termine animația de "Pilulă albă" apoi navigăm!
         Future.delayed(const Duration(milliseconds: 300), () {
-          Navigator.pop(context); // Închide meniul de sticlă
+          Navigator.pop(context);
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -222,7 +390,7 @@ class HomeHeader extends StatelessWidget {
           vertical: 16,
         ),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.transparent, // Aceeași pilulă albă ca și jos
+          color: isSelected ? Colors.white : Colors.transparent,
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
@@ -234,9 +402,8 @@ class HomeHeader extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Container fix (SizedBox) apără iconițele să nu strice alinierea laterală a textului din dreapta lor.
             SizedBox(
-              width: 30, // Forțăm lățime fixă de box pentru toate SVg-urile, indiferent cât de late sunt
+              width: 30,
               child: Center(
                 child: SvgPicture.asset(
                   iconPath,
@@ -266,10 +433,14 @@ class HomeHeader extends StatelessWidget {
             AnimatedOpacity(
               duration: const Duration(milliseconds: 300),
               opacity: isSelected ? 1.0 : 0.0,
-              child: const Icon(
-                Icons.chevron_right_rounded,
-                color: PulseTheme.textPrimary,
-                size: 28,
+              child: SvgPicture.asset(
+                'assets/icons/arrow.right.svg',
+                width: 20,
+                height: 20,
+                colorFilter: const ColorFilter.mode(
+                  PulseTheme.textPrimary,
+                  BlendMode.srcIn,
+                ),
               ),
             ),
           ],
