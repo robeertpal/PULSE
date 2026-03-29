@@ -1,8 +1,21 @@
-# PULSE
+<p align="center">
+  <img src="mobile/assets/images/logo.png" alt="PULSE Logo" width="120"/>
+</p>
 
+<h1 align="center">PULSE</h1>
 
-## Aplicație pentru medici, cu funcționalități AI
+<p align="center">
+  <strong>Aplicație pentru medici, cu funcționalități AI</strong>
+</p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white" alt="Flutter"/>
+  <img src="https://img.shields.io/badge/Dart-3.x-0175C2?logo=dart&logoColor=white" alt="Dart"/>
+  <img src="https://img.shields.io/badge/Platform-iOS%20%7C%20Android-lightgrey" alt="Platform"/>
+  <img src="https://img.shields.io/badge/AI-Powered-blueviolet" alt="AI"/>
+</p>
+
+---
 
 PULSE este o aplicație gândită pentru medici, care aduce într-un singur loc articole, știri, cursuri și evenimente profesionale. Scopul aplicației este să ofere acces mai rapid la conținut relevant.
 
@@ -15,7 +28,7 @@ PULSE este o aplicație gândită pentru medici, care aduce într-un singur loc 
 ---
 
 
-## Problema
+## 🧩 Problema
 
 
 Medicii au acces la mult conținut util, dar acesta este adesea împrăștiat, greu de filtrat și dificil de parcurs rapid de pe telefon. Într-un ecosistem cu multe articole, reviste, cursuri și evenimente, utilizatorul pierde timp până găsește ceva relevant pentru specializarea și interesele lui.
@@ -24,7 +37,7 @@ Medicii au acces la mult conținut util, dar acesta este adesea împrăștiat, g
 ---
 
 
-## Soluția
+## 💡 Soluția
 
 
 PULSE mută experiența unui hub medical într-o aplicație rapidă, clară și personalizată.
@@ -41,7 +54,7 @@ Aplicația oferă:
 ---
 
 
-## Obiectivele proiectului
+## 🎯 Obiectivele proiectului
 
 
 - construire aplicație pentru acces rapid la conținut profesional
@@ -54,7 +67,7 @@ Aplicația oferă:
 ---
 
 
-## Funcționalități principale
+## ⚙️ Funcționalități principale
 
 
 ### Funcționalități de bază
@@ -68,7 +81,8 @@ Aplicația oferă:
 - vizualizare profil și activitate recentă
 
 
-### Funcționalități AI
+### 🤖 Funcționalități AI
+
 #### Agent AI 1 - Recomandări personalizate
 Recomandă articole, cursuri și evenimente în funcție de:
 - specializare
@@ -87,21 +101,20 @@ Permite:
 ---
 
 
-## User Journey
+## 🗺️ User Journey
 
 
 Fluxul principal al utilizatorului este:
 
 
-**Login → completare profil → feed principal → explorare conținut → deschidere articol → rezumat AI → recomandări personalizate → salvare conținut → revenire în profil**
+> **Login → completare profil → feed principal → explorare conținut → deschidere articol → rezumat AI → recomandări personalizate → salvare conținut → revenire în profil**
 
 
 ---
 
 
-### AI
+### 🧠 AI
 - integrare prin API pentru:
   - recomandări explicabile
   - rezumare articole
   - eventual clasificare/tagging de conținut
-
