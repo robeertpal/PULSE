@@ -26,7 +26,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   final ApiService _apiService = ApiService();
   List<ContentItem> _articles = [];
-  List<ContentItem> _coursesEvents = [];
+  List<ContentItem> _coursesAndEvents = [];
   List<ContentItem> _news = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -84,14 +84,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     try {
       final results = await Future.wait([
         _apiService.getArticles(),
-        _apiService.getCoursesEvents(),
+        _apiService.getCoursesAndEvents(),
         _apiService.getNews(),
       ]);
 
       if (mounted) {
         setState(() {
           _articles = results[0];
-          _coursesEvents = results[1];
+          _coursesAndEvents = results[1];
           _news = results[2];
           _isLoading = false;
         });
@@ -280,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           emptyIconAsset: 'assets/icons/graduation.svg',
           categoryColor: PulseTheme.courseContent,
           onActionTap: () => _navigateToTab(1), // Navighează către Cursuri
-          children: _coursesEvents.map((item) => ContentCard.fromModel(item)).toList(),
+          children: _coursesAndEvents.map((item) => ContentCard.fromModel(item)).toList(),
         )),
 
         const SizedBox(height: 24),
@@ -446,7 +446,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           emptyIconAsset: 'assets/icons/events.svg',
           categoryColor: PulseTheme.eventContent,
           onActionTap: () => _navigateToTab(3), // Navighează către Evenimente
-          children: _coursesEvents.take(1).map((i) => ContentCard.fromModel(i)).toList(),
+          children: _coursesAndEvents.take(1).map((i) => ContentCard.fromModel(i)).toList(),
         )),
 
         const SizedBox(height: 100),
