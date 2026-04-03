@@ -2,6 +2,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
+import '../models/content_item.dart';
+import '../services/api_service.dart';
 import '../widgets/home_header.dart';
 import '../widgets/featured_card.dart';
 import '../widgets/content_section.dart';
@@ -21,6 +23,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late AnimationController _entranceController;
   late List<Animation<double>> _fadeAnimations;
   late List<Animation<Offset>> _slideAnimations;
+
+  final ApiService _apiService = ApiService();
+  List<ContentItem> _articles = [];
+  List<ContentItem> _coursesEvents = [];
+  List<ContentItem> _news = [];
+  bool _isLoading = true;
+  String? _errorMessage;
 
   static const int _sectionCount = 6;
 
@@ -61,6 +70,40 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) _entranceController.forward();
     });
+    
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final results = await Future.wait([
+        _apiService.getArticles(),
+        _apiService.getCoursesEvents(),
+        _apiService.getNews(),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _articles = results[0];
+          _coursesEvents = results[1];
+          _news = results[2];
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = "A apărut o eroare la încărcarea datelor";
+        });
+      }
+    }
   }
 
   @override
@@ -195,6 +238,33 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // ────────────── Acasă Feed ──────────────
 
   Widget _buildAcasaFeed() {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.only(top: 100.0),
+          child: CircularProgressIndicator(color: PulseTheme.primary),
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 100.0),
+          child: Column(
+            children: [
+              Text(_errorMessage!, style: const TextStyle(color: PulseTheme.textSecondary)),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: _loadData,
+                child: const Text("Reîncearcă"),
+              )
+            ],
+          ),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -205,30 +275,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
         // Cursuri Section
         _animatedSection(3, ContentSection(
-          title: 'Cursuri',
+          title: 'Cursuri și Evenimente',
           emptyMessage: 'Cursurile vor apărea aici',
           emptyIconAsset: 'assets/icons/graduation.svg',
           categoryColor: PulseTheme.courseContent,
           onActionTap: () => _navigateToTab(1), // Navighează către Cursuri
-          children: const [
-            ContentCard(
-              title: 'Comunicarea medic-pacient',
-              subtitle: '6 module · 4h 30min',
-              tag: 'Curs Online',
-              categoryColor: PulseTheme.courseContent,
-              iconAsset: 'assets/icons/graduation.svg',
-              emcPoints: '+12',
-              progress: 0.35,
-            ),
-            ContentCard(
-              title: 'Antiobioterapia în 2026',
-              subtitle: 'Live · 28 Aprilie, 18:00',
-              tag: 'Webinar',
-              categoryColor: PulseTheme.courseContent,
-              iconAsset: 'assets/icons/graduation.svg',
-              emcPoints: '+8',
-            ),
-          ],
+          children: _coursesEvents.map((item) => ContentCard.fromModel(item)).toList(),
         )),
 
         const SizedBox(height: 24),
@@ -252,22 +304,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           emptyIconAsset: 'assets/icons/newspaper.svg',
           categoryColor: PulseTheme.newsContent,
           onActionTap: () => _navigateToTab(4), // Navighează către Știri
-          children: const [
-            ContentCard(
-              title: 'Ministerul Sănătății lansează noul sistem informatic',
-              subtitle: 'Acum 2 ore',
-              tag: 'Sistem',
-              categoryColor: PulseTheme.newsContent,
-              iconAsset: 'assets/icons/newspaper.svg',
-            ),
-            ContentCard(
-              title: 'Noi medicamente compensate aprobate ieri',
-              subtitle: 'Acum 5 ore',
-              tag: 'Farma',
-              categoryColor: PulseTheme.newsContent,
-              iconAsset: 'assets/icons/newspaper.svg',
-            ),
-          ],
+          children: _news.map((item) => ContentCard.fromModel(item)).toList(),
         )),
 
         const SizedBox(height: 100),
@@ -278,6 +315,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // ────────────── Pentru Tine Feed (AI Curated) ──────────────
 
   Widget _buildPentruTineFeed() {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.only(top: 100.0),
+          child: CircularProgressIndicator(color: PulseTheme.primary),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -376,24 +422,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           emptyIconAsset: 'assets/icons/sharedwithyou.svg',
           categoryColor: PulseTheme.primary,
           onActionTap: () => _navigateToTab(1), // Navighează către Cursuri
-          children: const [
-            ContentCard(
-              title: 'Ghid Practic: Managementul Durerii Cronice',
-              subtitle: '10 module · 6h 15min',
-              tag: 'Curs Recomandat',
-              categoryColor: PulseTheme.primary,
-              iconAsset: 'assets/icons/graduation.svg',
-              emcPoints: '+15',
-            ),
-            ContentCard(
-              title: 'Imunoterapia în Oncologie — Update 2026',
-              subtitle: 'Live · 5 Mai, 19:00',
-              tag: 'Webinar Recomandat',
-              categoryColor: PulseTheme.primary,
-              iconAsset: 'assets/icons/graduation.svg',
-              emcPoints: '+10',
-            ),
-          ],
+          children: _articles.where((i) => i.isFeatured).map((i) => ContentCard.fromModel(i)).toList(),
         )),
 
         const SizedBox(height: 24),
@@ -405,22 +434,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           emptyIconAsset: 'assets/icons/newspaper.svg',
           categoryColor: PulseTheme.courseContent,
           onActionTap: () => _navigateToTab(4), // Navighează către Articole (Știri)
-          children: const [
-            ContentCard(
-              title: 'Rezistența la antibiotice — Strategii noi 2026',
-              subtitle: 'Acum 3 ore',
-              tag: 'Relevant',
-              categoryColor: PulseTheme.courseContent,
-              iconAsset: 'assets/icons/newspaper.svg',
-            ),
-            ContentCard(
-              title: 'Inteligența artificială în diagnosticul imagistic',
-              subtitle: 'Acum 1 zi',
-              tag: 'Trending',
-              categoryColor: PulseTheme.courseContent,
-              iconAsset: 'assets/icons/AI.svg',
-            ),
-          ],
+          children: _articles.map((i) => ContentCard.fromModel(i)).toList(),
         )),
 
         const SizedBox(height: 24),
@@ -432,16 +446,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           emptyIconAsset: 'assets/icons/events.svg',
           categoryColor: PulseTheme.eventContent,
           onActionTap: () => _navigateToTab(3), // Navighează către Evenimente
-          children: const [
-            ContentCard(
-              title: 'Simpozionul de Medicină Internă — Cluj-Napoca',
-              subtitle: '15 Aprilie 2026',
-              tag: 'Sugerat',
-              categoryColor: PulseTheme.eventContent,
-              iconAsset: 'assets/icons/events.svg',
-              emcPoints: '+20',
-            ),
-          ],
+          children: _coursesEvents.take(1).map((i) => ContentCard.fromModel(i)).toList(),
         )),
 
         const SizedBox(height: 100),

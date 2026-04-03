@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
+import '../models/content_item.dart';
 import 'emc_badge.dart';
 
 class ContentCard extends StatefulWidget {
@@ -22,6 +23,38 @@ class ContentCard extends StatefulWidget {
     this.progress,
     this.emcPoints,
   });
+
+  factory ContentCard.fromModel(ContentItem model, {double? progress}) {
+    Color categoryColor = PulseTheme.primary;
+    String iconAsset = 'assets/icons/newspaper.svg';
+
+    if (model.contentType == 'article') {
+      categoryColor = PulseTheme.courseContent; // In design articles are news-like but here courseContent
+      iconAsset = 'assets/icons/newspaper.svg';
+    } else if (model.contentType == 'news') {
+      categoryColor = PulseTheme.newsContent;
+      iconAsset = 'assets/icons/newspaper.svg';
+    } else if (model.contentType == 'course') {
+      categoryColor = PulseTheme.courseContent;
+      iconAsset = 'assets/icons/graduation.svg';
+    } else if (model.contentType == 'event') {
+      categoryColor = PulseTheme.eventContent;
+      iconAsset = 'assets/icons/events.svg';
+    } else if (model.contentType == 'publication') {
+      categoryColor = PulseTheme.magazineContent;
+      iconAsset = 'assets/icons/books.svg';
+    }
+
+    return ContentCard(
+      title: model.title,
+      subtitle: model.shortDescription ?? (model.authorName ?? ''),
+      tag: model.tag ?? model.contentType,
+      categoryColor: categoryColor,
+      iconAsset: iconAsset,
+      progress: progress,
+      emcPoints: model.emcCredits != null ? '+${model.emcCredits}' : null,
+    );
+  }
 
   @override
   State<ContentCard> createState() => _ContentCardState();
