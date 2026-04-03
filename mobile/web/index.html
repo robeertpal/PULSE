@@ -1,0 +1,622 @@
+<!DOCTYPE html><html><head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="PULSE - Pair your medical passion with technology.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="PULSE">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <title>PULSE</title>
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+  <style id="splash-screen-style">
+    html {
+      height: 100%
+    }
+
+    body {
+      margin: 0;
+      min-height: 100%;
+      background-color: #F8FAFC;
+          background-size: 100% 100%;
+    }
+
+    .center {
+      margin: 0;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      -ms-transform: translate(-50%, -50%);
+      transform: translate(-50%, -50%);
+    }
+
+    .contain {
+      display:block;
+      width:100%; height:100%;
+      object-fit: contain;
+    }
+
+    .stretch {
+      display:block;
+      width:100%; height:100%;
+    }
+
+    .cover {
+      display:block;
+      width:100%; height:100%;
+      object-fit: cover;
+    }
+
+    .bottom {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      -ms-transform: translate(-50%, 0);
+      transform: translate(-50%, 0);
+    }
+
+    .bottomLeft {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+    }
+
+    .bottomRight {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+    }
+
+    /* ═══════════════════════════════════════════════════════ */
+    /*  DESKTOP OVERLAY — shown when screen is too wide       */
+    /* ═══════════════════════════════════════════════════════ */
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50%      { transform: translateY(-14px); }
+    }
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 40px rgba(200, 50, 150, 0.25), 0 20px 60px rgba(0,0,0,0.3); }
+      50%      { box-shadow: 0 0 60px rgba(200, 50, 150, 0.45), 0 20px 80px rgba(0,0,0,0.35); }
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes bounceArrow {
+      0%, 100% { transform: translateX(0); }
+      50%      { transform: translateX(8px); }
+    }
+    @keyframes shimmer {
+      0%   { background-position: -200% center; }
+      100% { background-position: 200% center; }
+    }
+    @keyframes orb1 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33%      { transform: translate(60px, -40px) scale(1.1); }
+      66%      { transform: translate(-30px, 30px) scale(0.95); }
+    }
+    @keyframes orb2 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33%      { transform: translate(-50px, 50px) scale(1.05); }
+      66%      { transform: translate(40px, -20px) scale(0.9); }
+    }
+    @keyframes rotateHue {
+      0%   { filter: hue-rotate(0deg); }
+      100% { filter: hue-rotate(30deg); }
+    }
+
+    #desktop-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 999999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow: hidden;
+      transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+                  visibility 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #desktop-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    /* Deep dark background */
+    .overlay-bg {
+      position: absolute;
+      inset: 0;
+      background: #0a0a0f;
+    }
+
+    /* Animated gradient orbs */
+    .overlay-bg::before {
+      content: '';
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(200, 50, 150, 0.15) 0%, transparent 70%);
+      top: -100px;
+      right: -100px;
+      animation: orb1 12s ease-in-out infinite, rotateHue 20s linear infinite;
+    }
+    .overlay-bg::after {
+      content: '';
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(230, 100, 60, 0.12) 0%, transparent 70%);
+      bottom: -80px;
+      left: -80px;
+      animation: orb2 15s ease-in-out infinite;
+    }
+
+    /* Subtle grid pattern */
+    .overlay-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+
+    /* Content container */
+    .overlay-content {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 40px;
+      padding: 40px;
+      max-width: 520px;
+      text-align: center;
+    }
+
+    /* Logo area */
+    .overlay-logo {
+      animation: fadeInUp 0.8s ease-out both;
+    }
+    .overlay-logo img {
+      height: 48px;
+      filter: brightness(1.1);
+    }
+
+    /* Phone mockup */
+    .phone-wrapper {
+      animation: fadeInUp 0.8s ease-out 0.15s both;
+    }
+    .phone-mockup {
+      width: 220px;
+      height: 440px;
+      background: linear-gradient(145deg, #1a1a2e 0%, #16162a 100%);
+      border-radius: 36px;
+      border: 2px solid rgba(255,255,255,0.08);
+      position: relative;
+      overflow: hidden;
+      animation: float 5s ease-in-out infinite, pulseGlow 4s ease-in-out infinite;
+    }
+
+    /* Dynamic island / notch */
+    .phone-notch {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 80px;
+      height: 24px;
+      background: #000;
+      border-radius: 14px;
+      z-index: 3;
+    }
+
+    /* Screen content — simulated app UI */
+    .phone-screen {
+      position: absolute;
+      inset: 4px;
+      border-radius: 32px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #0f0f1a 0%, #141425 100%);
+    }
+
+    /* Simulated status bar */
+    .sim-statusbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px 8px;
+      position: relative;
+      z-index: 2;
+    }
+    .sim-time {
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.8);
+      letter-spacing: 0.3px;
+    }
+    .sim-icons {
+      display: flex;
+      gap: 4px;
+    }
+    .sim-icons span {
+      width: 14px;
+      height: 10px;
+      background: rgba(255,255,255,0.5);
+      border-radius: 2px;
+    }
+
+    /* Simulated header */
+    .sim-header {
+      padding: 8px 20px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sim-greeting {
+      font-size: 15px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.9);
+    }
+    .sim-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #c83296, #e85d3a);
+    }
+
+    /* Simulated cards */
+    .sim-card {
+      margin: 8px 16px;
+      height: 100px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(200, 50, 150, 0.2) 0%, rgba(230, 93, 58, 0.15) 100%);
+      border: 1px solid rgba(255,255,255,0.06);
+      position: relative;
+      overflow: hidden;
+    }
+    .sim-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%);
+      background-size: 200% 100%;
+      animation: shimmer 3s ease-in-out infinite;
+    }
+    .sim-card.small {
+      height: 65px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%);
+    }
+
+    /* Simulated card content hints */
+    .sim-card-lines {
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .sim-line {
+      height: 8px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.08);
+    }
+    .sim-line.w60 { width: 60%; }
+    .sim-line.w80 { width: 80%; }
+    .sim-line.w40 { width: 40%; }
+
+    /* Simulated nav bar */
+    .sim-navbar {
+      position: absolute;
+      bottom: 12px;
+      left: 16px;
+      right: 16px;
+      height: 44px;
+      border-radius: 22px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.04);
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      backdrop-filter: blur(20px);
+    }
+    .sim-nav-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.1);
+    }
+    .sim-nav-dot.active {
+      background: linear-gradient(135deg, #c83296, #e85d3a);
+    }
+
+    /* Text content */
+    .overlay-text {
+      animation: fadeInUp 0.8s ease-out 0.3s both;
+    }
+    .overlay-title {
+      font-size: 28px;
+      font-weight: 700;
+      color: #ffffff;
+      margin: 0 0 12px;
+      line-height: 1.25;
+      letter-spacing: -0.5px;
+    }
+    .overlay-title span {
+      background: linear-gradient(135deg, #d946a8, #e85d3a);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .overlay-desc {
+      font-size: 15px;
+      font-weight: 400;
+      color: rgba(255,255,255,0.5);
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    /* Resize CTA pill */
+    .overlay-cta {
+      animation: fadeInUp 0.8s ease-out 0.45s both;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 28px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 100px;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+    }
+    .overlay-cta:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.15);
+    }
+
+    .cta-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #c83296, #e85d3a);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .cta-icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .cta-text {
+      display: flex;
+      flex-direction: column;
+      text-align: left;
+    }
+    .cta-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.85);
+    }
+    .cta-sub {
+      font-size: 11px;
+      color: rgba(255,255,255,0.35);
+      margin-top: 2px;
+    }
+
+    .cta-arrow {
+      color: rgba(255,255,255,0.3);
+      animation: bounceArrow 1.5s ease-in-out infinite;
+      flex-shrink: 0;
+      margin-left: 4px;
+    }
+
+    /* Divider line */
+    .overlay-divider {
+      width: 60px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+      animation: fadeInUp 0.8s ease-out 0.5s both;
+    }
+
+    /* Footer hint */
+    .overlay-footer {
+      animation: fadeInUp 0.8s ease-out 0.55s both;
+      font-size: 12px;
+      color: rgba(255,255,255,0.2);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .overlay-footer .dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: rgba(200, 50, 150, 0.5);
+    }
+
+    /* On mobile-width screens, hide the overlay */
+    @media (max-width: 500px) {
+      #desktop-overlay {
+        display: none !important;
+      }
+    }
+  </style>
+  <script id="splash-screen-script">
+    function removeSplashFromWeb() {
+      document.getElementById("splash")?.remove();
+      document.getElementById("splash-branding")?.remove();
+      document.body.style.background = "transparent";
+    }
+  </script>
+</head>
+<body>
+  <picture id="splash">
+      <source srcset="splash/img/light-1x.png 1x, splash/img/light-2x.png 2x, splash/img/light-3x.png 3x, splash/img/light-4x.png 4x" media="(prefers-color-scheme: light)">
+      <source srcset="splash/img/dark-1x.png 1x, splash/img/dark-2x.png 2x, splash/img/dark-3x.png 3x, splash/img/dark-4x.png 4x" media="(prefers-color-scheme: dark)">
+      <img class="center" aria-hidden="true" src="splash/img/light-1x.png" alt="">
+  </picture>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- DESKTOP OVERLAY  -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div id="desktop-overlay">
+    <!-- Background layers -->
+    <div class="overlay-bg"></div>
+    <div class="overlay-grid"></div>
+
+    <!-- Main content -->
+    <div class="overlay-content">
+
+      <!-- Logo -->
+      <div class="overlay-logo">
+        <img src="assets/images/full%20logo.png" alt="PULSE" onerror="this.style.display='none'">
+      </div>
+
+      <!-- Phone mockup -->
+      <div class="phone-wrapper">
+        <div class="phone-mockup">
+          <div class="phone-notch"></div>
+          <div class="phone-screen">
+            <div class="sim-statusbar">
+              <span class="sim-time">9:41</span>
+              <div class="sim-icons"><span></span><span></span><span></span></div>
+            </div>
+            <div class="sim-header">
+              <span class="sim-greeting">Bună ziua! 👋</span>
+              <div class="sim-avatar"></div>
+            </div>
+            <div class="sim-card">
+              <div class="sim-card-lines">
+                <div class="sim-line w80"></div>
+                <div class="sim-line w60"></div>
+                <div class="sim-line w40"></div>
+              </div>
+            </div>
+            <div class="sim-card small">
+              <div class="sim-card-lines">
+                <div class="sim-line w60"></div>
+                <div class="sim-line w40"></div>
+              </div>
+            </div>
+            <div class="sim-card small">
+              <div class="sim-card-lines">
+                <div class="sim-line w80"></div>
+                <div class="sim-line w40"></div>
+              </div>
+            </div>
+            <div class="sim-navbar">
+              <div class="sim-nav-dot active"></div>
+              <div class="sim-nav-dot"></div>
+              <div class="sim-nav-dot"></div>
+              <div class="sim-nav-dot"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Text -->
+      <div class="overlay-text">
+        <h1 class="overlay-title">Experiență creată pentru <span>mobil</span></h1>
+        <p class="overlay-desc">
+          PULSE este o aplicație mobilă. Pentru cea mai bună experiență,
+          redimensionează fereastra browser-ului sau deschide pe telefon.
+        </p>
+      </div>
+
+      <!-- CTA pill -->
+      <div class="overlay-cta">
+        <div class="cta-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 3L3 21M21 3v7M21 3h-7"/>
+          </svg>
+        </div>
+        <div class="cta-text">
+          <span class="cta-label">Micșorează fereastra</span>
+          <span class="cta-sub">Sub 500px lățime pentru a continua</span>
+        </div>
+        <span class="cta-arrow">→</span>
+      </div>
+
+      <!-- Divider -->
+      <div class="overlay-divider"></div>
+
+      <!-- Footer -->
+      <div class="overlay-footer">
+        <span class="dot"></span>
+        <span>Disponibil pe iOS & Android</span>
+        <span class="dot"></span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Desktop overlay visibility logic -->
+  <script>
+    (function() {
+      var MOBILE_MAX = 500;
+      var overlay = null;
+
+      function checkWidth() {
+        if (!overlay) overlay = document.getElementById('desktop-overlay');
+        if (!overlay) return;
+        if (window.innerWidth <= MOBILE_MAX) {
+          overlay.classList.add('hidden');
+        } else {
+          overlay.classList.remove('hidden');
+        }
+      }
+
+      // Run on load and on resize
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkWidth);
+      } else {
+        checkWidth();
+      }
+      window.addEventListener('resize', checkWidth);
+    })();
+  </script>
+
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async=""></script>
+
+
+</body></html>

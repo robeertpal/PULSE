@@ -1,0 +1,362 @@
+1. User Login
+
+Title:
+User Login
+
+User Story:
+As a doctor, I want to log into my account, so that I can access personalized content and features.
+
+Description:
+The user must be able to authenticate in the application using email and password. After a successful login, the user should be redirected to the main experience of the app. Login is the entry point of the application and enables access to personalized content, recommendations, and saved data.
+
+Acceptance Criteria:
+
+The user can enter an email and password.
+The system validates required fields.
+If the credentials are correct, the user is authenticated.
+After successful login, the user is redirected to the home screen.
+If the credentials are incorrect, the app shows a clear error message.
+The user session is preserved after authentication.
+2. Complete User Profile
+
+Title:
+Complete User Profile
+
+User Story:
+As a doctor, I want to complete my profile with my specialty and interests, so that the app can personalize my experience.
+
+Description:
+After authentication, the user must be able to complete the basic professional information in their profile, such as specialty and areas of interest. These details are necessary for personalizing the feed and enabling AI-powered features.
+
+Acceptance Criteria:
+
+The user can select a specialty.
+The user can select one or more areas of interest.
+The entered data is saved in the profile.
+After saving, the app can use this information for personalization.
+If the profile is incomplete, the app may request completion before full access to features.
+3. Access Main Feed
+
+Title:
+Access Main Feed
+
+User Story:
+As a doctor, I want to access the main feed after login, so that I can view relevant content in one place.
+
+Description:
+After authentication and profile setup, the user should arrive in the main feed of the application. Here, they can see centralized and organized content for quick consumption: articles, courses, events, and relevant recommendations.
+
+Acceptance Criteria:
+
+After authentication, the user can access the main feed.
+The feed displays relevant content available in the application.
+The user can see distinct sections for the main content types.
+The feed is displayed clearly and is easy to navigate on mobile.
+4. Browse Articles, Courses and Events
+
+Title:
+Browse Articles, Courses and Events
+
+User Story:
+As a doctor, I want to browse articles, courses, and events, so that I can discover relevant professional content.
+
+Description:
+The user must be able to navigate through the available content in the application, including articles, courses, and events. The goal is to support easy discovery of information and professional opportunities relevant to the user.
+
+Acceptance Criteria:
+
+The user can access lists of articles, courses, and events.
+Content is displayed separately or clearly organized by category.
+The user can browse the available content without errors.
+The app displays basic information for each item, such as title and category.
+Navigation between sections is simple and clear.
+5. View Article Details
+
+Title:
+View Article Details
+
+User Story:
+As a doctor, I want to open an article and view its details, so that I can read and evaluate its relevance.
+
+Description:
+The user must be able to open an article from the feed or from a list in order to see more details. The article page should display the necessary information for content consumption and for using related AI features.
+
+Acceptance Criteria:
+
+The user can select an article from a list.
+When the article is selected, the app opens the details screen.
+The article screen displays at least the title, description or content, and category.
+The user can easily navigate back to the feed or list.
+The article screen allows access to additional features such as AI summary or saving.
+6. Generate AI Summary for Article
+
+Title:
+Generate AI Summary for Article
+
+User Story:
+As a doctor, I want to generate a short AI summary of an article, so that I can understand the key ideas faster.
+
+Description:
+The user must be able to use an AI agent to get a quick summary of an article. This feature helps save time and highlights the important ideas from the accessed content.
+
+Acceptance Criteria:
+
+The user can request an AI summary from the article page.
+The system generates a summary for the selected article.
+The summary is displayed clearly in the app.
+The summary is shorter than the original article and highlights key ideas.
+If the AI service is unavailable, the app shows an appropriate message.
+7. Receive Personalized Recommendations
+
+Title:
+Receive Personalized Recommendations
+
+User Story:
+As a doctor, I want to receive personalized recommendations, so that I can quickly discover the most relevant content for my profile.
+
+Description:
+The application must be able to suggest relevant content based on the user’s profile, selected interests, and activity in the app. Recommendations may include articles, courses, or events and represent one of the core AI features of the app.
+
+Acceptance Criteria:
+
+The user can see a personalized recommendations section.
+Recommendations are generated based on profile and interests.
+Recommendations can include multiple content types.
+The recommendations list is displayed clearly in the feed or in a dedicated section.
+Recommendations can be updated based on user activity.
+8. Save Relevant Content
+
+Title:
+Save Relevant Content
+
+User Story:
+As a doctor, I want to save relevant articles, courses, or events, so that I can return to them later.
+
+Description:
+The user must be able to save content they find useful for later access. This functionality allows them to organize their experience better and quickly return to important content.
+
+Acceptance Criteria:
+
+The user can save an article, course, or event.
+Saved content is associated with the authenticated user account.
+The user can view saved content in a dedicated section.
+The system visually confirms successful saving.
+The user can later return to saved items.
+9. View Profile and Continue Personalized Experience
+
+Title:
+View Profile and Continue Personalized Experience
+
+User Story:
+As a doctor, I want to return to my profile and continue my experience, so that I can manage my information and keep using the app in a personalized way.
+
+Description:
+The user must be able to return to their profile to view and update personal and professional information. The profile should support the continuity of the personalized experience in the app.
+
+Acceptance Criteria:
+
+The user can access the profile screen from the app.
+Saved user information is displayed in the profile.
+The user can view selected specialty and interests.
+The user can continue navigating the app from the profile.
+The profile contributes to maintaining the personalized experience.
+10. Register New Account
+
+Title:
+Register New Account
+
+User Story:
+As a doctor, I want to create a new account, so that I can use the app and save my preferences.
+
+Description:
+The user must be able to create a new account in the application by entering the required basic information. Registration is necessary to access personalized features and saved content.
+
+Acceptance Criteria:
+
+The user can access the registration screen.
+The user can enter the required account creation data.
+The system validates required fields.
+If the data is valid, the account is created successfully.
+After registration, the user can either be authenticated or redirected to login.
+If there are errors, the app shows a clear message.
+11. Edit User Profile
+
+Title:
+Edit User Profile
+
+User Story:
+As a doctor, I want to edit my profile information, so that my content and recommendations remain relevant.
+
+Description:
+The user must be able to update profile information such as specialty, interests, or other preferences. This allows the personalized experience to remain relevant over time.
+
+Acceptance Criteria:
+
+The user can access profile editing.
+The user can modify existing profile data.
+The changes can be saved successfully.
+Updated data is reflected in the profile.
+Recommendations can use the updated information.
+12. Search Content
+
+Title:
+Search Content
+
+User Story:
+As a doctor, I want to search for articles, courses, or events, so that I can quickly find relevant information.
+
+Description:
+The user must be able to search content in the app using a keyword. Search helps the user reach the needed information faster without manually browsing the whole feed.
+
+Acceptance Criteria:
+
+The user can enter a search term.
+The system returns relevant results for the entered term.
+Results can include articles, courses, or events.
+If no results exist, the app shows an appropriate message.
+Search works without errors.
+13. Filter Content by Category or Specialty
+
+Title:
+Filter Content by Category or Specialty
+
+User Story:
+As a doctor, I want to filter content by category or specialty, so that I can reduce irrelevant results.
+
+Description:
+The user must be able to apply filters to narrow down the displayed content. Filtering makes navigation more efficient and helps the user quickly find relevant content.
+
+Acceptance Criteria:
+
+The user can select one or more filters.
+Displayed content updates based on selected filters.
+Filters can be cleared or reset.
+Filtering works for at least one relevant category.
+Filtered results are displayed correctly.
+14. View Courses and Events
+
+Title:
+View Courses and Events
+
+User Story:
+As a doctor, I want to view available courses and events, so that I can discover relevant professional and learning opportunities.
+
+Description:
+The user must be able to access a list of available courses and events in the application. Content should be displayed clearly so the user can quickly identify relevant opportunities for professional development and open additional details for each item.
+
+Acceptance Criteria:
+
+The user can access the courses and events section.
+The app displays a list of available courses and/or events.
+Each item includes basic information such as title and a short description or date.
+The user can select a course or event to view more details.
+The list is displayed clearly and works without errors.
+The user can easily distinguish between courses and events.
+15. View Saved Content
+
+Title:
+View Saved Content
+
+User Story:
+As a doctor, I want to see my saved content in one place, so that I can quickly return to it later.
+
+Description:
+The user must be able to access a section dedicated to saved content. This section centralizes the articles, courses, and events previously marked as relevant.
+
+Acceptance Criteria:
+
+The user can access the saved content section.
+The section displays previously saved items.
+Multiple saved content types can be displayed.
+If no saved items exist, the app shows an appropriate message.
+The user can open a saved item from this section.
+16. View Recent Activity
+
+Title:
+View Recent Activity
+
+User Story:
+As a doctor, I want to see my recent activity, so that I can keep track of what I viewed or used in the app.
+
+Description:
+The user must be able to see recent activity in the app, such as opened articles, generated summaries, or saved content. This supports continuity of experience and future personalization.
+
+Acceptance Criteria:
+
+The user can access a recent activity section.
+Activity displays relevant recent app usage items.
+The list can include articles, courses, events, or AI actions.
+Activity is associated with the authenticated user.
+Information is displayed clearly and in an ordered way.
+17. View Recommendation Explanation
+
+Title:
+View Recommendation Explanation
+
+User Story:
+As a doctor, I want to see why a recommendation was generated, so that I can understand its relevance.
+
+Description:
+The user must be able to see a short explanation for recommended content. This increases recommendation transparency and helps the user understand the connection between their profile and the suggestions received.
+
+Acceptance Criteria:
+
+The app can display an explanation for a recommendation.
+The explanation is relevant to the recommended content.
+The explanation is easy to understand and clearly displayed.
+The explanation may use profile or activity information.
+Missing explanation does not block recommendation display.
+18. Adapt Recommendations Based on User Activity
+
+Title:
+Adapt Recommendations Based on User Activity
+
+User Story:
+As a doctor, I want the app to adapt recommendations based on my activity, so that my experience becomes more personalized over time.
+
+Description:
+The app must be able to take user activity into account, such as viewed articles or saved content, in order to adjust later recommendations. This improves personalization as the user continues using the app.
+
+Acceptance Criteria:
+
+The system can record relevant user activity.
+Recommendations can be influenced by previous activity.
+The user can observe more relevant content over time.
+Recommendation adaptation does not affect app stability.
+The functionality can be demonstrated with demo usage or test data.
+19. Navigate Easily Through the App
+
+Title:
+Navigate Easily Through the App
+
+User Story:
+As a doctor, I want a simple and intuitive navigation, so that I can use the app quickly in my daily routine.
+
+Description:
+The user must be able to navigate easily between the main sections of the app, such as Home, Articles, Events, Saved Content, and Profile. Simple navigation is essential for an efficient mobile experience.
+
+Acceptance Criteria:
+
+The user can quickly access the main sections of the app.
+Navigation is consistent across screens.
+The user can easily return to the previous screen.
+Main sections are visible and easy to identify.
+The navigation flow works without errors or dead ends.
+20. Ask Questions About an Article
+
+Title:
+Ask Questions About an Article
+
+User Story:
+As a doctor, I want to ask questions about an article and receive a quick answer, so that I can clarify important information without reading everything in detail.
+
+Description:
+The user must be able to ask a short question related to an opened article and receive a quick response generated by the AI assistant. This feature complements the summary feature and helps the user better understand the content.
+
+Acceptance Criteria:
+
+The user can access an AI question input from the article page.
+The user can submit a question related to the selected article.
+The system returns a relevant response.
+The answer is displayed clearly in the app.
+If the AI service is unavailable, the app shows an appropriate message.
