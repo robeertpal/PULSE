@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/content_item.dart';
+import '../models/event_gallery_item.dart';
 
 class ApiService {
   // Pentru local development:
@@ -34,17 +35,47 @@ class ApiService {
     }
   }
 
-  Future<List<ContentItem>> getCoursesAndEvents({int limit = 10}) async {
+  Future<List<ContentItem>> getCourses({int limit = 10}) async {
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/courses-events?limit=$limit'));
+      final response = await http.get(Uri.parse('$_baseUrl/courses?limit=$limit'));
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         return data.map((json) => ContentItem.fromJson(json)).toList();
       } else {
-        throw Exception('Failed to load courses/events: ${response.statusCode}');
+        throw Exception('Failed to load courses: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching courses/events: $e');
+      print('Error fetching courses: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<ContentItem>> getEvents({int limit = 10}) async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/events?limit=$limit'));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.map((json) => ContentItem.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to load events: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching events: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<ContentItem>> getPublications({int limit = 10}) async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/publications?limit=$limit'));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.map((json) => ContentItem.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to load publications: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching publications: $e');
       rethrow;
     }
   }
@@ -60,6 +91,21 @@ class ApiService {
       }
     } catch (e) {
       print('Error fetching news: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<EventGalleryItem>> getEventGallery() async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/event-gallery'));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.map((json) => EventGalleryItem.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to load event gallery: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching event gallery: $e');
       rethrow;
     }
   }

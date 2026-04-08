@@ -12,6 +12,7 @@ class ContentItem {
   final bool isFeatured;
   final String? tag; // Virtual field for UI
   final int? emcCredits;
+  final String? contentUrl;
 
   ContentItem({
     required this.id,
@@ -27,6 +28,7 @@ class ContentItem {
     this.isFeatured = false,
     this.tag,
     this.emcCredits,
+    this.contentUrl,
   });
 
   factory ContentItem.fromJson(Map<String, dynamic> json) {
@@ -42,6 +44,18 @@ class ContentItem {
     int? credits;
     if (json['event'] != null) credits = json['event']['emc_credits'];
     if (json['course'] != null) credits = json['course']['emc_credits'];
+
+    // Extract preferred content URL
+    String? url = json['source_url'];
+    if (json['event'] != null) {
+      url = json['event']['registration_url'] ?? json['event']['event_page_url'] ?? url;
+    }
+    if (json['course'] != null) {
+      url = json['course']['enrollment_url'] ?? url;
+    }
+    if (json['publication'] != null) {
+      url = json['publication']['subscription_url'] ?? url;
+    }
 
     return ContentItem(
       id: json['id'],
@@ -59,6 +73,7 @@ class ContentItem {
       isFeatured: json['is_featured'] ?? false,
       tag: derivedTag,
       emcCredits: credits,
+      contentUrl: url,
     );
   }
 }

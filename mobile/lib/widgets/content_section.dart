@@ -108,6 +108,7 @@ class ContentSection extends StatelessWidget {
                   ),
                 )
               : ListView.builder(
+                  clipBehavior: Clip.none,
                   padding: const EdgeInsets.only(left: 20.0, right: 4.0),
                   scrollDirection: Axis.horizontal,
                   itemCount: children.length,

@@ -154,41 +154,26 @@ class _HomeHeaderState extends State<HomeHeader> {
   // ── EMC Points Chip ──
   Widget _buildEmcChip() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
-        ),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF8B5CF6).withOpacity(0.25),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        color: PulseTheme.border.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           SvgPicture.asset(
             'assets/icons/EMC.svg',
-            width: 14,
-            height: 14,
-            colorFilter: const ColorFilter.mode(
-              Colors.white,
-              BlendMode.srcIn,
-            ),
+            width: 16,
+            height: 16,
           ),
-          const SizedBox(width: 5),
+          const SizedBox(width: 6),
           Text(
             '${widget.emcPoints}',
             style: const TextStyle(
-              color: Colors.white,
+              color: PulseTheme.textPrimary,
               fontWeight: FontWeight.w800,
-              fontSize: 13,
+              fontSize: 14,
               letterSpacing: -0.3,
             ),
           ),

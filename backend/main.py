@@ -298,6 +298,24 @@ def get_content_categories(db: Session = Depends(get_db)):
 
 
 # -------------------------
+# EVENT GALLERY
+# -------------------------
+
+@app.get("/event-gallery")
+def get_event_gallery(
+    db: Session = Depends(get_db)
+):
+    try:
+        items = (
+            db.query(models.EventGallery)
+            .order_by(models.EventGallery.display_order.asc())
+            .all()
+        )
+        return [serialize_model(item) for item in items]
+    except Exception as e:
+        return {"error": str(e)}
+
+# -------------------------
 # USERS / AUTH
 # -------------------------
 

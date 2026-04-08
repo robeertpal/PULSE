@@ -8,6 +8,10 @@ import '../widgets/home_header.dart';
 import '../widgets/featured_card.dart';
 import '../widgets/content_section.dart';
 import '../widgets/content_card.dart';
+import '../widgets/premium_loading_indicator.dart';
+import '../widgets/subscription_ad_banner.dart';
+import '../widgets/event_gallery_section.dart';
+import '../models/event_gallery_item.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,12 +30,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   final ApiService _apiService = ApiService();
   List<ContentItem> _articles = [];
-  List<ContentItem> _coursesAndEvents = [];
+  List<ContentItem> _courses = [];
+  List<ContentItem> _events = [];
+  List<ContentItem> _publications = [];
   List<ContentItem> _news = [];
+  List<EventGalleryItem> _galleryItems = [];
   bool _isLoading = true;
   String? _errorMessage;
 
-  static const int _sectionCount = 6;
+  static const int _sectionCount = 9;
 
   @override
   void initState() {
@@ -84,15 +91,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     try {
       final results = await Future.wait([
         _apiService.getArticles(),
-        _apiService.getCoursesAndEvents(),
+        _apiService.getCourses(),
+        _apiService.getEvents(),
+        _apiService.getPublications(),
         _apiService.getNews(),
+        _apiService.getEventGallery(),
       ]);
 
       if (mounted) {
         setState(() {
-          _articles = results[0];
-          _coursesAndEvents = results[1];
-          _news = results[2];
+          _articles = results[0] as List<ContentItem>;
+          _courses = results[1] as List<ContentItem>;
+          _events = results[2] as List<ContentItem>;
+          _publications = results[3] as List<ContentItem>;
+          _news = results[4] as List<ContentItem>;
+          _galleryItems = results[5] as List<EventGalleryItem>;
           _isLoading = false;
         });
       }
@@ -239,11 +252,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildAcasaFeed() {
     if (_isLoading) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.only(top: 100.0),
-          child: CircularProgressIndicator(color: PulseTheme.primary),
-        ),
+      return const Padding(
+        padding: EdgeInsets.only(top: 150.0),
+        child: PremiumLoadingIndicator(text: 'Se pregătește feed-ul...'),
       );
     }
 
@@ -271,35 +282,58 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         // Featured Carousel
         _animatedSection(2, const FeaturedCard()),
 
+        const SizedBox(height: 30),
+
+        // Subscription Ad Banner
+        _animatedSection(3, const SubscriptionAdBanner(
+          imageUrl: 'https://storageforpulse.blob.core.windows.net/ads/vitaly-gariev-XqMo4OlBnh0-unsplash.jpg',
+        )),
+
+        const SizedBox(height: 36),
+
+        _animatedSection(4, EventGallerySection(items: _galleryItems)),
+
         const SizedBox(height: 36),
 
         // Cursuri Section
-        _animatedSection(3, ContentSection(
-          title: 'Cursuri și Evenimente',
+        _animatedSection(5, ContentSection(
+          title: 'Cursuri',
           emptyMessage: 'Cursurile vor apărea aici',
           emptyIconAsset: 'assets/icons/graduation.svg',
           categoryColor: PulseTheme.courseContent,
           onActionTap: () => _navigateToTab(1), // Navighează către Cursuri
-          children: _coursesAndEvents.map((item) => ContentCard.fromModel(item)).toList(),
+          children: _courses.map((item) => ContentCard.fromModel(item)).toList(),
+        )),
+
+        const SizedBox(height: 24),
+
+        // Evenimente Section
+        _animatedSection(6, ContentSection(
+          title: 'Evenimente',
+          emptyMessage: 'Evenimentele vor apărea aici',
+          emptyIconAsset: 'assets/icons/events.svg',
+          categoryColor: PulseTheme.eventContent,
+          onActionTap: () => _navigateToTab(3), // Navighează către Evenimente
+          children: _events.map((item) => ContentCard.fromModel(item)).toList(),
         )),
 
         const SizedBox(height: 24),
 
         // Reviste Section
-        _animatedSection(4, ContentSection(
+        _animatedSection(7, ContentSection(
           title: 'Reviste',
           emptyMessage: 'Nu există reviste disponibile momentan',
           emptyIconAsset: 'assets/icons/books.svg',
           categoryColor: PulseTheme.magazineContent,
           onActionTap: () => _navigateToTab(2), // Navighează către Reviste
-          children: const [],
+          children: _publications.map((item) => ContentCard.fromModel(item)).toList(),
         )),
 
         const SizedBox(height: 24),
 
         // Știri Medicale
-        _animatedSection(5, ContentSection(
-          title: 'Știri Medicale',
+        _animatedSection(8, ContentSection(
+          title: 'Știri',
           emptyMessage: 'Știrile medicale vor apărea aici',
           emptyIconAsset: 'assets/icons/newspaper.svg',
           categoryColor: PulseTheme.newsContent,
@@ -316,11 +350,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildPentruTineFeed() {
     if (_isLoading) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.only(top: 100.0),
-          child: CircularProgressIndicator(color: PulseTheme.primary),
-        ),
+      return const Padding(
+        padding: EdgeInsets.only(top: 150.0),
+        child: PremiumLoadingIndicator(text: 'AI-ul analizează curicula...'),
       );
     }
 
@@ -446,7 +478,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           emptyIconAsset: 'assets/icons/events.svg',
           categoryColor: PulseTheme.eventContent,
           onActionTap: () => _navigateToTab(3), // Navighează către Evenimente
-          children: _coursesAndEvents.take(1).map((i) => ContentCard.fromModel(i)).toList(),
+          children: _events.take(1).map((i) => ContentCard.fromModel(i)).toList(),
         )),
 
         const SizedBox(height: 100),

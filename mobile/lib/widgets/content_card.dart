@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 import '../models/content_item.dart';
 import 'emc_badge.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ContentCard extends StatefulWidget {
   final String title;
@@ -12,9 +13,12 @@ class ContentCard extends StatefulWidget {
   final String iconAsset;
   final double? progress;
   final String? emcPoints;
+  final String? imageUrl;
+  final int? id; // For debug logging
 
   const ContentCard({
     super.key,
+    this.id,
     required this.title,
     required this.subtitle,
     required this.tag,
@@ -22,7 +26,11 @@ class ContentCard extends StatefulWidget {
     required this.iconAsset,
     this.progress,
     this.emcPoints,
+    this.imageUrl,
+    this.onTap,
   });
+
+  final VoidCallback? onTap;
 
   factory ContentCard.fromModel(ContentItem model, {double? progress}) {
     Color categoryColor = PulseTheme.primary;
@@ -45,7 +53,23 @@ class ContentCard extends StatefulWidget {
       iconAsset = 'assets/icons/books.svg';
     }
 
+    // ── Image Selection Priority ──
+    // 1. Remote Thumbnail > 2. Remote Hero > 3. Local Thumbnail > 4. Local Hero
+    String? chosenImageUrl;
+    bool isRemote(String? s) => s != null && (s.startsWith('http://') || s.startsWith('https://'));
+
+    if (isRemote(model.thumbnailUrl)) {
+      chosenImageUrl = model.thumbnailUrl;
+    } else if (isRemote(model.heroImageUrl)) {
+      chosenImageUrl = model.heroImageUrl;
+    } else if (model.thumbnailUrl != null && model.thumbnailUrl!.isNotEmpty) {
+      chosenImageUrl = model.thumbnailUrl;
+    } else if (model.heroImageUrl != null && model.heroImageUrl!.isNotEmpty) {
+      chosenImageUrl = model.heroImageUrl;
+    }
+
     return ContentCard(
+      id: model.id,
       title: model.title,
       subtitle: model.shortDescription ?? (model.authorName ?? ''),
       tag: model.tag ?? model.contentType,
@@ -53,6 +77,13 @@ class ContentCard extends StatefulWidget {
       iconAsset: iconAsset,
       progress: progress,
       emcPoints: model.emcCredits != null ? '+${model.emcCredits}' : null,
+      imageUrl: chosenImageUrl,
+      onTap: model.contentUrl != null ? () async {
+        final Uri url = Uri.parse(model.contentUrl!);
+        if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+          debugPrint('Could not launch ${model.contentUrl}');
+        }
+      } : null,
     );
   }
 
@@ -83,13 +114,83 @@ class _ContentCardState extends State<ContentCard>
     super.dispose();
   }
 
+  Widget _buildIconPlaceholder() {
+    return Center(
+      child: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          color: widget.categoryColor.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Center(
+          child: SvgPicture.asset(
+            widget.iconAsset,
+            width: 28,
+            height: 28,
+            colorFilter: ColorFilter.mode(
+              widget.categoryColor,
+              BlendMode.srcIn,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageContent() {
+    final String? rawUrl = widget.imageUrl?.trim();
+    
+    if (rawUrl == null || rawUrl.isEmpty) {
+      return _buildIconPlaceholder();
+    }
+
+    // 1. Remote Image (Network)
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      debugPrint('[ContentCard ID:${widget.id}] Loading REMOTE image: $rawUrl');
+      return Image.network(
+        rawUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          debugPrint('[ContentCard ID:${widget.id}] ERROR loading remote image: $rawUrl');
+          return _buildIconPlaceholder();
+        },
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return _buildIconPlaceholder();
+        },
+      );
+    } 
+    
+    // 2. Local Asset
+    String assetPath;
+    if (rawUrl.startsWith('assets/')) {
+      // Use exactly as is - NO double prefixing
+      assetPath = rawUrl;
+    } else if (rawUrl.startsWith('images/')) {
+      assetPath = 'assets/$rawUrl';
+    } else {
+      assetPath = 'assets/images/$rawUrl';
+    }
+
+    debugPrint('[ContentCard ID:${widget.id}] Loading LOCAL asset: $assetPath (Original: $rawUrl)');
+    return Image.asset(
+      assetPath,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) {
+        debugPrint('[ContentCard ID:${widget.id}] ASSET NOT FOUND: $assetPath');
+        return _buildIconPlaceholder();
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTapDown: (_) => _tapController.forward(),
       onTapUp: (_) => _tapController.reverse(),
       onTapCancel: () => _tapController.reverse(),
-      onTap: () {},
+      onTap: widget.onTap,
       child: ScaleTransition(
         scale: _scaleAnimation,
         child: Container(
@@ -147,26 +248,9 @@ class _ContentCardState extends State<ContentCard>
                           ),
                         ),
                       ),
-                      Center(
-                        child: Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: widget.categoryColor.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: Center(
-                            child: SvgPicture.asset(
-                              widget.iconAsset,
-                              width: 28,
-                              height: 28,
-                              colorFilter: ColorFilter.mode(
-                                widget.categoryColor,
-                                BlendMode.srcIn,
-                              ),
-                            ),
-                          ),
-                        ),
+                      // ── Image or Placeholder Icon ──
+                      Positioned.fill(
+                        child: _buildImageContent(),
                       ),
                       // EMC Points badge (consistent with featured cards)
                       if (widget.emcPoints != null)

@@ -156,3 +156,10 @@ class Publication(Base):
     subscription_url = Column(Text)
 
     content_item = relationship("ContentItem", back_populates="publication")
+class EventGallery(Base):
+    __tablename__ = "event_gallery"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    image_url = Column(Text, nullable=False)
+    display_order = Column(Integer, nullable=False, default=0)
