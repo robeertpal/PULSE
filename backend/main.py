@@ -105,6 +105,25 @@ def get_content_items(
         return {"error": str(e)}
 
 
+@app.get("/featured-content")
+def get_featured_content(
+    limit: int = Query(default=10, le=50),
+    db: Session = Depends(get_db),
+):
+    try:
+        items = (
+            db.query(models.ContentItem)
+            .filter(models.ContentItem.is_featured == True)
+            .filter(models.ContentItem.is_active == True)
+            .order_by(models.ContentItem.published_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return [serialize_model(item, include_relationships=True) for item in items]
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.get("/articles")
 def get_articles(
     skip: int = 0,

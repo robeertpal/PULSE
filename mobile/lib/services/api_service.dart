@@ -109,4 +109,19 @@ class ApiService {
       rethrow;
     }
   }
+
+  Future<List<ContentItem>> getFeaturedContent({int limit = 10}) async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/featured-content?limit=$limit'));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.map((json) => ContentItem.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to load featured content: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching featured content: $e');
+      rethrow;
+    }
+  }
 }

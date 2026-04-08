@@ -14,12 +14,31 @@ class EventGallerySection extends StatelessWidget {
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Title Area
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        color: PulseTheme.surface,
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: PulseTheme.border.withOpacity(0.5), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+            spreadRadius: -2,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(32),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title Area
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -55,7 +74,7 @@ class EventGallerySection extends StatelessWidget {
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
             clipBehavior: Clip.none,
             itemCount: items.length,
             itemBuilder: (context, index) {
@@ -135,6 +154,9 @@ class EventGallerySection extends StatelessWidget {
           ),
         ),
       ],
+          ),
+        ),
+      ),
     );
   }
 }

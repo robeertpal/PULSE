@@ -11,6 +11,7 @@ import '../widgets/content_card.dart';
 import '../widgets/premium_loading_indicator.dart';
 import '../widgets/subscription_ad_banner.dart';
 import '../widgets/event_gallery_section.dart';
+import '../widgets/activity_section.dart';
 import '../models/event_gallery_item.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -35,10 +36,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<ContentItem> _publications = [];
   List<ContentItem> _news = [];
   List<EventGalleryItem> _galleryItems = [];
+  List<ContentItem> _featuredItems = [];
   bool _isLoading = true;
   String? _errorMessage;
 
-  static const int _sectionCount = 9;
+  static const int _sectionCount = 10;
 
   @override
   void initState() {
@@ -96,6 +98,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _apiService.getPublications(),
         _apiService.getNews(),
         _apiService.getEventGallery(),
+        _apiService.getFeaturedContent(),
       ]);
 
       if (mounted) {
@@ -106,6 +109,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _publications = results[3] as List<ContentItem>;
           _news = results[4] as List<ContentItem>;
           _galleryItems = results[5] as List<EventGalleryItem>;
+          _featuredItems = results[6] as List<ContentItem>;
+          
+          if (_featuredItems.isEmpty && _articles.isNotEmpty) {
+            // Fallback to top articles if no featured items available
+            _featuredItems = _articles.where((i) => i.isFeatured).toList();
+            if (_featuredItems.isEmpty) _featuredItems = _articles.take(3).toList();
+          }
+
           _isLoading = false;
         });
       }
@@ -280,7 +291,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Featured Carousel
-        _animatedSection(2, const FeaturedCard()),
+        if (_featuredItems.isNotEmpty)
+          _animatedSection(2, FeaturedCard(items: _featuredItems))
+        else
+          const SizedBox(height: 1), // spacer if empty
 
         const SizedBox(height: 30),
 
@@ -340,6 +354,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           onActionTap: () => _navigateToTab(4), // Navighează către Știri
           children: _news.map((item) => ContentCard.fromModel(item)).toList(),
         )),
+
+        const SizedBox(height: 36),
+
+        _animatedSection(9, ActivitySection()),
 
         const SizedBox(height: 100),
       ],

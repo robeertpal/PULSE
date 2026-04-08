@@ -3,30 +3,15 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 import 'emc_badge.dart';
 
-class FeaturedItemModel {
-  final String tag;
-  final String title;
-  final String subtitle;
-  final String buttonText;
-  final Color colorPrimary;
-  final Color colorLight;
-  final String emcPoints;
-  final String? buttonIcon; // Optional SVG asset path for the CTA button
-
-  FeaturedItemModel({
-    required this.tag,
-    required this.title,
-    required this.subtitle,
-    required this.buttonText,
-    required this.colorPrimary,
-    required this.colorLight,
-    required this.emcPoints,
-    this.buttonIcon,
-  });
-}
+import '../models/content_item.dart';
 
 class FeaturedCard extends StatefulWidget {
-  const FeaturedCard({super.key});
+  final List<ContentItem> items;
+
+  const FeaturedCard({
+    super.key,
+    required this.items,
+  });
 
   @override
   State<FeaturedCard> createState() => _FeaturedCardState();
@@ -36,45 +21,40 @@ class _FeaturedCardState extends State<FeaturedCard> {
   late PageController _pageController;
   double _currentPage = 0;
 
-  final List<FeaturedItemModel> _items = [
-    FeaturedItemModel(
-      tag: 'NOU',
-      title: 'Ghiduri Europene de Cardiologie 2026',
-      subtitle: 'Rezumatul complet al noilor recomandări privind tratamentul pacienților cu insuficiență cardiacă.',
-      buttonText: 'Citește rezumatul AI',
-      colorPrimary: PulseTheme.primary,
-      colorLight: PulseTheme.primaryLight,
-      emcPoints: '+10',
-      buttonIcon: 'assets/icons/AI.svg',
-    ),
-    FeaturedItemModel(
-      tag: 'CURS',
-      title: 'Urgente Majore în Pediatrie',
-      subtitle: 'Curs EMC interactiv - câștigă 12 puncte prin parcurgerea modulelor video.',
-      buttonText: 'Începe cursul',
-      colorPrimary: PulseTheme.courseContent,
-      colorLight: PulseTheme.courseContent.withOpacity(0.7),
-      emcPoints: '+12',
-    ),
-    FeaturedItemModel(
-      tag: 'EVENIMENT',
-      title: 'Congresul Național de Medicină',
-      subtitle: 'Rezervă-ți locul acum pentru cel mai important eveniment medical al anului, desfășurat offline și online.',
-      buttonText: 'Vezi detalii',
-      colorPrimary: PulseTheme.eventContent,
-      colorLight: PulseTheme.eventContent.withOpacity(0.7),
-      emcPoints: '+30',
-    ),
-    FeaturedItemModel(
-      tag: 'REVISTĂ',
-      title: 'Medicina Modernă - Ediția Martie',
-      subtitle: 'Articole de top, interviuri exclusive, studii clinice noi și inovații tehnologice în sănătate.',
-      buttonText: 'Răsfoiește',
-      colorPrimary: PulseTheme.magazineContent,
-      colorLight: PulseTheme.magazineContent.withOpacity(0.7),
-      emcPoints: '+5',
-    ),
-  ];
+  List<ContentItem> get _items => widget.items;
+
+  Color _getPrimaryColor(String type) {
+    switch (type) {
+      case 'course': return PulseTheme.courseContent;
+      case 'event': return PulseTheme.eventContent;
+      case 'publication': return PulseTheme.magazineContent;
+      case 'news': return PulseTheme.newsContent;
+      case 'article': return PulseTheme.primary;
+      default: return PulseTheme.primary;
+    }
+  }
+
+  Color _getLightColor(String type) {
+    switch (type) {
+      case 'course': return PulseTheme.courseContent.withOpacity(0.7);
+      case 'event': return PulseTheme.eventContent.withOpacity(0.7);
+      case 'publication': return PulseTheme.magazineContent.withOpacity(0.7);
+      case 'news': return PulseTheme.newsContent.withOpacity(0.7);
+      case 'article': return PulseTheme.primaryLight;
+      default: return PulseTheme.primaryLight;
+    }
+  }
+
+  String _getButtonText(String type) {
+    switch (type) {
+      case 'course': return 'Începe cursul';
+      case 'event': return 'Vezi detalii';
+      case 'publication': return 'Răsfoiește';
+      case 'news': return 'Citește știrea';
+      case 'article': return 'Citește articolul';
+      default: return 'Vezi detalii';
+    }
+  }
 
   @override
   void initState() {
@@ -144,7 +124,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
       children: List.generate(_items.length, (index) {
         double distance = (_currentPage - index).abs().clamp(0.0, 1.0);
         Color dotColor = Color.lerp(
-          _items[_currentPage.round().clamp(0, _items.length - 1)].colorPrimary,
+          _getPrimaryColor(_items[_currentPage.round().clamp(0, _items.length - 1)].contentType),
           PulseTheme.border,
           distance,
         )!;
@@ -173,9 +153,17 @@ class _FeaturedCardState extends State<FeaturedCard> {
     );
   }
 
-  Widget _buildCardItem(FeaturedItemModel item, int index) {
+  Widget _buildCardItem(ContentItem item, int index) {
     // Parallax offset for decorative circles
     double parallaxOffset = (_currentPage - index) * 30;
+    
+    final colorPrimary = _getPrimaryColor(item.contentType);
+    final colorLight = _getLightColor(item.contentType);
+    final String emcPoints = item.emcCredits != null ? '+${item.emcCredits}' : '';
+    final String buttonText = _getButtonText(item.contentType);
+    final String tagText = item.tag?.toUpperCase() ?? item.contentType.toUpperCase();
+    final String subtitleText = item.shortDescription ?? (item.body != null && item.body!.length > 100 ? '${item.body!.substring(0, 100)}...' : '');
+    final String? buttonIcon = item.contentType == 'article' ? 'assets/icons/AI.svg' : null;
 
     return Container(
       width: double.infinity,
@@ -185,15 +173,15 @@ class _FeaturedCardState extends State<FeaturedCard> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            item.colorPrimary,
-            item.colorLight,
-            item.colorPrimary.withOpacity(0.85),
+            colorPrimary,
+            colorLight,
+            colorPrimary.withOpacity(0.85),
           ],
           stops: const [0.0, 0.5, 1.0],
         ),
         boxShadow: [
           BoxShadow(
-            color: item.colorPrimary.withOpacity(0.35),
+            color: colorPrimary.withOpacity(0.35),
             blurRadius: 28,
             offset: const Offset(0, 14),
             spreadRadius: -4,
@@ -257,11 +245,12 @@ class _FeaturedCardState extends State<FeaturedCard> {
               ),
             ),
             // EMC Badge
-            Positioned(
-              right: 16,
-              top: 16,
-              child: EmcBadge(points: item.emcPoints),
-            ),
+            if (emcPoints.isNotEmpty)
+              Positioned(
+                right: 16,
+                top: 16,
+                child: EmcBadge(points: emcPoints),
+              ),
             // Content
             Padding(
               padding: const EdgeInsets.all(24.0),
@@ -279,7 +268,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
                       ),
                     ),
                     child: Text(
-                      item.tag,
+                      tagText,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 10,
@@ -304,7 +293,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
                   const SizedBox(height: 8),
                   Expanded(
                     child: Text(
-                      item.subtitle,
+                      subtitleText,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -331,7 +320,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
                       onPressed: () {},
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
-                        foregroundColor: item.colorPrimary,
+                        foregroundColor: colorPrimary,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
@@ -345,26 +334,26 @@ class _FeaturedCardState extends State<FeaturedCard> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           // Show gradient AI icon or arrow based on buttonIcon
-                          if (item.buttonIcon != null) ...[
-                            _buildGradientIcon(item.buttonIcon!, item.colorPrimary),
+                          if (buttonIcon != null) ...[
+                            _buildGradientIcon(buttonIcon, colorPrimary),
                             const SizedBox(width: 8),
                           ],
                           Text(
-                            item.buttonText,
+                            buttonText,
                             style: const TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
                               letterSpacing: -0.2,
                             ),
                           ),
-                          if (item.buttonIcon == null) ...[
+                          if (buttonIcon == null) ...[
                             const SizedBox(width: 6),
                             SvgPicture.asset(
                               'assets/icons/arrow.right.svg',
                               width: 16,
                               height: 16,
                               colorFilter: ColorFilter.mode(
-                                item.colorPrimary,
+                                colorPrimary,
                                 BlendMode.srcIn,
                               ),
                             ),
