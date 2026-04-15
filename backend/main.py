@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 import models
+from models import User, UserProfile
+from schemas import UserCreate
 
 load_dotenv()
 
@@ -337,6 +339,42 @@ def get_event_gallery(
 # -------------------------
 # USERS / AUTH
 # -------------------------
+
+@app.post("/api/register")
+def register_user(payload: UserCreate, db: Session = Depends(get_db)):
+    try:
+        user = User(
+            email=payload.email,
+            firebase_uid=payload.firebase_uid,
+        )
+        db.add(user)
+        db.flush()
+
+        user_profile = UserProfile(
+            user_id=user.id,
+            first_name=payload.first_name,
+            last_name=payload.last_name,
+            cnp=payload.cnp,
+            phone=payload.phone,
+            cuim=payload.cuim,
+            cod_parafa=payload.cod_parafa,
+            titlu_universitar=payload.titlu_universitar,
+            city_id=payload.city_id,
+            occupation_id=payload.occupation_id,
+            specialization_id=payload.specialization_id,
+            acord_email=payload.acord_email,
+            acord_sms=payload.acord_sms,
+        )
+        db.add(user_profile)
+        db.commit()
+
+        return {
+            "message": "User registered successfully",
+            "user_id": user.id,
+        }
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
 
 @app.get("/users")
 def get_users(db: Session = Depends(get_db)):
