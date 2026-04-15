@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/pulse_theme.dart';
 import 'home_screen.dart';
+import 'register_page.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -26,7 +27,7 @@ class LoginScreen extends StatelessWidget {
               ),
               const SizedBox(height: 40),
               const Text(
-                'Bun venit în pulse',
+                'Bun venit în Pulse',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 28,
@@ -76,7 +77,7 @@ class LoginScreen extends StatelessWidget {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20), // Formă de lux iOS
                   ),
-                  shadowColor: PulseTheme.primary.withOpacity(0.5),
+                  shadowColor: PulseTheme.primary.withValues(alpha: 0.5),
                 ),
                 child: const Text(
                   'Continuă către Acasă',
@@ -84,6 +85,29 @@ class LoginScreen extends StatelessWidget {
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const RegisterPage()),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: PulseTheme.primary),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: const Text(
+                  'Creează cont nou',
+                  style: TextStyle(
+                    color: PulseTheme.primary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -95,3 +119,4 @@ class LoginScreen extends StatelessWidget {
     );
   }
 }
+
