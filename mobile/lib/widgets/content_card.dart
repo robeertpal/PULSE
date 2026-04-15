@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 import '../models/content_item.dart';
@@ -53,7 +53,7 @@ class ContentCard extends StatefulWidget {
       iconAsset = 'assets/icons/books.svg';
     }
 
-    // ── Image Selection Priority ──
+    // â”€â”€ Image Selection Priority â”€â”€
     // 1. Remote Thumbnail > 2. Remote Hero > 3. Local Thumbnail > 4. Local Hero
     String? chosenImageUrl;
     bool isRemote(String? s) => s != null && (s.startsWith('http://') || s.startsWith('https://'));
@@ -120,7 +120,7 @@ class _ContentCardState extends State<ContentCard>
         width: 56,
         height: 56,
         decoration: BoxDecoration(
-          color: widget.categoryColor.withOpacity(0.12),
+          color: widget.categoryColor.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(18),
         ),
         child: Center(
@@ -199,16 +199,16 @@ class _ContentCardState extends State<ContentCard>
           decoration: BoxDecoration(
             color: PulseTheme.surface,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: PulseTheme.border.withOpacity(0.6)),
+            border: Border.all(color: PulseTheme.border.withValues(alpha: 0.6)),
             boxShadow: [
               BoxShadow(
-                color: widget.categoryColor.withOpacity(0.08),
+                color: widget.categoryColor.withValues(alpha: 0.08),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
                 spreadRadius: -2,
               ),
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
+                color: Colors.black.withValues(alpha: 0.03),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -219,7 +219,7 @@ class _ContentCardState extends State<ContentCard>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Image Area with Gradient ──
+                // â”€â”€ Image Area with Gradient â”€â”€
                 Container(
                   height: 120,
                   width: double.infinity,
@@ -228,8 +228,8 @@ class _ContentCardState extends State<ContentCard>
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        widget.categoryColor.withOpacity(0.12),
-                        widget.categoryColor.withOpacity(0.04),
+                        widget.categoryColor.withValues(alpha: 0.12),
+                        widget.categoryColor.withValues(alpha: 0.04),
                       ],
                     ),
                   ),
@@ -244,11 +244,11 @@ class _ContentCardState extends State<ContentCard>
                           height: 80,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: widget.categoryColor.withOpacity(0.08),
+                            color: widget.categoryColor.withValues(alpha: 0.08),
                           ),
                         ),
                       ),
-                      // ── Image or Placeholder Icon ──
+                      // â”€â”€ Image or Placeholder Icon â”€â”€
                       Positioned.fill(
                         child: _buildImageContent(),
                       ),
@@ -262,7 +262,7 @@ class _ContentCardState extends State<ContentCard>
                     ],
                   ),
                 ),
-                // ── Text Content ──
+                // â”€â”€ Text Content â”€â”€
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -273,7 +273,7 @@ class _ContentCardState extends State<ContentCard>
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: widget.categoryColor.withOpacity(0.1),
+                            color: widget.categoryColor.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -308,7 +308,7 @@ class _ContentCardState extends State<ContentCard>
                               height: 4,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: widget.categoryColor.withOpacity(0.6),
+                                color: widget.categoryColor.withValues(alpha: 0.6),
                               ),
                             ),
                             const SizedBox(width: 6),
@@ -334,7 +334,7 @@ class _ContentCardState extends State<ContentCard>
                             child: LinearProgressIndicator(
                               value: widget.progress!,
                               minHeight: 4,
-                              backgroundColor: widget.categoryColor.withOpacity(0.1),
+                              backgroundColor: widget.categoryColor.withValues(alpha: 0.1),
                               valueColor: AlwaysStoppedAnimation<Color>(widget.categoryColor),
                             ),
                           ),
@@ -351,3 +351,4 @@ class _ContentCardState extends State<ContentCard>
     );
   }
 }
+

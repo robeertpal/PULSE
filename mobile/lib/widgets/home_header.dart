@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
@@ -36,7 +36,7 @@ class _HomeHeaderState extends State<HomeHeader> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Top Row: Avatar + Greeting | Actions ──
+          // â”€â”€ Top Row: Avatar + Greeting | Actions â”€â”€
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -74,7 +74,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                   ],
                 ),
               ),
-              // ── Right side action icons ──
+              // â”€â”€ Right side action icons â”€â”€
               _buildEmcChip(),
               const SizedBox(width: 10),
               _buildIconButton(
@@ -110,7 +110,7 @@ class _HomeHeaderState extends State<HomeHeader> {
     );
   }
 
-  // ── Premium Avatar with gradient ring ──
+  // â”€â”€ Premium Avatar with gradient ring â”€â”€
   Widget _buildAvatar() {
     return Container(
       width: 48,
@@ -120,7 +120,7 @@ class _HomeHeaderState extends State<HomeHeader> {
         gradient: PulseTheme.avatarRingGradient,
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF8B5CF6).withOpacity(0.2),
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -151,12 +151,12 @@ class _HomeHeaderState extends State<HomeHeader> {
     );
   }
 
-  // ── EMC Points Chip ──
+  // â”€â”€ EMC Points Chip â”€â”€
   Widget _buildEmcChip() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: PulseTheme.border.withOpacity(0.35),
+        color: PulseTheme.border.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -182,7 +182,7 @@ class _HomeHeaderState extends State<HomeHeader> {
     );
   }
 
-  // ── Small icon button (bell, menu) ──
+  // â”€â”€ Small icon button (bell, menu) â”€â”€
   Widget _buildIconButton(String iconPath, {required VoidCallback onTap, double iconSize = 20, bool hasBadge = false}) {
     return GestureDetector(
       onTap: onTap,
@@ -191,7 +191,7 @@ class _HomeHeaderState extends State<HomeHeader> {
         width: 38,
         height: 38,
         decoration: BoxDecoration(
-          color: PulseTheme.border.withOpacity(0.35),
+          color: PulseTheme.border.withValues(alpha: 0.35),
           shape: BoxShape.circle,
         ),
         child: Stack(
@@ -227,14 +227,14 @@ class _HomeHeaderState extends State<HomeHeader> {
     );
   }
 
-  // ────────────────── Premium Dropdown Menu ──────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Premium Dropdown Menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   void _showPremiumMenu(BuildContext context) {
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Închide',
-      barrierColor: Colors.black.withOpacity(0.05),
+      barrierColor: Colors.black.withValues(alpha: 0.05),
       transitionDuration: const Duration(milliseconds: 250),
       pageBuilder: (context, animation, secondaryAnimation) {
         return SafeArea(
@@ -252,12 +252,12 @@ class _HomeHeaderState extends State<HomeHeader> {
                       width: 230,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.75),
+                        color: Colors.white.withValues(alpha: 0.75),
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.white.withOpacity(0.6), width: 1),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
+                            color: Colors.black.withValues(alpha: 0.08),
                             blurRadius: 24,
                             offset: const Offset(0, 8),
                             spreadRadius: -4,
@@ -274,7 +274,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                           _buildDropdownItem(context, 'Biletele mele', 'assets/icons/events.svg'),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
-                            child: Divider(height: 1, color: Colors.black.withOpacity(0.06)),
+                            child: Divider(height: 1, color: Colors.black.withValues(alpha: 0.06)),
                           ),
                           _buildDropdownItem(context, 'Favorite', 'assets/icons/heart.svg'),
                         ],
@@ -303,10 +303,10 @@ class _HomeHeaderState extends State<HomeHeader> {
   Widget _buildDropdownItem(BuildContext context, String title, String iconPath) {
     return InkWell(
       onTap: () {
-        Navigator.pop(context);
+        Navigator.of(context).pop();
         Future.delayed(const Duration(milliseconds: 200), () {
-          Navigator.push(
-            context,
+          if (!mounted) return;
+          Navigator.of(this.context).push(
             MaterialPageRoute(
               builder: (context) => Scaffold(
                 appBar: AppBar(title: Text(title)),
@@ -321,8 +321,8 @@ class _HomeHeaderState extends State<HomeHeader> {
           );
         });
       },
-      splashColor: PulseTheme.primary.withOpacity(0.1),
-      highlightColor: PulseTheme.primary.withOpacity(0.05),
+      splashColor: PulseTheme.primary.withValues(alpha: 0.1),
+      highlightColor: PulseTheme.primary.withValues(alpha: 0.05),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         child: Row(

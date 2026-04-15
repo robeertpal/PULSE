@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../models/event_gallery_item.dart';
 import '../theme/pulse_theme.dart';
 
@@ -19,10 +19,10 @@ class EventGallerySection extends StatelessWidget {
       decoration: BoxDecoration(
         color: PulseTheme.surface,
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: PulseTheme.border.withOpacity(0.5), width: 1),
+        border: Border.all(color: PulseTheme.border.withValues(alpha: 0.5), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 24,
             offset: const Offset(0, 8),
             spreadRadius: -2,
@@ -86,7 +86,7 @@ class EventGallerySection extends StatelessWidget {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
+                      color: Colors.black.withValues(alpha: 0.08),
                       blurRadius: 16,
                       offset: const Offset(0, 8),
                       spreadRadius: -4,
@@ -104,7 +104,7 @@ class EventGallerySection extends StatelessWidget {
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stack) {
                           return Container(
-                            color: PulseTheme.border.withOpacity(0.3),
+                            color: PulseTheme.border.withValues(alpha: 0.3),
                             child: const Center(
                               child: Icon(Icons.broken_image_rounded, color: PulseTheme.textSecondary),
                             ),
@@ -120,8 +120,8 @@ class EventGallerySection extends StatelessWidget {
                             end: Alignment.bottomCenter,
                             colors: [
                               Colors.transparent,
-                              Colors.black.withOpacity(0.1),
-                              Colors.black.withOpacity(0.75),
+                              Colors.black.withValues(alpha: 0.1),
+                              Colors.black.withValues(alpha: 0.75),
                             ],
                             stops: const [0.4, 0.7, 1.0],
                           ),
@@ -160,3 +160,4 @@ class EventGallerySection extends StatelessWidget {
     );
   }
 }
+

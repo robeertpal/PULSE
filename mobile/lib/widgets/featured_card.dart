@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 import 'emc_badge.dart';
@@ -36,10 +36,10 @@ class _FeaturedCardState extends State<FeaturedCard> {
 
   Color _getLightColor(String type) {
     switch (type) {
-      case 'course': return PulseTheme.courseContent.withOpacity(0.7);
-      case 'event': return PulseTheme.eventContent.withOpacity(0.7);
-      case 'publication': return PulseTheme.magazineContent.withOpacity(0.7);
-      case 'news': return PulseTheme.newsContent.withOpacity(0.7);
+      case 'course': return PulseTheme.courseContent.withValues(alpha: 0.7);
+      case 'event': return PulseTheme.eventContent.withValues(alpha: 0.7);
+      case 'publication': return PulseTheme.magazineContent.withValues(alpha: 0.7);
+      case 'news': return PulseTheme.newsContent.withValues(alpha: 0.7);
       case 'article': return PulseTheme.primaryLight;
       default: return PulseTheme.primaryLight;
     }
@@ -112,7 +112,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
           ),
         ),
         const SizedBox(height: 20),
-        // ── Page Indicators ──
+        // â”€â”€ Page Indicators â”€â”€
         _buildPageIndicators(),
       ],
     );
@@ -141,7 +141,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
             boxShadow: distance < 0.5
                 ? [
                     BoxShadow(
-                      color: dotColor.withOpacity(0.4),
+                      color: dotColor.withValues(alpha: 0.4),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -175,13 +175,13 @@ class _FeaturedCardState extends State<FeaturedCard> {
           colors: [
             colorPrimary,
             colorLight,
-            colorPrimary.withOpacity(0.85),
+            colorPrimary.withValues(alpha: 0.85),
           ],
           stops: const [0.0, 0.5, 1.0],
         ),
         boxShadow: [
           BoxShadow(
-            color: colorPrimary.withOpacity(0.35),
+            color: colorPrimary.withValues(alpha: 0.35),
             blurRadius: 28,
             offset: const Offset(0, 14),
             spreadRadius: -4,
@@ -203,8 +203,8 @@ class _FeaturedCardState extends State<FeaturedCard> {
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      Colors.white.withOpacity(0.15),
-                      Colors.white.withOpacity(0.0),
+                      Colors.white.withValues(alpha: 0.15),
+                      Colors.white.withValues(alpha: 0.0),
                     ],
                   ),
                 ),
@@ -220,8 +220,8 @@ class _FeaturedCardState extends State<FeaturedCard> {
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      Colors.white.withOpacity(0.1),
-                      Colors.white.withOpacity(0.0),
+                      Colors.white.withValues(alpha: 0.1),
+                      Colors.white.withValues(alpha: 0.0),
                     ],
                   ),
                 ),
@@ -235,9 +235,9 @@ class _FeaturedCardState extends State<FeaturedCard> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.white.withOpacity(0.05),
+                      Colors.white.withValues(alpha: 0.05),
                       Colors.transparent,
-                      Colors.black.withOpacity(0.08),
+                      Colors.black.withValues(alpha: 0.08),
                     ],
                     stops: const [0.0, 0.4, 1.0],
                   ),
@@ -260,10 +260,10 @@ class _FeaturedCardState extends State<FeaturedCard> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         width: 1,
                       ),
                     ),
@@ -297,7 +297,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.85),
+                        color: Colors.white.withValues(alpha: 0.85),
                         fontSize: 14,
                         height: 1.5,
                       ),
@@ -310,7 +310,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
@@ -393,3 +393,4 @@ class _FeaturedCardState extends State<FeaturedCard> {
     );
   }
 }
+

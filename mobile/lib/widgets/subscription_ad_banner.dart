@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 
@@ -25,7 +25,7 @@ class SubscriptionAdBanner extends StatelessWidget {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.12),
+                color: Colors.black.withValues(alpha: 0.12),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -62,8 +62,8 @@ class SubscriptionAdBanner extends StatelessWidget {
                   borderRadius: BorderRadius.circular(24),
                   gradient: LinearGradient(
                     colors: [
-                      Colors.black.withOpacity(0.75),
-                      Colors.black.withOpacity(0.3),
+                      Colors.black.withValues(alpha: 0.75),
+                      Colors.black.withValues(alpha: 0.3),
                       Colors.transparent,
                     ],
                     begin: Alignment.centerLeft,
@@ -83,10 +83,10 @@ class SubscriptionAdBanner extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: PulseTheme.primary.withOpacity(0.2),
+                        color: PulseTheme.primary.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: PulseTheme.primary.withOpacity(0.5),
+                          color: PulseTheme.primary.withValues(alpha: 0.5),
                         ),
                       ),
                       child: const Text(
@@ -123,7 +123,7 @@ class SubscriptionAdBanner extends StatelessWidget {
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: PulseTheme.primary.withOpacity(0.4),
+                            color: PulseTheme.primary.withValues(alpha: 0.4),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           )
@@ -163,3 +163,4 @@ class SubscriptionAdBanner extends StatelessWidget {
     );
   }
 }
+

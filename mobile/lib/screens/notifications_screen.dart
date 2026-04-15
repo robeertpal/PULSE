@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
@@ -47,7 +47,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     NotificationItem(
       id: '2',
       title: 'Curs nou disponibil',
-      body: 'Te-ar putea interesa un nou curs: "Imunoterapia în Oncologie — Update 2026".',
+      body: 'Te-ar putea interesa un nou curs: "Imunoterapia în Oncologie - Update 2026".',
       time: 'Acum 5 ore',
       type: NotificationType.course,
       isRead: false,
@@ -104,9 +104,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         slivers: [
-          // ────────── Modern Sliver App Bar ──────────
+          // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Modern Sliver App Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           SliverAppBar(
-            backgroundColor: PulseTheme.background.withOpacity(0.9),
+            backgroundColor: PulseTheme.background.withValues(alpha: 0.9),
             elevation: 0,
             pinned: true,
             expandedHeight: 130,
@@ -175,7 +175,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
           ),
 
-          // ────────── Filter Pills ──────────
+          // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Filter Pills â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.only(top: 8.0, bottom: 16.0),
@@ -209,7 +209,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           boxShadow: isSelected
                               ? [
                                   BoxShadow(
-                                    color: PulseTheme.primary.withOpacity(0.3),
+                                    color: PulseTheme.primary.withValues(alpha: 0.3),
                                     blurRadius: 10,
                                     offset: const Offset(0, 4),
                                   ),
@@ -234,7 +234,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
           ),
 
-          // ────────── Notifications List ──────────
+          // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Notifications List â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           if (items.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
@@ -246,17 +246,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       'assets/icons/bell.svg',
                       width: 64,
                       height: 64,
-                      colorFilter: ColorFilter.mode(PulseTheme.textSecondary.withOpacity(0.3), BlendMode.srcIn),
+                      colorFilter: ColorFilter.mode(PulseTheme.textSecondary.withValues(alpha: 0.3), BlendMode.srcIn),
                     ),
                     const SizedBox(height: 16),
                     Text(
                       'Aici este liniște',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: PulseTheme.textPrimary.withOpacity(0.7)),
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: PulseTheme.textPrimary.withValues(alpha: 0.7)),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Nu ai nicio notificare pentru acest filtru.',
-                      style: TextStyle(fontSize: 15, color: PulseTheme.textSecondary.withOpacity(0.8)),
+                      style: TextStyle(fontSize: 15, color: PulseTheme.textSecondary.withValues(alpha: 0.8)),
                     ),
                   ],
                 ),
@@ -297,7 +297,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         iconPath = 'assets/icons/events.svg';
         break;
       case NotificationType.system:
-      default:
         iconColor = const Color(0xFFF59E0B);
         iconPath = 'assets/icons/bell.svg';
         break;
@@ -328,17 +327,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: item.isRead ? Colors.white.withOpacity(0.6) : Colors.white,
+            color: item.isRead ? Colors.white.withValues(alpha: 0.6) : Colors.white,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: item.isRead ? Colors.white.withOpacity(0.5) : const Color(0xFFE2E8F0),
+              color: item.isRead ? Colors.white.withValues(alpha: 0.5) : const Color(0xFFE2E8F0),
               width: 1,
             ),
             boxShadow: item.isRead
                 ? []
                 : [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
+                      color: Colors.black.withValues(alpha: 0.04),
                       blurRadius: 16,
                       offset: const Offset(0, 4),
                     )
@@ -352,7 +351,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.12),
+                  color: iconColor.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
@@ -378,7 +377,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: item.isRead ? FontWeight.w600 : FontWeight.w800,
-                              color: item.isRead ? PulseTheme.textPrimary.withOpacity(0.8) : PulseTheme.textPrimary,
+                              color: item.isRead ? PulseTheme.textPrimary.withValues(alpha: 0.8) : PulseTheme.textPrimary,
                               letterSpacing: -0.2,
                             ),
                           ),
@@ -402,7 +401,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w400,
-                        color: item.isRead ? PulseTheme.textSecondary.withOpacity(0.7) : PulseTheme.textSecondary,
+                        color: item.isRead ? PulseTheme.textSecondary.withValues(alpha: 0.7) : PulseTheme.textSecondary,
                         height: 1.4,
                       ),
                     ),
@@ -412,7 +411,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: PulseTheme.textSecondary.withOpacity(0.5),
+                        color: PulseTheme.textSecondary.withValues(alpha: 0.5),
                       ),
                     ),
                   ],
@@ -425,3 +424,4 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 }
+

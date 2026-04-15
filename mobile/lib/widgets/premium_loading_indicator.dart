@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/pulse_theme.dart';
 
@@ -42,15 +42,15 @@ class _PremiumLoadingIndicatorState extends State<PremiumLoadingIndicator> with 
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.7),
               borderRadius: BorderRadius.circular(30),
               border: Border.all(
-                color: Colors.white.withOpacity(0.8),
+                color: Colors.white.withValues(alpha: 0.8),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: PulseTheme.primary.withOpacity(0.08),
+                  color: PulseTheme.primary.withValues(alpha: 0.08),
                   blurRadius: 30,
                   spreadRadius: 5,
                   offset: const Offset(0, 10),
@@ -70,8 +70,8 @@ class _PremiumLoadingIndicatorState extends State<PremiumLoadingIndicator> with 
                       shape: BoxShape.circle,
                       gradient: SweepGradient(
                         colors: [
-                          PulseTheme.primary.withOpacity(0.0),
-                          PulseTheme.primary.withOpacity(0.2),
+                          PulseTheme.primary.withValues(alpha: 0.0),
+                          PulseTheme.primary.withValues(alpha: 0.2),
                           PulseTheme.primary,
                         ],
                         stops: const [0.0, 0.5, 1.0],
@@ -81,7 +81,7 @@ class _PremiumLoadingIndicatorState extends State<PremiumLoadingIndicator> with 
                       padding: const EdgeInsets.all(3.0),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -107,3 +107,4 @@ class _PremiumLoadingIndicatorState extends State<PremiumLoadingIndicator> with 
     );
   }
 }
+

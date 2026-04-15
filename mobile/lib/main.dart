@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'theme/pulse_theme.dart';
-import 'screens/home_screen.dart';
 import 'screens/splash_screen.dart';
 
 void main() {

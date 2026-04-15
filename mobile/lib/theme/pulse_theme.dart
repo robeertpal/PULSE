@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 class PulseTheme {
-  // ── Core Palette ──
+  // â”€â”€ Core Palette â”€â”€
   static const Color primary = Color(0xFF2563EB);
   static const Color primaryLight = Color(0xFF60A5FA);
   static const Color primaryDark = Color(0xFF1D4ED8);
@@ -14,13 +14,13 @@ class PulseTheme {
   static const Color border = Color(0xFFE2E8F0);
   static const Color borderLight = Color(0xFFF1F5F9);
 
-  // ── Category Palette ──
+  // â”€â”€ Category Palette â”€â”€
   static const Color magazineContent = Color(0xFF10B981);
   static const Color courseContent = Color(0xFF8B5CF6);
   static const Color eventContent = Color(0xFFF59E0B);
   static const Color newsContent = Color(0xFFEF4444);
 
-  // ── Gradient Definitions ──
+  // â”€â”€ Gradient Definitions â”€â”€
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
@@ -44,16 +44,16 @@ class PulseTheme {
     colors: [Color(0xFF2563EB), Color(0xFF8B5CF6), Color(0xFFEC4899)],
   );
 
-  // ── Shadows ──
+  // â”€â”€ Shadows â”€â”€
   static List<BoxShadow> get cardShadow => [
     BoxShadow(
-      color: Colors.black.withOpacity(0.04),
+      color: Colors.black.withValues(alpha: 0.04),
       blurRadius: 16,
       offset: const Offset(0, 4),
       spreadRadius: 0,
     ),
     BoxShadow(
-      color: Colors.black.withOpacity(0.02),
+      color: Colors.black.withValues(alpha: 0.02),
       blurRadius: 6,
       offset: const Offset(0, 2),
       spreadRadius: 0,
@@ -62,27 +62,26 @@ class PulseTheme {
 
   static List<BoxShadow> coloredShadow(Color color) => [
     BoxShadow(
-      color: color.withOpacity(0.25),
+      color: color.withValues(alpha: 0.25),
       blurRadius: 20,
       offset: const Offset(0, 8),
       spreadRadius: -4,
     ),
   ];
 
-  // ── Durations & Curves ──
+  // â”€â”€ Durations & Curves â”€â”€
   static const Duration animFast = Duration(milliseconds: 200);
   static const Duration animMedium = Duration(milliseconds: 350);
   static const Duration animSlow = Duration(milliseconds: 500);
   static const Curve animCurve = Curves.easeOutCubic;
 
-  // ── Theme Data ──
+  // â”€â”€ Theme Data â”€â”€
   static ThemeData get lightTheme {
     return ThemeData(
       primaryColor: primary,
       scaffoldBackgroundColor: background,
       colorScheme: const ColorScheme.light(
         primary: primary,
-        background: background,
         surface: surface,
       ),
       fontFamily: 'Avenir',
@@ -157,3 +156,4 @@ class PulseTheme {
     );
   }
 }
+

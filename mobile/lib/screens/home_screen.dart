@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
@@ -147,7 +147,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ────────────── Feed Tab Switcher (Acasă / Pentru tine) ──────────────
+  // Feed Tab Switcher (Acasă / Pentru tine)
 
   Widget _buildFeedTabSwitcher() {
     return Padding(
@@ -155,7 +155,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: PulseTheme.border.withOpacity(0.35),
+          color: PulseTheme.border.withValues(alpha: 0.35),
           borderRadius: BorderRadius.circular(20),
         ),
         child: LayoutBuilder(
@@ -163,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             final tabWidth = constraints.maxWidth / 2;
             return Stack(
               children: [
-                // ── Sliding pill indicator ──
+                // Sliding pill indicator
                 AnimatedPositioned(
                   duration: const Duration(milliseconds: 350),
                   curve: Curves.easeOutCubic,
@@ -177,7 +177,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.06),
+                          color: Colors.black.withValues(alpha: 0.06),
                           blurRadius: 12,
                           offset: const Offset(0, 2),
                         ),
@@ -185,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-                // ── Tab labels (on top of pill) ──
+                // Tab labels (on top of pill)
                 Row(
                   children: [
                     _buildFeedTab(0, 'assets/icons/house.svg', 'Acasă'),
@@ -231,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   width: 18,
                   height: 18,
                   colorFilter: ColorFilter.mode(
-                    isActive ? PulseTheme.textPrimary : PulseTheme.textSecondary.withOpacity(0.6),
+                    isActive ? PulseTheme.textPrimary : PulseTheme.textSecondary.withValues(alpha: 0.6),
                     BlendMode.srcIn,
                   ),
                 ),
@@ -240,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Text(
                 label,
                 style: TextStyle(
-                  color: isActive ? PulseTheme.textPrimary : PulseTheme.textSecondary.withOpacity(0.6),
+                  color: isActive ? PulseTheme.textPrimary : PulseTheme.textSecondary.withValues(alpha: 0.6),
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                   fontSize: 14,
                   letterSpacing: -0.2,
@@ -259,7 +259,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
   }
 
-  // ────────────── Acasă Feed ──────────────
+  // Acasă Feed
 
   Widget _buildAcasaFeed() {
     if (_isLoading) {
@@ -364,7 +364,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ────────────── Pentru Tine Feed (AI Curated) ──────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Pentru Tine Feed (AI Curated) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Widget _buildPentruTineFeed() {
     if (_isLoading) {
@@ -399,7 +399,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF7C3AED).withOpacity(0.3),
+                  color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
                   blurRadius: 24,
                   offset: const Offset(0, 12),
                   spreadRadius: -4,
@@ -414,9 +414,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   height: 48,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.25),
+                      color: Colors.white.withValues(alpha: 0.25),
                       width: 1,
                     ),
                   ),
@@ -450,7 +450,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       Text(
                         'Bazat pe specialitatea și interesele tale',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.8),
+                          color: Colors.white.withValues(alpha: 0.8),
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),
@@ -504,7 +504,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ────────────── Main Home Content ──────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Main Home Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Widget _buildHomeContent() {
     return NestedScrollView(
@@ -608,7 +608,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ────────────── Glassmorphism Bottom Navigation ──────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Glassmorphism Bottom Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Widget _buildGlassBottomNav() {
     return SafeArea(
@@ -621,15 +621,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.72),
+                color: Colors.white.withValues(alpha: 0.72),
                 borderRadius: BorderRadius.circular(28),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.5),
+                  color: Colors.white.withValues(alpha: 0.5),
                   width: 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
+                    color: Colors.black.withValues(alpha: 0.06),
                     blurRadius: 24,
                     offset: const Offset(0, 8),
                     spreadRadius: -2,
@@ -686,7 +686,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           vertical: 10,
         ),
         decoration: BoxDecoration(
-          color: isSelected ? PulseTheme.primary.withOpacity(0.1) : Colors.transparent,
+          color: isSelected ? PulseTheme.primary.withValues(alpha: 0.1) : Colors.transparent,
           borderRadius: BorderRadius.circular(22),
         ),
         child: Row(
@@ -697,7 +697,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               width: 22,
               height: 22,
               colorFilter: ColorFilter.mode(
-                isSelected ? PulseTheme.primary : PulseTheme.textSecondary.withOpacity(0.7),
+                isSelected ? PulseTheme.primary : PulseTheme.textSecondary.withValues(alpha: 0.7),
                 BlendMode.srcIn,
               ),
             ),
@@ -796,3 +796,4 @@ class _FadeIndexedStackState extends State<FadeIndexedStack> {
     );
   }
 }
+

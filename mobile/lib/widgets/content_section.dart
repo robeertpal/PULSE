@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import '../theme/pulse_theme.dart';
 import 'empty_state_card.dart';
 
 class ContentSection extends StatelessWidget {
@@ -37,7 +36,7 @@ class ContentSection extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // ── Accent bar ──
+                  // â”€â”€ Accent bar â”€â”€
                   Container(
                     width: 3.5,
                     height: 22,
@@ -53,16 +52,16 @@ class ContentSection extends StatelessWidget {
                   ),
                 ],
               ),
-              // ── „Vezi toate" capsule button ──
+              // Vezi toate capsule button
               GestureDetector(
                 onTap: onActionTap,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                   decoration: BoxDecoration(
-                    color: categoryColor.withOpacity(0.08),
+                    color: categoryColor.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: categoryColor.withOpacity(0.12),
+                      color: categoryColor.withValues(alpha: 0.12),
                       width: 1,
                     ),
                   ),
@@ -121,3 +120,4 @@ class ContentSection extends StatelessWidget {
     );
   }
 }
+

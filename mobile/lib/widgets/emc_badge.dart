@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 
-/// Reusable EMC Points badge — identical everywhere in the app.
+/// Reusable EMC Points badge - identical everywhere in the app.
 /// Used on Featured Carousel, Content Cards, and anywhere EMC points are shown.
 class EmcBadge extends StatelessWidget {
   final String points;
@@ -17,11 +17,11 @@ class EmcBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.only(left: 10, right: 14, top: 8, bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.95),
+        color: Colors.white.withValues(alpha: 0.95),
         borderRadius: BorderRadius.circular(40),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -68,3 +68,4 @@ class EmcBadge extends StatelessWidget {
     );
   }
 }
+

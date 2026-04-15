@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/content_item.dart';
 import '../models/event_gallery_item.dart';
@@ -15,7 +16,7 @@ class ApiService {
           .timeout(const Duration(seconds: 10));
       return response.statusCode == 200;
     } catch (e) {
-      print('Health check failed: $e');
+      debugPrint('Health check failed: $e');
       return false;
     }
   }
@@ -30,7 +31,7 @@ class ApiService {
         throw Exception('Failed to load articles: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching articles: $e');
+      debugPrint('Error fetching articles: $e');
       rethrow;
     }
   }
@@ -45,7 +46,7 @@ class ApiService {
         throw Exception('Failed to load courses: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching courses: $e');
+      debugPrint('Error fetching courses: $e');
       rethrow;
     }
   }
@@ -60,7 +61,7 @@ class ApiService {
         throw Exception('Failed to load events: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching events: $e');
+      debugPrint('Error fetching events: $e');
       rethrow;
     }
   }
@@ -75,7 +76,7 @@ class ApiService {
         throw Exception('Failed to load publications: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching publications: $e');
+      debugPrint('Error fetching publications: $e');
       rethrow;
     }
   }
@@ -90,7 +91,7 @@ class ApiService {
         throw Exception('Failed to load news: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching news: $e');
+      debugPrint('Error fetching news: $e');
       rethrow;
     }
   }
@@ -105,7 +106,7 @@ class ApiService {
         throw Exception('Failed to load event gallery: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching event gallery: $e');
+      debugPrint('Error fetching event gallery: $e');
       rethrow;
     }
   }
@@ -120,7 +121,7 @@ class ApiService {
         throw Exception('Failed to load featured content: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching featured content: $e');
+      debugPrint('Error fetching featured content: $e');
       rethrow;
     }
   }

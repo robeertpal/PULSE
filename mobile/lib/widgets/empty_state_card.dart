@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 
@@ -20,10 +20,10 @@ class EmptyStateCard extends StatelessWidget {
       width: 260,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: baseColor.withOpacity(0.05),
+        color: baseColor.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: baseColor.withOpacity(0.1),
+          color: baseColor.withValues(alpha: 0.1),
           style: BorderStyle.solid,
         ),
       ),
@@ -34,7 +34,7 @@ class EmptyStateCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: baseColor.withOpacity(0.1),
+              color: baseColor.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: SvgPicture.asset(
@@ -62,3 +62,4 @@ class EmptyStateCard extends StatelessWidget {
     );
   }
 }
+

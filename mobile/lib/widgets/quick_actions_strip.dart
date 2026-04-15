@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 
@@ -102,15 +102,15 @@ class _QuickActionCapsuleState extends State<_QuickActionCapsule>
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: action.color.withOpacity(0.08),
+                color: action.color.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(
-                  color: action.color.withOpacity(0.15),
+                  color: action.color.withValues(alpha: 0.15),
                   width: 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: action.color.withOpacity(0.08),
+                    color: action.color.withValues(alpha: 0.08),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -145,3 +145,4 @@ class _QuickActionCapsuleState extends State<_QuickActionCapsule>
     );
   }
 }
+

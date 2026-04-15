@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 
@@ -54,10 +54,10 @@ class ActivitySection extends StatelessWidget {
       decoration: BoxDecoration(
         color: PulseTheme.surface,
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: PulseTheme.border.withOpacity(0.5), width: 1),
+        border: Border.all(color: PulseTheme.border.withValues(alpha: 0.5), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 24,
             offset: const Offset(0, 8),
             spreadRadius: -2,
@@ -126,10 +126,10 @@ class ActivitySection extends StatelessWidget {
       decoration: BoxDecoration(
         color: PulseTheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: PulseTheme.border.withOpacity(0.4), width: 1),
+        border: Border.all(color: PulseTheme.border.withValues(alpha: 0.4), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -143,7 +143,7 @@ class ActivitySection extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: PulseTheme.border.withOpacity(0.3),
+              color: PulseTheme.border.withValues(alpha: 0.3),
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -206,9 +206,9 @@ class ActivitySection extends StatelessWidget {
             width: 74,
             padding: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(
-              color: const Color(0xFF10B981).withOpacity(0.1), // Green light
+              color: const Color(0xFF10B981).withValues(alpha: 0.1), // Green light
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -259,3 +259,4 @@ class ActivitySection extends StatelessWidget {
     return 'assets/icons/newspaper.svg';
   }
 }
+
