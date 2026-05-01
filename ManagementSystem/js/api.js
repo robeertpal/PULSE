@@ -19,6 +19,9 @@ async function apiRequest(endpoint, options = {}) {
         if (!response.ok) {
             throw new Error(data.detail || data.error || data.message || `Eroare HTTP: ${response.status}`);
         }
+        if (data && typeof data === 'object' && data.error) {
+            throw new Error(data.error);
+        }
         return data;
     } catch (error) {
         console.error(`Eroare API [${endpoint}]:`, error);

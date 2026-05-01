@@ -28,7 +28,7 @@ Platforma este construită folosind tehnologii web standard (HTML, CSS, JavaScri
 3.  **Accesează aplicația**:
     Deschide browserul și accesează: `http://localhost:5500`
 
-    *Pentru MVP: Folosește credențialele de test: `admin@pulse.ro` / `admin`.*
+    *Pentru MVP: Folosește credențialele de test: `pulse@admin` / `pulse@admin`.*
 
 ## Configurare pentru Producție
 
@@ -36,8 +36,7 @@ Când backend-ul este deployat pe Render (sau alt provider), trebuie să actuali
 
 ```javascript
 const CONFIG = {
-    // API_BASE_URL: 'http://127.0.0.1:8000', // Local
-    API_BASE_URL: 'https://pulse-backend-url.onrender.com',
+    API_BASE_URL: (window.PULSE_API_BASE_URL || 'https://pulse-backend-5f9b.onrender.com').replace(/\/+$/, ''),
 };
 ```
 

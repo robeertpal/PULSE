@@ -18,7 +18,11 @@ app = FastAPI(title="PULSE Backend API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+        "https://pulse-medichub.web.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -59,6 +63,17 @@ def serialize_model(obj, include_relationships: bool = False):
             data["publication"] = publication_data
 
     return data
+
+
+def model_class(name: str):
+    return getattr(models, name, None)
+
+
+def count_model(db: Session, name: str) -> int:
+    model = model_class(name)
+    if model is None:
+        return 0
+    return db.query(model).count()
 
 
 @app.get("/")
@@ -341,7 +356,10 @@ def get_event_gallery(
 @app.get("/users")
 def get_users(db: Session = Depends(get_db)):
     try:
-        return [serialize_model(item) for item in db.query(models.User).all()]
+        user_model = model_class("User")
+        if user_model is None:
+            return []
+        return [serialize_model(item) for item in db.query(user_model).all()]
     except Exception as e:
         return {"error": str(e)}
 
@@ -617,7 +635,7 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db)):
         courses_count = db.query(models.ContentItem).filter(models.ContentItem.content_type == models.ContentItemType.course).count()
         events_count = db.query(models.ContentItem).filter(models.ContentItem.content_type == models.ContentItemType.event).count()
         publications_count = db.query(models.ContentItem).filter(models.ContentItem.content_type == models.ContentItemType.publication).count()
-        users_count = db.query(models.User).count()
+        users_count = count_model(db, "User")
         
         recent_items = db.query(models.ContentItem).order_by(models.ContentItem.created_at.desc()).limit(5).all()
         
@@ -758,4 +776,3 @@ def admin_get_courses(db: Session = Depends(get_db)):
 @app.get("/admin/publications")
 def admin_get_publications(db: Session = Depends(get_db)):
     return get_publications(db=db, skip=0, limit=1000)
-
