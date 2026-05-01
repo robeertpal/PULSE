@@ -2,8 +2,8 @@ const UI = {
     renderSidebar: (activePage) => {
         const sidebarHTML = `
             <div class="sidebar">
-                <div class="sidebar-header">
-                    PULSE Admin
+                <div class="sidebar-header" style="display: flex; align-items: center; justify-content: center; padding: 24px;">
+                    <img src="assets/logo.png" alt="PULSE Logo" style="max-height: 40px; width: auto; object-fit: contain;">
                 </div>
                 <ul class="nav-links">
                     <li><a href="dashboard.html" class="${activePage === 'dashboard' ? 'active' : ''}">Dashboard</a></li>
