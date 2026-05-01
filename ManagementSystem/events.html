@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <base href="/admin/">
+
+    <meta charset="UTF-8">
+    <title>Evenimente - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="header-actions">
+                <h2>Lista Evenimente</h2>
+            </div>
+            <div id="error-msg" class="alert error"></div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Titlu Eveniment</th>
+                        <th>Status</th>
+                        <th>Data Începere</th>
+                        <th>Puncte EMC</th>
+                        <th>Preț</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body"><tr><td colspan="5">Se încarcă...</td></tr></tbody>
+            </table>
+            <p style="margin-top:20px; color:var(--text-secondary);">* Pentru a crea sau edita un eveniment și atributele lui, mergeți la secțiunea <b>Toate Articolele & Conținutul</b>.</p>
+        </div>
+    </div>
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            UI.init('events', 'Evenimente');
+            const tbody = document.getElementById('table-body');
+            try {
+                const data = await API.get('/admin/events');
+                tbody.innerHTML = '';
+                if(data.length === 0) { tbody.innerHTML = '<tr><td colspan="5">Nu există evenimente.</td></tr>'; return; }
+                data.forEach(item => {
+                    const tr = document.createElement('tr');
+                    const eventData = item.event || {};
+                    tr.innerHTML = `
+                        <td><strong>${item.title}</strong></td>
+                        <td><span class="badge ${item.status}">${item.status}</span></td>
+                        <td>${eventData.start_date ? new Date(eventData.start_date).toLocaleDateString() : '-'}</td>
+                        <td>${eventData.emc_credits || '-'}</td>
+                        <td>${eventData.price_amount ? eventData.price_amount + ' RON' : 'Free'}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch(e) { document.getElementById('error-msg').textContent = e.message; document.getElementById('error-msg').style.display='block'; }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <base href="/admin/">
+
+    <meta charset="UTF-8">
+    <title>Conținut - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="header-actions">
+                <div>
+                    <input type="text" id="search-input" placeholder="Caută după titlu..." style="padding:10px; border-radius:8px; border:1px solid #ccc; width: 250px;">
+                    <select id="type-filter" style="padding:10px; border-radius:8px; border:1px solid #ccc; margin-left:10px;">
+                        <option value="">Toate Tipurile</option>
+                        <option value="article">Articol</option>
+                        <option value="news">Știre</option>
+                        <option value="course">Curs</option>
+                        <option value="event">Eveniment</option>
+                        <option value="publication">Publicație</option>
+                    </select>
+                    <select id="status-filter" style="padding:10px; border-radius:8px; border:1px solid #ccc; margin-left:10px;">
+                        <option value="">Toate Statusurile</option>
+                        <option value="draft">Draft</option>
+                        <option value="in_review">In Review</option>
+                        <option value="published">Publicat</option>
+                        <option value="archived">Arhivat</option>
+                    </select>
+                </div>
+                <a href="content-form.html" class="btn btn-primary">Adaugă Conținut</a>
+            </div>
+
+            <div id="error-msg" class="alert error"></div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Titlu</th>
+                        <th>Tip</th>
+                        <th>Categorie</th>
+                        <th>Status</th>
+                        <th>Publicat la</th>
+                        <th>Acțiuni</th>
+                    </tr>
+                </thead>
+                <tbody id="content-table-body">
+                    <tr><td colspan="6">Se încarcă...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/content.js"></script>
+</body>
+</html>

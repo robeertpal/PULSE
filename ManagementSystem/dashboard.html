@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <base href="/admin/">
+
+    <meta charset="UTF-8">
+    <title>Dashboard - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div id="error-msg" class="alert error"></div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-title">Articole</div>
+                    <div class="stat-value" id="stat-articles">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Știri</div>
+                    <div class="stat-value" id="stat-news">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Cursuri</div>
+                    <div class="stat-value" id="stat-courses">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Evenimente</div>
+                    <div class="stat-value" id="stat-events">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Publicații</div>
+                    <div class="stat-value" id="stat-publications">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Utilizatori</div>
+                    <div class="stat-value" id="stat-users">-</div>
+                </div>
+            </div>
+
+            <h2>Ultimele Publicații</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Titlu</th>
+                        <th>Tip Conținut</th>
+                        <th>Status</th>
+                        <th>Data Publicării</th>
+                    </tr>
+                </thead>
+                <tbody id="recent-table-body">
+                    <tr><td colspan="4">Se încarcă...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

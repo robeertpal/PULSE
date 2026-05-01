@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <base href="/admin/">
+
+    <meta charset="UTF-8">
+    <title>Editare Conținut - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="header-actions">
+                <a href="content.html" class="btn" style="background:#E2E8F0; color:#0F172A; text-decoration:none;">← Înapoi</a>
+                <button type="button" class="btn btn-primary" onclick="saveContent()">Salvează</button>
+            </div>
+
+            <div id="alert-msg" class="alert"></div>
+
+            <div class="form-card">
+                <form id="content-form">
+                    <input type="hidden" id="content-id">
+                    
+                    <div class="form-group">
+                        <label>Tip Conținut *</label>
+                        <select id="content_type" required>
+                            <option value="article">Articol</option>
+                            <option value="news">Știre</option>
+                            <option value="course">Curs</option>
+                            <option value="event">Eveniment</option>
+                            <option value="publication">Publicație</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Titlu *</label>
+                        <input type="text" id="title" required oninput="generateSlug()">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Slug (URL Friendly) *</label>
+                        <input type="text" id="slug" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="status">
+                            <option value="draft">Draft</option>
+                            <option value="in_review">In Review</option>
+                            <option value="published">Publicat</option>
+                            <option value="archived">Arhivat</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Scurtă descriere</label>
+                        <textarea id="short_description" rows="3"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Conținut (Body - HTML/Text)</label>
+                        <textarea id="body" rows="10"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Autor</label>
+                        <input type="text" id="author_name">
+                    </div>
+
+                    <div class="form-group">
+                        <label>URL Imagine Principală (Hero)</label>
+                        <input type="url" id="hero_image_url">
+                    </div>
+
+                    <div class="form-group">
+                        <label>URL Sursă (Opțional)</label>
+                        <input type="url" id="source_url">
+                    </div>
+
+                    <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="is_featured" style="width:auto;">
+                        <label style="margin:0;">Conținut Promovat (Featured)</label>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/forms.js"></script>
+</body>
+</html>

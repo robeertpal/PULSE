@@ -576,3 +576,186 @@ def get_audit_logs(db: Session = Depends(get_db)):
         return [serialize_model(item) for item in db.query(models.AuditLog).all()]
     except Exception as e:
         return {"error": str(e)}
+# -------------------------
+# ADMIN ENDPOINTS
+# -------------------------
+
+from pydantic import BaseModel
+from typing import Optional, List
+from sqlalchemy import func
+
+class ContentItemBase(BaseModel):
+    title: str
+    slug: str
+    content_type: str
+    status: str = "draft"
+    short_description: Optional[str] = None
+    body: Optional[str] = None
+    category_id: Optional[int] = None
+    specialization_id: Optional[int] = None
+    hero_image_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    author_name: Optional[str] = None
+    source_url: Optional[str] = None
+    is_featured: bool = False
+    is_active: bool = True
+    published_at: Optional[datetime] = None
+
+class ContentItemCreate(ContentItemBase):
+    pass
+
+class ContentItemUpdate(ContentItemBase):
+    title: Optional[str] = None
+    slug: Optional[str] = None
+    content_type: Optional[str] = None
+
+@app.get("/admin/dashboard/stats")
+def get_admin_dashboard_stats(db: Session = Depends(get_db)):
+    try:
+        articles_count = db.query(models.ContentItem).filter(models.ContentItem.content_type == models.ContentItemType.article).count()
+        news_count = db.query(models.ContentItem).filter(models.ContentItem.content_type == models.ContentItemType.news).count()
+        courses_count = db.query(models.ContentItem).filter(models.ContentItem.content_type == models.ContentItemType.course).count()
+        events_count = db.query(models.ContentItem).filter(models.ContentItem.content_type == models.ContentItemType.event).count()
+        publications_count = db.query(models.ContentItem).filter(models.ContentItem.content_type == models.ContentItemType.publication).count()
+        users_count = db.query(models.User).count()
+        
+        recent_items = db.query(models.ContentItem).order_by(models.ContentItem.created_at.desc()).limit(5).all()
+        
+        return {
+            "stats": {
+                "articles": articles_count,
+                "news": news_count,
+                "courses": courses_count,
+                "events": events_count,
+                "publications": publications_count,
+                "users": users_count
+            },
+            "recent_content": [serialize_model(item) for item in recent_items]
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/admin/content-items")
+def admin_get_content_items(db: Session = Depends(get_db)):
+    try:
+        items = db.query(models.ContentItem).order_by(models.ContentItem.created_at.desc()).all()
+        return [serialize_model(item) for item in items]
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/admin/content-items")
+def admin_create_content_item(item: ContentItemCreate, db: Session = Depends(get_db)):
+    try:
+        db_item = models.ContentItem(
+            title=item.title,
+            slug=item.slug,
+            content_type=models.ContentItemType(item.content_type),
+            status=models.ContentStatus(item.status),
+            short_description=item.short_description,
+            body=item.body,
+            category_id=item.category_id,
+            specialization_id=item.specialization_id,
+            hero_image_url=item.hero_image_url,
+            thumbnail_url=item.thumbnail_url,
+            author_name=item.author_name,
+            source_url=item.source_url,
+            is_featured=item.is_featured,
+            is_active=item.is_active,
+            published_at=item.published_at
+        )
+        db.add(db_item)
+        db.commit()
+        db.refresh(db_item)
+        return serialize_model(db_item)
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
+
+@app.get("/admin/content-items/{id}")
+def admin_get_content_item(id: int, db: Session = Depends(get_db)):
+    try:
+        item = db.query(models.ContentItem).filter(models.ContentItem.id == id).first()
+        if not item:
+            return {"error": "Not found"}
+        return serialize_model(item, include_relationships=True)
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.put("/admin/content-items/{id}")
+def admin_update_content_item(id: int, item: ContentItemUpdate, db: Session = Depends(get_db)):
+    try:
+        db_item = db.query(models.ContentItem).filter(models.ContentItem.id == id).first()
+        if not db_item:
+            return {"error": "Not found"}
+        
+        update_data = item.dict(exclude_unset=True)
+        if "content_type" in update_data:
+            update_data["content_type"] = models.ContentItemType(update_data["content_type"])
+        if "status" in update_data:
+            update_data["status"] = models.ContentStatus(update_data["status"])
+            
+        for key, value in update_data.items():
+            setattr(db_item, key, value)
+            
+        db.commit()
+        db.refresh(db_item)
+        return serialize_model(db_item)
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
+
+@app.patch("/admin/content-items/{id}/archive")
+def admin_archive_content_item(id: int, db: Session = Depends(get_db)):
+    try:
+        db_item = db.query(models.ContentItem).filter(models.ContentItem.id == id).first()
+        if not db_item:
+            return {"error": "Not found"}
+        db_item.status = models.ContentStatus.archived
+        db_item.is_active = False
+        db.commit()
+        return {"success": True}
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
+
+@app.delete("/admin/content-items/{id}")
+def admin_delete_content_item(id: int, db: Session = Depends(get_db)):
+    try:
+        db_item = db.query(models.ContentItem).filter(models.ContentItem.id == id).first()
+        if not db_item:
+            return {"error": "Not found"}
+        db.delete(db_item)
+        db.commit()
+        return {"success": True}
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
+
+@app.get("/admin/categories")
+def admin_get_categories(db: Session = Depends(get_db)):
+    return get_content_categories(db)
+
+@app.get("/admin/specializations")
+def admin_get_specializations(db: Session = Depends(get_db)):
+    return get_specializations(db)
+
+@app.get("/admin/cities")
+def admin_get_cities(db: Session = Depends(get_db)):
+    return get_cities(db)
+
+@app.get("/admin/users")
+def admin_get_users(db: Session = Depends(get_db)):
+    return get_users(db)
+
+@app.get("/admin/events")
+def admin_get_events(db: Session = Depends(get_db)):
+    return get_events(db=db, skip=0, limit=1000)
+
+@app.get("/admin/courses")
+def admin_get_courses(db: Session = Depends(get_db)):
+    return get_courses(db=db, skip=0, limit=1000)
+
+@app.get("/admin/publications")
+def admin_get_publications(db: Session = Depends(get_db)):
+    return get_publications(db=db, skip=0, limit=1000)
+

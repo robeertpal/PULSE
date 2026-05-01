@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
@@ -9,11 +9,14 @@ class HomeHeader extends StatefulWidget {
   final String avatarUrl;
   final int emcPoints;
 
+  final bool compactMode;
+
   const HomeHeader({
     super.key,
     required this.doctorName,
     this.avatarUrl = '',
     this.emcPoints = 142,
+    this.compactMode = false,
   });
 
   @override
@@ -76,35 +79,39 @@ class _HomeHeaderState extends State<HomeHeader> {
               ),
               // â”€â”€ Right side action icons â”€â”€
               _buildEmcChip(),
-              const SizedBox(width: 10),
-              _buildIconButton(
-                'assets/icons/bell.svg',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                  );
-                },
-                hasBadge: true,
-              ),
-              const SizedBox(width: 8),
-              _buildIconButton(
-                'assets/icons/ellipsis.svg',
-                onTap: () => _showPremiumMenu(context),
-                iconSize: 4,
-              ),
+              if (!widget.compactMode) ...[
+                const SizedBox(width: 10),
+                _buildIconButton(
+                  'assets/icons/bell.svg',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                    );
+                  },
+                  hasBadge: true,
+                ),
+                const SizedBox(width: 8),
+                _buildIconButton(
+                  'assets/icons/ellipsis.svg',
+                  onTap: () => _showPremiumMenu(context),
+                  iconSize: 4,
+                ),
+              ]
             ],
           ),
-          const SizedBox(height: 16),
-          const Text(
-            'Explorează noutățile medicale de azi.',
-            style: TextStyle(
-              color: PulseTheme.textSecondary,
-              fontWeight: FontWeight.w500,
-              fontSize: 13.5,
-              letterSpacing: -0.1,
+          if (!widget.compactMode) ...[
+            const SizedBox(height: 16),
+            const Text(
+              'Explorează noutățile medicale de azi.',
+              style: TextStyle(
+                color: PulseTheme.textSecondary,
+                fontWeight: FontWeight.w500,
+                fontSize: 13.5,
+                letterSpacing: -0.1,
+              ),
             ),
-          ),
+          ]
         ],
       ),
     );

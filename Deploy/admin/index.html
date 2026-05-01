@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <base href="/admin/">
+
+    <meta charset="UTF-8">
+    <title>PULSE Management System</title>
+    <script src="js/auth.js"></script>
+    <script>
+        if (Auth.isAuthenticated()) {
+            window.location.href = 'dashboard.html';
+        } else {
+            window.location.href = 'login.html';
+        }
+    </script>
+</head>
+<body></body>
+</html>
