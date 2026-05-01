@@ -2,20 +2,43 @@
 # https://github.com/firebase/firebase-tools
 
 name: Deploy to Firebase Hosting on PR
+
 on: pull_request
+
 permissions:
   checks: write
   contents: read
   pull-requests: write
+
 jobs:
   build_and_preview:
     if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: mobile
+
     steps:
       - uses: actions/checkout@v4
-      - run: flutter pub get && flutter build web
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - run: flutter pub get
+
+      - run: flutter build web
+
+      - name: Add ManagementSystem to /admin
+        run: |
+          rm -rf build/web/admin
+          mkdir -p build/web/admin
+          cp -r ../ManagementSystem/* build/web/admin/
+
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PULSE_MEDICHUB }}
           projectId: pulse-medichub
+          entryPoint: mobile
