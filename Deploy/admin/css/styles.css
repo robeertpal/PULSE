@@ -262,9 +262,57 @@ td {
     font-size: 18px;
 }
 
+.upload-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.upload-row input[type="file"] {
+    flex: 1;
+    padding: 9px;
+}
+
+.upload-status {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-top: 8px;
+}
+
+.upload-status.error {
+    color: var(--news);
+}
+
+.upload-status.success {
+    color: var(--magazine);
+}
+
+.media-preview {
+    margin-top: 12px;
+}
+
+.media-preview img {
+    max-width: 240px;
+    max-height: 160px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    object-fit: cover;
+}
+
+.media-preview a {
+    color: var(--primary);
+    font-weight: 600;
+}
+
 @media (max-width: 760px) {
     .form-grid {
         grid-template-columns: 1fr;
+    }
+
+    .upload-row {
+        align-items: stretch;
+        flex-direction: column;
     }
 }
 

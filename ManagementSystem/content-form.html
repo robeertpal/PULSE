@@ -85,11 +85,23 @@
                     <div class="form-group">
                         <label>URL Imagine Principală (Hero)</label>
                         <input type="url" id="hero_image_url">
+                        <div class="upload-row">
+                            <input type="file" id="hero_image_file" accept="image/jpeg,image/png,image/webp">
+                            <button type="button" class="btn" onclick="uploadImageFromInput('hero_image_file', 'hero_image_url')">Încarcă imagine</button>
+                        </div>
+                        <div id="hero_image_url_upload_status" class="upload-status"></div>
+                        <div id="hero_image_url_preview" class="media-preview"></div>
                     </div>
 
                     <div class="form-group">
                         <label>URL Thumbnail</label>
                         <input type="url" id="thumbnail_url">
+                        <div class="upload-row">
+                            <input type="file" id="thumbnail_file" accept="image/jpeg,image/png,image/webp">
+                            <button type="button" class="btn" onclick="uploadImageFromInput('thumbnail_file', 'thumbnail_url')">Încarcă imagine</button>
+                        </div>
+                        <div id="thumbnail_url_upload_status" class="upload-status"></div>
+                        <div id="thumbnail_url_preview" class="media-preview"></div>
                     </div>
 
                     <div class="form-group">
@@ -228,6 +240,12 @@
                         <div class="form-group">
                             <label>URL logo</label>
                             <input type="url" id="publication_logo_url">
+                            <div class="upload-row">
+                                <input type="file" id="publication_logo_file" accept="image/jpeg,image/png,image/webp">
+                                <button type="button" class="btn" onclick="uploadImageFromInput('publication_logo_file', 'publication_logo_url')">Încarcă logo</button>
+                            </div>
+                            <div id="publication_logo_url_upload_status" class="upload-status"></div>
+                            <div id="publication_logo_url_preview" class="media-preview"></div>
                         </div>
                         <div class="form-group">
                             <label>Descriere publicație</label>

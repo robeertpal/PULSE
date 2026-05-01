@@ -2,9 +2,12 @@ from datetime import datetime
 from decimal import Decimal
 import enum
 import os
+import re
+from pathlib import Path
+from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -617,6 +620,136 @@ def get_audit_logs(db: Session = Depends(get_db)):
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from sqlalchemy import func
+
+IMAGE_ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+IMAGE_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+PDF_ALLOWED_CONTENT_TYPES = {"application/pdf"}
+PDF_ALLOWED_EXTENSIONS = {".pdf"}
+IMAGE_MAX_SIZE = 5 * 1024 * 1024
+PDF_MAX_SIZE = 25 * 1024 * 1024
+
+
+def get_azure_upload_config():
+    connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    container_name = os.getenv("AZURE_STORAGE_CONTAINER_NAME")
+    public_base_url = os.getenv("AZURE_STORAGE_PUBLIC_BASE_URL")
+
+    missing = [
+        name
+        for name, value in {
+            "AZURE_STORAGE_CONNECTION_STRING": connection_string,
+            "AZURE_STORAGE_CONTAINER_NAME": container_name,
+            "AZURE_STORAGE_PUBLIC_BASE_URL": public_base_url,
+        }.items()
+        if not value
+    ]
+    if missing:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Azure upload configuration missing: {', '.join(missing)}",
+        )
+
+    return connection_string, container_name, public_base_url.rstrip("/")
+
+
+def sanitize_filename(filename: str):
+    stem = Path(filename or "upload").stem.lower()
+    suffix = Path(filename or "").suffix.lower()
+    stem = re.sub(r"[^a-z0-9._-]+", "-", stem)
+    stem = re.sub(r"-+", "-", stem).strip("-._")
+    return f"{stem or 'upload'}{suffix}"
+
+
+def validate_upload_file(file: UploadFile, allowed_content_types: set, allowed_extensions: set):
+    content_type = (file.content_type or "").lower()
+    sanitized_name = sanitize_filename(file.filename or "upload")
+    extension = Path(sanitized_name).suffix.lower()
+
+    if content_type not in allowed_content_types:
+        allowed = ", ".join(sorted(allowed_content_types))
+        raise HTTPException(status_code=400, detail=f"Tip fișier neacceptat. Tipuri permise: {allowed}")
+    if extension not in allowed_extensions:
+        allowed = ", ".join(sorted(allowed_extensions))
+        raise HTTPException(status_code=400, detail=f"Extensie fișier neacceptată. Extensii permise: {allowed}")
+
+    return sanitized_name, content_type
+
+
+async def read_limited_upload(file: UploadFile, max_size: int):
+    data = await file.read(max_size + 1)
+    if not data:
+        raise HTTPException(status_code=400, detail="Fișierul este gol")
+    if len(data) > max_size:
+        raise HTTPException(status_code=413, detail=f"Fișierul depășește limita de {max_size // (1024 * 1024)}MB")
+    return data
+
+
+def generate_blob_name(folder: str, file_name: str):
+    now = datetime.utcnow()
+    return f"{folder}/{now:%Y/%m}/{uuid4()}-{file_name}"
+
+
+def upload_to_azure_blob(blob_name: str, data: bytes, content_type: str):
+    connection_string, container_name, public_base_url = get_azure_upload_config()
+
+    try:
+        from azure.storage.blob import BlobServiceClient, ContentSettings
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Pachetul azure-storage-blob nu este instalat pe server",
+        ) from exc
+
+    service_client = BlobServiceClient.from_connection_string(connection_string)
+    blob_client = service_client.get_blob_client(container=container_name, blob=blob_name)
+    blob_client.upload_blob(
+        data,
+        overwrite=False,
+        content_settings=ContentSettings(content_type=content_type),
+    )
+
+    return f"{public_base_url}/{blob_name}"
+
+
+async def handle_upload(
+    file: UploadFile,
+    folder: str,
+    max_size: int,
+    allowed_content_types: set,
+    allowed_extensions: set,
+):
+    file_name, content_type = validate_upload_file(file, allowed_content_types, allowed_extensions)
+    data = await read_limited_upload(file, max_size)
+    blob_name = generate_blob_name(folder, file_name)
+    url = upload_to_azure_blob(blob_name, data, content_type)
+    return {
+        "url": url,
+        "file_name": file_name,
+        "blob_name": blob_name,
+        "content_type": content_type,
+    }
+
+
+@app.post("/admin/uploads/image")
+async def admin_upload_image(file: UploadFile = File(...)):
+    return await handle_upload(
+        file=file,
+        folder="images",
+        max_size=IMAGE_MAX_SIZE,
+        allowed_content_types=IMAGE_ALLOWED_CONTENT_TYPES,
+        allowed_extensions=IMAGE_ALLOWED_EXTENSIONS,
+    )
+
+
+@app.post("/admin/uploads/pdf")
+async def admin_upload_pdf(file: UploadFile = File(...)):
+    return await handle_upload(
+        file=file,
+        folder="documents",
+        max_size=PDF_MAX_SIZE,
+        allowed_content_types=PDF_ALLOWED_CONTENT_TYPES,
+        allowed_extensions=PDF_ALLOWED_EXTENSIONS,
+    )
 
 class ContentItemBase(BaseModel):
     title: str

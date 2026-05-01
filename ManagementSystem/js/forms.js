@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const contentType = document.getElementById('content_type');
     contentType.addEventListener('change', toggleDetailsSections);
+    ['hero_image_url', 'thumbnail_url', 'publication_logo_url'].forEach(inputId => {
+        document.getElementById(inputId).addEventListener('input', () => updateImagePreview(inputId));
+    });
 
     await loadReferenceData();
 
@@ -114,6 +117,8 @@ async function loadContentData(id) {
         document.getElementById('published_at').value = toDateTimeLocal(data.published_at);
         document.getElementById('is_featured').checked = data.is_featured || false;
         document.getElementById('is_active').checked = data.is_active !== false;
+        updateImagePreview('hero_image_url');
+        updateImagePreview('thumbnail_url');
 
         fillCourseFields(data.course || {});
         fillEventFields(data.event || {});
@@ -155,6 +160,96 @@ function fillPublicationFields(publication) {
     document.getElementById('publication_creditation_text').value = publication.creditation_text || '';
     document.getElementById('publication_indexing_text').value = publication.indexing_text || '';
     document.getElementById('publication_subscription_url').value = publication.subscription_url || '';
+    updateImagePreview('publication_logo_url');
+}
+
+function setUploadStatus(targetInputId, message, type = '') {
+    const status = document.getElementById(`${targetInputId}_upload_status`);
+    if (!status) return;
+    status.textContent = message;
+    status.className = `upload-status ${type}`.trim();
+}
+
+function updateImagePreview(targetInputId) {
+    const input = document.getElementById(targetInputId);
+    const preview = document.getElementById(`${targetInputId}_preview`);
+    if (!input || !preview) return;
+
+    const url = input.value.trim();
+    preview.innerHTML = url ? `<img src="${url}" alt="Preview imagine">` : '';
+}
+
+function updatePdfPreview(targetInputId) {
+    const input = document.getElementById(targetInputId);
+    const preview = document.getElementById(`${targetInputId}_preview`);
+    if (!input || !preview) return;
+
+    const url = input.value.trim();
+    preview.innerHTML = url ? `<a href="${url}" target="_blank" rel="noopener">Deschide PDF</a>` : '';
+}
+
+async function uploadFile(file, endpoint, targetInputId, previewType) {
+    if (!file) {
+        setUploadStatus(targetInputId, 'Alegeți un fișier înainte de upload.', 'error');
+        return null;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setUploadStatus(targetInputId, 'Se încarcă...');
+
+    try {
+        const headers = {};
+        const token = localStorage.getItem('pulse_admin_token');
+        if (token) headers.Authorization = `Bearer ${token}`;
+
+        const response = await fetch(`${CONFIG.API_BASE_URL}${endpoint}`, {
+            method: 'POST',
+            headers,
+            body: formData,
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.detail || data.error || data.message || `Upload eșuat: ${response.status}`);
+        }
+
+        document.getElementById(targetInputId).value = data.url;
+        if (previewType === 'image') updateImagePreview(targetInputId);
+        if (previewType === 'pdf') updatePdfPreview(targetInputId);
+        setUploadStatus(targetInputId, 'Upload finalizat.', 'success');
+        return data;
+    } catch (err) {
+        setUploadStatus(targetInputId, err.message, 'error');
+        throw err;
+    }
+}
+
+async function uploadImage(file, targetInputId) {
+    return uploadFile(file, '/admin/uploads/image', targetInputId, 'image');
+}
+
+async function uploadPdf(file, targetInputId) {
+    return uploadFile(file, '/admin/uploads/pdf', targetInputId, 'pdf');
+}
+
+async function uploadImageFromInput(fileInputId, targetInputId) {
+    const file = document.getElementById(fileInputId).files[0];
+    try {
+        await uploadImage(file, targetInputId);
+    } catch (err) {
+        showAlert('Eroare upload imagine: ' + err.message, 'error');
+    }
+}
+
+async function uploadPdfFromInput(fileInputId, targetInputId) {
+    const file = document.getElementById(fileInputId).files[0];
+    try {
+        await uploadPdf(file, targetInputId);
+    } catch (err) {
+        showAlert('Eroare upload PDF: ' + err.message, 'error');
+    }
 }
 
 function buildContentPayload() {
