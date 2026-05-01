@@ -43,7 +43,7 @@ async function loadContent() {
             tr.innerHTML = `
                 <td><strong>${item.title}</strong></td>
                 <td><span class="badge" style="background:#E2E8F0; color:#475569;">${item.content_type}</span></td>
-                <td>${item.category?.name || '-'}</td>
+                <td>${item.category_name || item.category?.name || '-'}</td>
                 <td><span class="badge ${item.status}">${item.status}</span></td>
                 <td>${dateStr}</td>
                 <td class="table-actions">

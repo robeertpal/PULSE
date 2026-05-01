@@ -176,6 +176,7 @@ td {
 }
 
 .badge.draft { background: #F1F5F9; color: var(--text-secondary); }
+.badge.in_review { background: #FEF3C7; color: #92400E; }
 .badge.published { background: #ECFDF5; color: var(--magazine); }
 .badge.archived { background: #FEF2F2; color: var(--news); }
 
@@ -237,6 +238,34 @@ td {
     border: 1px solid var(--border);
     box-shadow: 0 4px 6px rgba(0,0,0,0.02);
     max-width: 800px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.details-section {
+    display: none;
+    border-top: 1px solid var(--border);
+    margin-top: 24px;
+    padding-top: 24px;
+}
+
+.details-section.active {
+    display: block;
+}
+
+.details-section h3 {
+    margin: 0 0 20px;
+    font-size: 18px;
+}
+
+@media (max-width: 760px) {
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .alert {

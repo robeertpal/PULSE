@@ -11,6 +11,7 @@
         <div class="content-wrapper">
             <div class="header-actions">
                 <h2>Lista Evenimente</h2>
+                <a href="content-form.html?type=event" class="btn btn-primary">Adaugă Eveniment</a>
             </div>
             <div id="error-msg" class="alert error"></div>
             <table>
@@ -21,11 +22,11 @@
                         <th>Data Începere</th>
                         <th>Puncte EMC</th>
                         <th>Preț</th>
+                        <th>Acțiuni</th>
                     </tr>
                 </thead>
-                <tbody id="table-body"><tr><td colspan="5">Se încarcă...</td></tr></tbody>
+                <tbody id="table-body"><tr><td colspan="6">Se încarcă...</td></tr></tbody>
             </table>
-            <p style="margin-top:20px; color:var(--text-secondary);">* Pentru a crea sau edita un eveniment și atributele lui, mergeți la secțiunea <b>Toate Articolele & Conținutul</b>.</p>
         </div>
     </div>
     <script src="js/config.js"></script>
@@ -39,7 +40,7 @@
             try {
                 const data = await API.get('/admin/events');
                 tbody.innerHTML = '';
-                if(data.length === 0) { tbody.innerHTML = '<tr><td colspan="5">Nu există evenimente.</td></tr>'; return; }
+                if(data.length === 0) { tbody.innerHTML = '<tr><td colspan="6">Nu există evenimente.</td></tr>'; return; }
                 data.forEach(item => {
                     const tr = document.createElement('tr');
                     const eventData = item.event || {};
@@ -49,6 +50,7 @@
                         <td>${eventData.start_date ? new Date(eventData.start_date).toLocaleDateString() : '-'}</td>
                         <td>${eventData.emc_credits || '-'}</td>
                         <td>${eventData.price_amount ? eventData.price_amount + ' RON' : 'Free'}</td>
+                        <td class="table-actions"><button onclick="window.location.href='content-form.html?id=${item.id}'">Edit</button></td>
                     `;
                     tbody.appendChild(tr);
                 });

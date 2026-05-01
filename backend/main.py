@@ -4,7 +4,7 @@ import enum
 import os
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -45,15 +45,23 @@ def serialize_model(obj, include_relationships: bool = False):
 
     data = {}
     for column in obj.__table__.columns:
-        data[column.name] = serialize_value(getattr(obj, column.name))
+        data[column.name] = serialize_value(getattr(obj, column.key))
 
     if include_relationships:
         if hasattr(obj, "category") and getattr(obj, "category", None):
-            data["category"] = serialize_model(obj.category)
+            category_data = serialize_model(obj.category)
+            data["category"] = category_data
+            data["category_name"] = category_data.get("name")
         if hasattr(obj, "specialization") and getattr(obj, "specialization", None):
-            data["specialization"] = serialize_model(obj.specialization)
+            specialization_data = serialize_model(obj.specialization)
+            data["specialization"] = specialization_data
+            data["specialization_name"] = specialization_data.get("name")
+        if hasattr(obj, "city") and getattr(obj, "city", None):
+            city_data = serialize_model(obj.city)
+            data["city"] = city_data
+            data["city_name"] = city_data.get("name")
         if hasattr(obj, "event") and getattr(obj, "event", None):
-            data["event"] = serialize_model(obj.event)
+            data["event"] = serialize_model(obj.event, include_relationships=True)
         if hasattr(obj, "course") and getattr(obj, "course", None):
             data["course"] = serialize_model(obj.course)
         if hasattr(obj, "publication") and getattr(obj, "publication", None):
@@ -74,6 +82,15 @@ def count_model(db: Session, name: str) -> int:
     if model is None:
         return 0
     return db.query(model).count()
+
+
+def visible_content_query(db: Session):
+    return (
+        db.query(models.ContentItem)
+        .filter(models.ContentItem.is_active == True)
+        .filter(models.ContentItem.deleted_at.is_(None))
+        .filter(models.ContentItem.status == models.ContentStatus.published)
+    )
 
 
 @app.get("/")
@@ -114,7 +131,7 @@ def get_content_items(
     db: Session = Depends(get_db),
 ):
     try:
-        items = db.query(models.ContentItem).offset(skip).limit(limit).all()
+        items = visible_content_query(db).offset(skip).limit(limit).all()
         return [serialize_model(item) for item in items]
     except Exception as e:
         return {"error": str(e)}
@@ -127,9 +144,8 @@ def get_featured_content(
 ):
     try:
         items = (
-            db.query(models.ContentItem)
+            visible_content_query(db)
             .filter(models.ContentItem.is_featured == True)
-            .filter(models.ContentItem.is_active == True)
             .order_by(models.ContentItem.published_at.desc())
             .limit(limit)
             .all()
@@ -147,7 +163,7 @@ def get_articles(
 ):
     try:
         items = (
-            db.query(models.ContentItem)
+            visible_content_query(db)
             .filter(models.ContentItem.content_type == models.ContentItemType.article)
             .order_by(models.ContentItem.published_at.desc())
             .offset(skip)
@@ -167,7 +183,7 @@ def get_news(
 ):
     try:
         items = (
-            db.query(models.ContentItem)
+            visible_content_query(db)
             .filter(models.ContentItem.content_type == models.ContentItemType.news)
             .order_by(models.ContentItem.published_at.desc())
             .offset(skip)
@@ -187,7 +203,7 @@ def get_courses(
 ):
     try:
         items = (
-            db.query(models.ContentItem)
+            visible_content_query(db)
             .filter(models.ContentItem.content_type == models.ContentItemType.course)
             .order_by(models.ContentItem.published_at.desc())
             .offset(skip)
@@ -207,7 +223,7 @@ def get_events(
 ):
     try:
         items = (
-            db.query(models.ContentItem)
+            visible_content_query(db)
             .filter(models.ContentItem.content_type == models.ContentItemType.event)
             .order_by(models.ContentItem.published_at.desc())
             .offset(skip)
@@ -227,7 +243,7 @@ def get_courses_events(
 ):
     try:
         items = (
-            db.query(models.ContentItem)
+            visible_content_query(db)
             .filter(
                 models.ContentItem.content_type.in_(
                     [models.ContentItemType.course, models.ContentItemType.event]
@@ -251,7 +267,7 @@ def get_publications(
 ):
     try:
         items = (
-            db.query(models.ContentItem)
+            visible_content_query(db)
             .filter(models.ContentItem.content_type == models.ContentItemType.publication)
             .order_by(models.ContentItem.published_at.desc())
             .offset(skip)
@@ -598,7 +614,7 @@ def get_audit_logs(db: Session = Depends(get_db)):
 # ADMIN ENDPOINTS
 # -------------------------
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from sqlalchemy import func
 
@@ -615,6 +631,9 @@ class ContentItemBase(BaseModel):
     thumbnail_url: Optional[str] = None
     author_name: Optional[str] = None
     source_url: Optional[str] = None
+    seo_title: Optional[str] = None
+    seo_description: Optional[str] = None
+    canonical_url: Optional[str] = None
     is_featured: bool = False
     is_active: bool = True
     published_at: Optional[datetime] = None
@@ -626,6 +645,128 @@ class ContentItemUpdate(ContentItemBase):
     title: Optional[str] = None
     slug: Optional[str] = None
     content_type: Optional[str] = None
+
+
+class CourseDetailsPayload(BaseModel):
+    emc_credits: Optional[int] = None
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    enrollment_url: Optional[str] = None
+    provider: Optional[str] = None
+    course_status: str = "draft"
+
+
+class EventDetailsPayload(BaseModel):
+    city_id: Optional[int] = None
+    venue_name: Optional[str] = None
+    attendance_mode: str = "onsite"
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    price_type: str = "free"
+    price_amount: Optional[float] = None
+    emc_credits: Optional[int] = None
+    accreditation_status: Optional[str] = None
+    event_page_url: Optional[str] = None
+    registration_url: Optional[str] = None
+
+
+class PublicationDetailsPayload(BaseModel):
+    name: Optional[str] = None
+    logo_url: Optional[str] = None
+    description: Optional[str] = None
+    emc_credits_text: Optional[str] = None
+    creditation_text: Optional[str] = None
+    indexing_text: Optional[str] = None
+    subscription_url: Optional[str] = None
+
+
+class CourseAdminPayload(ContentItemBase):
+    course: CourseDetailsPayload = Field(default_factory=CourseDetailsPayload)
+
+
+class EventAdminPayload(ContentItemBase):
+    event: EventDetailsPayload = Field(default_factory=EventDetailsPayload)
+
+
+class PublicationAdminPayload(ContentItemBase):
+    publication: PublicationDetailsPayload = Field(default_factory=PublicationDetailsPayload)
+
+
+CONTENT_ITEM_FIELDS = [
+    "title",
+    "slug",
+    "content_type",
+    "status",
+    "short_description",
+    "body",
+    "category_id",
+    "specialization_id",
+    "hero_image_url",
+    "thumbnail_url",
+    "author_name",
+    "source_url",
+    "seo_title",
+    "seo_description",
+    "canonical_url",
+    "is_featured",
+    "is_active",
+    "published_at",
+]
+
+
+def enum_value(enum_class, value, field_name: str):
+    if value in (None, ""):
+        return None
+    try:
+        return enum_class(value)
+    except ValueError as exc:
+        allowed = ", ".join(item.value for item in enum_class)
+        raise HTTPException(status_code=400, detail=f"{field_name} invalid. Valori acceptate: {allowed}") from exc
+
+
+def pydantic_dump(item: BaseModel, exclude_unset: bool = False):
+    return item.model_dump(exclude_unset=exclude_unset)
+
+
+def content_item_data(item: BaseModel, exclude_unset: bool = False):
+    data = pydantic_dump(item, exclude_unset=exclude_unset)
+    return {key: data[key] for key in CONTENT_ITEM_FIELDS if key in data}
+
+
+def normalize_content_item_data(data: dict):
+    normalized = dict(data)
+    if "content_type" in normalized:
+        normalized["content_type"] = enum_value(models.ContentItemType, normalized["content_type"], "content_type")
+    if "status" in normalized:
+        normalized["status"] = enum_value(models.ContentStatus, normalized["status"], "status")
+    return normalized
+
+
+def serialize_content_item(item: models.ContentItem):
+    return serialize_model(item, include_relationships=True)
+
+
+def create_content_item(db: Session, item: BaseModel, expected_type: str):
+    data = content_item_data(item)
+    data["content_type"] = expected_type
+    db_item = models.ContentItem(**normalize_content_item_data(data))
+    db.add(db_item)
+    db.flush()
+    return db_item
+
+
+def update_content_item(db_item: models.ContentItem, item: BaseModel, expected_type: str):
+    data = content_item_data(item, exclude_unset=True)
+    data["content_type"] = expected_type
+    for key, value in normalize_content_item_data(data).items():
+        setattr(db_item, key, value)
+
+
+def get_content_item_or_404(db: Session, content_item_id: int):
+    db_item = db.query(models.ContentItem).filter(models.ContentItem.id == content_item_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    return db_item
 
 @app.get("/admin/dashboard/stats")
 def get_admin_dashboard_stats(db: Session = Depends(get_db)):
@@ -648,7 +789,7 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db)):
                 "publications": publications_count,
                 "users": users_count
             },
-            "recent_content": [serialize_model(item) for item in recent_items]
+            "recent_content": [serialize_content_item(item) for item in recent_items]
         }
     except Exception as e:
         return {"error": str(e)}
@@ -657,97 +798,78 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db)):
 def admin_get_content_items(db: Session = Depends(get_db)):
     try:
         items = db.query(models.ContentItem).order_by(models.ContentItem.created_at.desc()).all()
-        return [serialize_model(item) for item in items]
+        return [serialize_content_item(item) for item in items]
     except Exception as e:
         return {"error": str(e)}
 
 @app.post("/admin/content-items")
 def admin_create_content_item(item: ContentItemCreate, db: Session = Depends(get_db)):
     try:
-        db_item = models.ContentItem(
-            title=item.title,
-            slug=item.slug,
-            content_type=models.ContentItemType(item.content_type),
-            status=models.ContentStatus(item.status),
-            short_description=item.short_description,
-            body=item.body,
-            category_id=item.category_id,
-            specialization_id=item.specialization_id,
-            hero_image_url=item.hero_image_url,
-            thumbnail_url=item.thumbnail_url,
-            author_name=item.author_name,
-            source_url=item.source_url,
-            is_featured=item.is_featured,
-            is_active=item.is_active,
-            published_at=item.published_at
-        )
+        db_item = models.ContentItem(**normalize_content_item_data(content_item_data(item)))
         db.add(db_item)
         db.commit()
         db.refresh(db_item)
-        return serialize_model(db_item)
+        return serialize_content_item(db_item)
     except Exception as e:
         db.rollback()
-        return {"error": str(e)}
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 @app.get("/admin/content-items/{id}")
 def admin_get_content_item(id: int, db: Session = Depends(get_db)):
     try:
-        item = db.query(models.ContentItem).filter(models.ContentItem.id == id).first()
-        if not item:
-            return {"error": "Not found"}
-        return serialize_model(item, include_relationships=True)
+        item = get_content_item_or_404(db, id)
+        return serialize_content_item(item)
     except Exception as e:
-        return {"error": str(e)}
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 @app.put("/admin/content-items/{id}")
 def admin_update_content_item(id: int, item: ContentItemUpdate, db: Session = Depends(get_db)):
     try:
-        db_item = db.query(models.ContentItem).filter(models.ContentItem.id == id).first()
-        if not db_item:
-            return {"error": "Not found"}
-        
-        update_data = item.dict(exclude_unset=True)
-        if "content_type" in update_data:
-            update_data["content_type"] = models.ContentItemType(update_data["content_type"])
-        if "status" in update_data:
-            update_data["status"] = models.ContentStatus(update_data["status"])
-            
+        db_item = get_content_item_or_404(db, id)
+        update_data = normalize_content_item_data(content_item_data(item, exclude_unset=True))
+
         for key, value in update_data.items():
             setattr(db_item, key, value)
             
         db.commit()
         db.refresh(db_item)
-        return serialize_model(db_item)
+        return serialize_content_item(db_item)
     except Exception as e:
         db.rollback()
-        return {"error": str(e)}
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 @app.patch("/admin/content-items/{id}/archive")
 def admin_archive_content_item(id: int, db: Session = Depends(get_db)):
     try:
-        db_item = db.query(models.ContentItem).filter(models.ContentItem.id == id).first()
-        if not db_item:
-            return {"error": "Not found"}
+        db_item = get_content_item_or_404(db, id)
         db_item.status = models.ContentStatus.archived
         db_item.is_active = False
         db.commit()
         return {"success": True}
     except Exception as e:
         db.rollback()
-        return {"error": str(e)}
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 @app.delete("/admin/content-items/{id}")
 def admin_delete_content_item(id: int, db: Session = Depends(get_db)):
     try:
-        db_item = db.query(models.ContentItem).filter(models.ContentItem.id == id).first()
-        if not db_item:
-            return {"error": "Not found"}
+        db_item = get_content_item_or_404(db, id)
         db.delete(db_item)
         db.commit()
         return {"success": True}
     except Exception as e:
         db.rollback()
-        return {"error": str(e)}
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 @app.get("/admin/categories")
 def admin_get_categories(db: Session = Depends(get_db)):
@@ -765,14 +887,156 @@ def admin_get_cities(db: Session = Depends(get_db)):
 def admin_get_users(db: Session = Depends(get_db)):
     return get_users(db)
 
+
+def update_course_details(db_course: models.Course, details: CourseDetailsPayload):
+    data = pydantic_dump(details, exclude_unset=True)
+    if "course_status" in data:
+        data["course_status"] = enum_value(models.CourseStatusEnum, data["course_status"], "course_status")
+    for key, value in data.items():
+        setattr(db_course, key, value)
+
+
+def update_event_details(db_event: models.Event, details: EventDetailsPayload, require_dates: bool = False):
+    data = pydantic_dump(details, exclude_unset=True)
+    if require_dates and not (data.get("start_date") and data.get("end_date")):
+        raise HTTPException(status_code=400, detail="start_date și end_date sunt obligatorii pentru evenimente")
+    if require_dates:
+        data.setdefault("attendance_mode", "onsite")
+        data.setdefault("price_type", "free")
+    if "attendance_mode" in data:
+        data["attendance_mode"] = enum_value(models.AttendanceMode, data["attendance_mode"], "attendance_mode")
+    if "price_type" in data:
+        data["price_type"] = enum_value(models.PriceTypeEnum, data["price_type"], "price_type")
+    if "accreditation_status" in data:
+        data["accreditation_status"] = enum_value(models.AccreditationStatusEnum, data["accreditation_status"], "accreditation_status")
+    for key, value in data.items():
+        setattr(db_event, key, value)
+
+
+def update_publication_details(db_publication: models.Publication, details: PublicationDetailsPayload, fallback_title: str):
+    data = pydantic_dump(details, exclude_unset=True)
+    if not data.get("name"):
+        data["name"] = fallback_title
+    for key, value in data.items():
+        setattr(db_publication, key, value)
+
+
 @app.get("/admin/events")
 def admin_get_events(db: Session = Depends(get_db)):
     return get_events(db=db, skip=0, limit=1000)
+
+
+@app.post("/admin/events")
+def admin_create_event(item: EventAdminPayload, db: Session = Depends(get_db)):
+    try:
+        db_item = create_content_item(db, item, "event")
+        db_event = models.Event(content_item_id=db_item.id)
+        update_event_details(db_event, item.event, require_dates=True)
+        db.add(db_event)
+        db.commit()
+        db.refresh(db_item)
+        return serialize_content_item(db_item)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/admin/events/{id}")
+def admin_update_event(id: int, item: EventAdminPayload, db: Session = Depends(get_db)):
+    try:
+        db_item = get_content_item_or_404(db, id)
+        update_content_item(db_item, item, "event")
+        is_new_event = db_item.event is None
+        db_event = db_item.event or models.Event(content_item_id=db_item.id)
+        update_event_details(db_event, item.event, require_dates=is_new_event)
+        db.add(db_event)
+        db.commit()
+        db.refresh(db_item)
+        return serialize_content_item(db_item)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
 
 @app.get("/admin/courses")
 def admin_get_courses(db: Session = Depends(get_db)):
     return get_courses(db=db, skip=0, limit=1000)
 
+
+@app.post("/admin/courses")
+def admin_create_course(item: CourseAdminPayload, db: Session = Depends(get_db)):
+    try:
+        db_item = create_content_item(db, item, "course")
+        db_course = models.Course(content_item_id=db_item.id)
+        update_course_details(db_course, item.course)
+        db.add(db_course)
+        db.commit()
+        db.refresh(db_item)
+        return serialize_content_item(db_item)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/admin/courses/{id}")
+def admin_update_course(id: int, item: CourseAdminPayload, db: Session = Depends(get_db)):
+    try:
+        db_item = get_content_item_or_404(db, id)
+        update_content_item(db_item, item, "course")
+        db_course = db_item.course or models.Course(content_item_id=db_item.id)
+        update_course_details(db_course, item.course)
+        db.add(db_course)
+        db.commit()
+        db.refresh(db_item)
+        return serialize_content_item(db_item)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.get("/admin/publications")
 def admin_get_publications(db: Session = Depends(get_db)):
     return get_publications(db=db, skip=0, limit=1000)
+
+
+@app.post("/admin/publications")
+def admin_create_publication(item: PublicationAdminPayload, db: Session = Depends(get_db)):
+    try:
+        db_item = create_content_item(db, item, "publication")
+        db_publication = models.Publication(content_item_id=db_item.id)
+        update_publication_details(db_publication, item.publication, db_item.title)
+        db.add(db_publication)
+        db.commit()
+        db.refresh(db_item)
+        return serialize_content_item(db_item)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/admin/publications/{id}")
+def admin_update_publication(id: int, item: PublicationAdminPayload, db: Session = Depends(get_db)):
+    try:
+        db_item = get_content_item_or_404(db, id)
+        update_content_item(db_item, item, "publication")
+        db_publication = db_item.publication or models.Publication(content_item_id=db_item.id)
+        update_publication_details(db_publication, item.publication, db_item.title)
+        db.add(db_publication)
+        db.commit()
+        db.refresh(db_item)
+        return serialize_content_item(db_item)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e

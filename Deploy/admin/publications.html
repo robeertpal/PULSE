@@ -9,13 +9,15 @@
 <body>
     <div class="main-content">
         <div class="content-wrapper">
-            <div class="header-actions"><h2>Lista Publicații</h2></div>
+            <div class="header-actions">
+                <h2>Lista Publicații</h2>
+                <a href="content-form.html?type=publication" class="btn btn-primary">Adaugă Publicație</a>
+            </div>
             <div id="error-msg" class="alert error"></div>
             <table>
-                <thead><tr><th>Nume Publicație</th><th>Status</th><th>Credite</th></tr></thead>
-                <tbody id="table-body"><tr><td colspan="3">Se încarcă...</td></tr></tbody>
+                <thead><tr><th>Nume Publicație</th><th>Status</th><th>Credite</th><th>Acțiuni</th></tr></thead>
+                <tbody id="table-body"><tr><td colspan="4">Se încarcă...</td></tr></tbody>
             </table>
-            <p style="margin-top:20px; color:var(--text-secondary);">* Pentru creare/editare detaliată mergeți la secțiunea <b>Toate Articolele</b>.</p>
         </div>
     </div>
     <script src="js/config.js"></script><script src="js/api.js"></script><script src="js/auth.js"></script><script src="js/ui.js"></script>
@@ -26,7 +28,7 @@
             try {
                 const data = await API.get('/admin/publications');
                 tbody.innerHTML = '';
-                if(data.length === 0) { tbody.innerHTML = '<tr><td colspan="3">Nu există publicații.</td></tr>'; return; }
+                if(data.length === 0) { tbody.innerHTML = '<tr><td colspan="4">Nu există publicații.</td></tr>'; return; }
                 data.forEach(item => {
                     const tr = document.createElement('tr');
                     const pubData = item.publication || {};
@@ -34,6 +36,7 @@
                         <td><strong>${item.title}</strong></td>
                         <td><span class="badge ${item.status}">${item.status}</span></td>
                         <td>${pubData.emc_credits_text || '-'}</td>
+                        <td class="table-actions"><button onclick="window.location.href='content-form.html?id=${item.id}'">Edit</button></td>
                     `;
                     tbody.appendChild(tr);
                 });
