@@ -71,40 +71,6 @@ class Specialization(Base):
     name = Column(String(255), nullable=False, unique=True)
 
 
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), unique=True, index=True, nullable=False)
-    firebase_uid = Column(String(255), unique=True, index=True, nullable=False)
-
-    profile = relationship("UserProfile", uselist=False, back_populates="user")
-
-
-class UserProfile(Base):
-    __tablename__ = "user_profiles"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
-    first_name = Column(String(255), nullable=False)
-    last_name = Column(String(255), nullable=False)
-    cnp = Column(String(13), unique=True, index=True)
-    phone = Column(String(50))
-    correspondence_address = Column(Text)
-    email_alternativ = Column(String(255))
-    cuim = Column(String(255))
-    cod_parafa = Column(String(255))
-    titlu_universitar = Column(String(255))
-    city_id = Column(Integer)
-    occupation_id = Column(Integer)
-    specialization_id = Column(Integer, ForeignKey("specializations.id"))
-    acord_email = Column(Boolean, nullable=False, default=False)
-    acord_sms = Column(Boolean, nullable=False, default=False)
-    sectia = Column(String(255))
-
-    user = relationship("User", back_populates="profile")
-
-
 class ContentItem(Base):
     __tablename__ = "content_items"
 

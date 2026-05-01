@@ -7,14 +7,12 @@ from dotenv import load_dotenv
 # Reîncărcăm variabilele de mediu
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./pulse.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Engine options by backend type.
+# Engine options for Azure PostgreSQL
+# sslmode=require is typical for Azure
 connect_args = {}
-if DATABASE_URL.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
-elif "postgresql" in DATABASE_URL:
-    # sslmode=require is typical for Azure PostgreSQL
+if "postgresql" in (DATABASE_URL or ""):
     connect_args = {"sslmode": "require"}
 
 engine = create_engine(
