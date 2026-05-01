@@ -21,7 +21,14 @@ jobs:
           channel: stable
 
       - run: flutter pub get
+
       - run: flutter build web
+
+      - name: Add ManagementSystem to /admin
+        run: |
+          rm -rf build/web/admin
+          mkdir -p build/web/admin
+          cp -r ../ManagementSystem/* build/web/admin/
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
