@@ -142,15 +142,19 @@ def get_content_items(
 
 @app.get("/featured-content")
 def get_featured_content(
-    limit: int = Query(default=10, le=50),
+    limit: int = Query(default=5, le=50),
     db: Session = Depends(get_db),
 ):
     try:
+        effective_limit = min(limit, 5)
         items = (
             visible_content_query(db)
             .filter(models.ContentItem.is_featured == True)
-            .order_by(models.ContentItem.published_at.desc())
-            .limit(limit)
+            .order_by(
+                models.ContentItem.published_at.desc().nullslast(),
+                models.ContentItem.created_at.desc().nullslast(),
+            )
+            .limit(effective_limit)
             .all()
         )
         return [serialize_model(item, include_relationships=True) for item in items]

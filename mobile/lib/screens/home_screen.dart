@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
@@ -22,8 +22,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  int _selectedIndex = 0;  // Bottom nav index
-  int _feedTab = 0;         // 0 = Acasă, 1 = Pentru tine
+  int _selectedIndex = 0; // Bottom nav index
+  int _feedTab = 0; // 0 = Acasă, 1 = Pentru tine
   late PageController _feedPageController;
   late AnimationController _entranceController;
   late List<Animation<double>> _fadeAnimations;
@@ -79,7 +79,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) _entranceController.forward();
     });
-    
+
     _loadData();
   }
 
@@ -98,7 +98,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _apiService.getPublications(),
         _apiService.getNews(),
         _apiService.getEventGallery(),
-        _apiService.getFeaturedContent(),
+        _apiService.getFeaturedContent(limit: 5),
       ]);
 
       if (mounted) {
@@ -110,11 +110,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _news = results[4] as List<ContentItem>;
           _galleryItems = results[5] as List<EventGalleryItem>;
           _featuredItems = results[6] as List<ContentItem>;
-          
+
           if (_featuredItems.isEmpty && _articles.isNotEmpty) {
             // Fallback to top articles if no featured items available
             _featuredItems = _articles.where((i) => i.isFeatured).toList();
-            if (_featuredItems.isEmpty) _featuredItems = _articles.take(3).toList();
+            if (_featuredItems.isEmpty) {
+              _featuredItems = _articles.take(5).toList();
+            }
           }
 
           _isLoading = false;
@@ -140,10 +142,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _animatedSection(int index, Widget child) {
     return FadeTransition(
       opacity: _fadeAnimations[index],
-      child: SlideTransition(
-        position: _slideAnimations[index],
-        child: child,
-      ),
+      child: SlideTransition(position: _slideAnimations[index], child: child),
     );
   }
 
@@ -189,7 +188,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 Row(
                   children: [
                     _buildFeedTab(0, 'assets/icons/house.svg', 'Acasă'),
-                    _buildFeedTab(1, 'assets/icons/sharedwithyou.svg', 'Pentru tine'),
+                    _buildFeedTab(
+                      1,
+                      'assets/icons/sharedwithyou.svg',
+                      'Pentru tine',
+                    ),
                   ],
                 ),
               ],
@@ -231,7 +234,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   width: 18,
                   height: 18,
                   colorFilter: ColorFilter.mode(
-                    isActive ? PulseTheme.textPrimary : PulseTheme.textSecondary.withValues(alpha: 0.6),
+                    isActive
+                        ? PulseTheme.textPrimary
+                        : PulseTheme.textSecondary.withValues(alpha: 0.6),
                     BlendMode.srcIn,
                   ),
                 ),
@@ -240,7 +245,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Text(
                 label,
                 style: TextStyle(
-                  color: isActive ? PulseTheme.textPrimary : PulseTheme.textSecondary.withValues(alpha: 0.6),
+                  color: isActive
+                      ? PulseTheme.textPrimary
+                      : PulseTheme.textSecondary.withValues(alpha: 0.6),
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                   fontSize: 14,
                   letterSpacing: -0.2,
@@ -275,12 +282,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           padding: const EdgeInsets.only(top: 100.0),
           child: Column(
             children: [
-              Text(_errorMessage!, style: const TextStyle(color: PulseTheme.textSecondary)),
+              Text(
+                _errorMessage!,
+                style: const TextStyle(color: PulseTheme.textSecondary),
+              ),
               const SizedBox(height: 12),
               ElevatedButton(
                 onPressed: _loadData,
                 child: const Text("Reîncearcă"),
-              )
+              ),
             ],
           ),
         ),
@@ -299,9 +309,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         const SizedBox(height: 30),
 
         // Subscription Ad Banner
-        _animatedSection(3, const SubscriptionAdBanner(
-          imageUrl: 'https://storageforpulse.blob.core.windows.net/ads/vitaly-gariev-XqMo4OlBnh0-unsplash.jpg',
-        )),
+        _animatedSection(
+          3,
+          const SubscriptionAdBanner(
+            imageUrl:
+                'https://storageforpulse.blob.core.windows.net/ads/vitaly-gariev-XqMo4OlBnh0-unsplash.jpg',
+          ),
+        ),
 
         const SizedBox(height: 36),
 
@@ -310,50 +324,68 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         const SizedBox(height: 36),
 
         // Cursuri Section
-        _animatedSection(5, ContentSection(
-          title: 'Cursuri',
-          emptyMessage: 'Cursurile vor apărea aici',
-          emptyIconAsset: 'assets/icons/graduation.svg',
-          categoryColor: PulseTheme.courseContent,
-          onActionTap: () => _navigateToTab(1), // Navighează către Cursuri
-          children: _courses.map((item) => ContentCard.fromModel(item)).toList(),
-        )),
+        _animatedSection(
+          5,
+          ContentSection(
+            title: 'Cursuri',
+            emptyMessage: 'Cursurile vor apărea aici',
+            emptyIconAsset: 'assets/icons/graduation.svg',
+            categoryColor: PulseTheme.courseContent,
+            onActionTap: () => _navigateToTab(1), // Navighează către Cursuri
+            children: _courses
+                .map((item) => ContentCard.fromModel(item))
+                .toList(),
+          ),
+        ),
 
         const SizedBox(height: 24),
 
         // Evenimente Section
-        _animatedSection(6, ContentSection(
-          title: 'Evenimente',
-          emptyMessage: 'Evenimentele vor apărea aici',
-          emptyIconAsset: 'assets/icons/events.svg',
-          categoryColor: PulseTheme.eventContent,
-          onActionTap: () => _navigateToTab(3), // Navighează către Evenimente
-          children: _events.map((item) => ContentCard.fromModel(item)).toList(),
-        )),
+        _animatedSection(
+          6,
+          ContentSection(
+            title: 'Evenimente',
+            emptyMessage: 'Evenimentele vor apărea aici',
+            emptyIconAsset: 'assets/icons/events.svg',
+            categoryColor: PulseTheme.eventContent,
+            onActionTap: () => _navigateToTab(3), // Navighează către Evenimente
+            children: _events
+                .map((item) => ContentCard.fromModel(item))
+                .toList(),
+          ),
+        ),
 
         const SizedBox(height: 24),
 
         // Reviste Section
-        _animatedSection(7, ContentSection(
-          title: 'Reviste',
-          emptyMessage: 'Nu există reviste disponibile momentan',
-          emptyIconAsset: 'assets/icons/books.svg',
-          categoryColor: PulseTheme.magazineContent,
-          onActionTap: () => _navigateToTab(2), // Navighează către Reviste
-          children: _publications.map((item) => ContentCard.fromModel(item)).toList(),
-        )),
+        _animatedSection(
+          7,
+          ContentSection(
+            title: 'Reviste',
+            emptyMessage: 'Nu există reviste disponibile momentan',
+            emptyIconAsset: 'assets/icons/books.svg',
+            categoryColor: PulseTheme.magazineContent,
+            onActionTap: () => _navigateToTab(2), // Navighează către Reviste
+            children: _publications
+                .map((item) => ContentCard.fromModel(item))
+                .toList(),
+          ),
+        ),
 
         const SizedBox(height: 24),
 
         // Știri Medicale
-        _animatedSection(8, ContentSection(
-          title: 'Știri',
-          emptyMessage: 'Știrile medicale vor apărea aici',
-          emptyIconAsset: 'assets/icons/newspaper.svg',
-          categoryColor: PulseTheme.newsContent,
-          onActionTap: () => _navigateToTab(4), // Navighează către Știri
-          children: _news.map((item) => ContentCard.fromModel(item)).toList(),
-        )),
+        _animatedSection(
+          8,
+          ContentSection(
+            title: 'Știri',
+            emptyMessage: 'Știrile medicale vor apărea aici',
+            emptyIconAsset: 'assets/icons/newspaper.svg',
+            categoryColor: PulseTheme.newsContent,
+            onActionTap: () => _navigateToTab(4), // Navighează către Știri
+            children: _news.map((item) => ContentCard.fromModel(item)).toList(),
+          ),
+        ),
 
         const SizedBox(height: 36),
 
@@ -380,124 +412,143 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         const SizedBox(height: 8),
 
         // AI Intro Card
-        _animatedSection(2, Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF2563EB),
-                  Color(0xFF7C3AED),
-                  Color(0xFFEC4899),
+        _animatedSection(
+          2,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF2563EB),
+                    Color(0xFF7C3AED),
+                    Color(0xFFEC4899),
+                  ],
+                  stops: [0.0, 0.5, 1.0],
+                ),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
+                    blurRadius: 24,
+                    offset: const Offset(0, 12),
+                    spreadRadius: -4,
+                  ),
                 ],
-                stops: [0.0, 0.5, 1.0],
               ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
-                  blurRadius: 24,
-                  offset: const Offset(0, 12),
-                  spreadRadius: -4,
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // AI Icon with glass circle
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withValues(alpha: 0.15),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.25),
-                      width: 1,
+              child: Row(
+                children: [
+                  // AI Icon with glass circle
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.15),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        width: 1,
+                      ),
                     ),
-                  ),
-                  child: Center(
-                    child: SvgPicture.asset(
-                      'assets/icons/AI.svg',
-                      width: 24,
-                      height: 24,
-                      colorFilter: const ColorFilter.mode(
-                        Colors.white,
-                        BlendMode.srcIn,
+                    child: Center(
+                      child: SvgPicture.asset(
+                        'assets/icons/AI.svg',
+                        width: 24,
+                        height: 24,
+                        colorFilter: const ColorFilter.mode(
+                          Colors.white,
+                          BlendMode.srcIn,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Selectat de AI pentru tine',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.3,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Selectat de AI pentru tine',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.3,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Bazat pe specialitatea și interesele tale',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                        const SizedBox(height: 4),
+                        Text(
+                          'Bazat pe specialitatea și interesele tale',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        )),
+        ),
 
         const SizedBox(height: 28),
 
         // Recomandate pentru tine - Cursuri
-        _animatedSection(3, ContentSection(
-          title: 'Recomandate',
-          emptyMessage: 'Recomandările vor apărea aici',
-          emptyIconAsset: 'assets/icons/sharedwithyou.svg',
-          categoryColor: PulseTheme.primary,
-          onActionTap: () => _navigateToTab(1), // Navighează către Cursuri
-          children: _articles.where((i) => i.isFeatured).map((i) => ContentCard.fromModel(i)).toList(),
-        )),
+        _animatedSection(
+          3,
+          ContentSection(
+            title: 'Recomandate',
+            emptyMessage: 'Recomandările vor apărea aici',
+            emptyIconAsset: 'assets/icons/sharedwithyou.svg',
+            categoryColor: PulseTheme.primary,
+            onActionTap: () => _navigateToTab(1), // Navighează către Cursuri
+            children: _articles
+                .where((i) => i.isFeatured)
+                .map((i) => ContentCard.fromModel(i))
+                .toList(),
+          ),
+        ),
 
         const SizedBox(height: 24),
 
         // Articole relevante
-        _animatedSection(4, ContentSection(
-          title: 'Articole relevante',
-          emptyMessage: 'Articolele relevante vor apărea aici',
-          emptyIconAsset: 'assets/icons/newspaper.svg',
-          categoryColor: PulseTheme.courseContent,
-          onActionTap: () => _navigateToTab(4), // Navighează către Articole (Știri)
-          children: _articles.map((i) => ContentCard.fromModel(i)).toList(),
-        )),
+        _animatedSection(
+          4,
+          ContentSection(
+            title: 'Articole relevante',
+            emptyMessage: 'Articolele relevante vor apărea aici',
+            emptyIconAsset: 'assets/icons/newspaper.svg',
+            categoryColor: PulseTheme.courseContent,
+            onActionTap: () =>
+                _navigateToTab(4), // Navighează către Articole (Știri)
+            children: _articles.map((i) => ContentCard.fromModel(i)).toList(),
+          ),
+        ),
 
         const SizedBox(height: 24),
 
         // Evenimente sugerate
-        _animatedSection(5, ContentSection(
-          title: 'Evenimente sugerate',
-          emptyMessage: 'Evenimentele sugerate vor apărea aici',
-          emptyIconAsset: 'assets/icons/events.svg',
-          categoryColor: PulseTheme.eventContent,
-          onActionTap: () => _navigateToTab(3), // Navighează către Evenimente
-          children: _events.take(1).map((i) => ContentCard.fromModel(i)).toList(),
-        )),
+        _animatedSection(
+          5,
+          ContentSection(
+            title: 'Evenimente sugerate',
+            emptyMessage: 'Evenimentele sugerate vor apărea aici',
+            emptyIconAsset: 'assets/icons/events.svg',
+            categoryColor: PulseTheme.eventContent,
+            onActionTap: () => _navigateToTab(3), // Navighează către Evenimente
+            children: _events
+                .take(1)
+                .map((i) => ContentCard.fromModel(i))
+                .toList(),
+          ),
+        ),
 
         const SizedBox(height: 100),
       ],
@@ -516,60 +567,60 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Feed Tab Switcher (Acasă / Pentru tine)
-                _animatedSection(1, Padding(
-                  padding: const EdgeInsets.only(bottom: 24.0),
-                  child: _buildFeedTabSwitcher(),
-                )),
+                _animatedSection(
+                  1,
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 24.0),
+                    child: _buildFeedTabSwitcher(),
+                  ),
+                ),
               ],
             ),
           ),
         ];
       },
-        body: PageView(
-          controller: _feedPageController,
-          physics: const BouncingScrollPhysics(),
-          onPageChanged: (index) {
-            setState(() {
-              _feedTab = index;
-            });
-          },
-          children: [
-            SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: _buildAcasaFeed(),
-            ),
-            SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: _buildPentruTineFeed(),
-            ),
-          ],
-        ),
+      body: PageView(
+        controller: _feedPageController,
+        physics: const BouncingScrollPhysics(),
+        onPageChanged: (index) {
+          setState(() {
+            _feedTab = index;
+          });
+        },
+        children: [
+          SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: _buildAcasaFeed(),
+          ),
+          SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: _buildPentruTineFeed(),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildPlaceholder(String title) {
     return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: PulseTheme.textPrimary,
-              ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: PulseTheme.textPrimary,
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Pagină în construcție',
-              style: TextStyle(
-                fontSize: 14,
-                color: PulseTheme.textSecondary,
-              ),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Pagină în construcție',
+            style: TextStyle(fontSize: 14, color: PulseTheme.textSecondary),
+          ),
+        ],
+      ),
     );
   }
 
@@ -584,10 +635,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         child: Column(
           children: [
             // Partea de acces de sus (Template global)
-            _animatedSection(0, const HomeHeader(
-              doctorName: 'Andrei',
-              avatarUrl: '',
-            )),
+            _animatedSection(
+              0,
+              const HomeHeader(doctorName: 'Andrei', avatarUrl: ''),
+            ),
             // Conținutul paginii cu tranziții
             Expanded(
               child: FadeIndexedStack(
@@ -673,7 +724,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           }
           return;
         }
-        
+
         setState(() {
           _selectedIndex = index;
         });
@@ -686,7 +737,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           vertical: 10,
         ),
         decoration: BoxDecoration(
-          color: isSelected ? PulseTheme.primary.withValues(alpha: 0.1) : Colors.transparent,
+          color: isSelected
+              ? PulseTheme.primary.withValues(alpha: 0.1)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(22),
         ),
         child: Row(
@@ -697,7 +750,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               width: 22,
               height: 22,
               colorFilter: ColorFilter.mode(
-                isSelected ? PulseTheme.primary : PulseTheme.textSecondary.withValues(alpha: 0.7),
+                isSelected
+                    ? PulseTheme.primary
+                    : PulseTheme.textSecondary.withValues(alpha: 0.7),
                 BlendMode.srcIn,
               ),
             ),
@@ -757,7 +812,7 @@ class _FadeIndexedStackState extends State<FadeIndexedStack> {
     if (widget.index != oldWidget.index) {
       _active[oldWidget.index] = true;
       _active[widget.index] = true;
-      
+
       Future.delayed(widget.duration, () {
         if (mounted) {
           setState(() {
@@ -776,7 +831,7 @@ class _FadeIndexedStackState extends State<FadeIndexedStack> {
       children: List.generate(widget.children.length, (i) {
         final isSelected = widget.index == i;
         final isActive = _active[i];
-        
+
         return IgnorePointer(
           ignoring: !isSelected,
           child: Offstage(
@@ -785,10 +840,7 @@ class _FadeIndexedStackState extends State<FadeIndexedStack> {
               opacity: isSelected ? 1.0 : 0.0,
               duration: widget.duration,
               curve: Curves.easeOutCubic,
-              child: TickerMode(
-                enabled: isSelected,
-                child: widget.children[i],
-              ),
+              child: TickerMode(enabled: isSelected, child: widget.children[i]),
             ),
           ),
         );
@@ -796,4 +848,3 @@ class _FadeIndexedStackState extends State<FadeIndexedStack> {
     );
   }
 }
-

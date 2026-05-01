@@ -9,10 +9,11 @@ class ApiService {
   // - iOS Simulator / Web: http://127.0.0.1:8000
   // - Android Emulator: http://10.0.2.2:8000
   static const String _baseUrl = 'https://pulse-backend-5f9b.onrender.com';
-  
+
   Future<bool> checkHealth() async {
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/health'))
+      final response = await http
+          .get(Uri.parse('$_baseUrl/health'))
           .timeout(const Duration(seconds: 10));
       return response.statusCode == 200;
     } catch (e) {
@@ -23,7 +24,9 @@ class ApiService {
 
   Future<List<ContentItem>> getArticles({int limit = 10}) async {
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/articles?limit=$limit'));
+      final response = await http.get(
+        Uri.parse('$_baseUrl/articles?limit=$limit'),
+      );
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         return data.map((json) => ContentItem.fromJson(json)).toList();
@@ -38,7 +41,9 @@ class ApiService {
 
   Future<List<ContentItem>> getCourses({int limit = 10}) async {
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/courses?limit=$limit'));
+      final response = await http.get(
+        Uri.parse('$_baseUrl/courses?limit=$limit'),
+      );
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         return data.map((json) => ContentItem.fromJson(json)).toList();
@@ -53,7 +58,9 @@ class ApiService {
 
   Future<List<ContentItem>> getEvents({int limit = 10}) async {
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/events?limit=$limit'));
+      final response = await http.get(
+        Uri.parse('$_baseUrl/events?limit=$limit'),
+      );
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         return data.map((json) => ContentItem.fromJson(json)).toList();
@@ -68,7 +75,9 @@ class ApiService {
 
   Future<List<ContentItem>> getPublications({int limit = 10}) async {
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/publications?limit=$limit'));
+      final response = await http.get(
+        Uri.parse('$_baseUrl/publications?limit=$limit'),
+      );
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         return data.map((json) => ContentItem.fromJson(json)).toList();
@@ -111,14 +120,18 @@ class ApiService {
     }
   }
 
-  Future<List<ContentItem>> getFeaturedContent({int limit = 10}) async {
+  Future<List<ContentItem>> getFeaturedContent({int limit = 5}) async {
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/featured-content?limit=$limit'));
+      final response = await http.get(
+        Uri.parse('$_baseUrl/featured-content?limit=$limit'),
+      );
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         return data.map((json) => ContentItem.fromJson(json)).toList();
       } else {
-        throw Exception('Failed to load featured content: ${response.statusCode}');
+        throw Exception(
+          'Failed to load featured content: ${response.statusCode}',
+        );
       }
     } catch (e) {
       debugPrint('Error fetching featured content: $e');

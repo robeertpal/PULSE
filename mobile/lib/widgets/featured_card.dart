@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 import 'emc_badge.dart';
@@ -8,10 +8,7 @@ import '../models/content_item.dart';
 class FeaturedCard extends StatefulWidget {
   final List<ContentItem> items;
 
-  const FeaturedCard({
-    super.key,
-    required this.items,
-  });
+  const FeaturedCard({super.key, required this.items});
 
   @override
   State<FeaturedCard> createState() => _FeaturedCardState();
@@ -25,35 +22,99 @@ class _FeaturedCardState extends State<FeaturedCard> {
 
   Color _getPrimaryColor(String type) {
     switch (type) {
-      case 'course': return PulseTheme.courseContent;
-      case 'event': return PulseTheme.eventContent;
-      case 'publication': return PulseTheme.magazineContent;
-      case 'news': return PulseTheme.newsContent;
-      case 'article': return PulseTheme.primary;
-      default: return PulseTheme.primary;
-    }
-  }
-
-  Color _getLightColor(String type) {
-    switch (type) {
-      case 'course': return PulseTheme.courseContent.withValues(alpha: 0.7);
-      case 'event': return PulseTheme.eventContent.withValues(alpha: 0.7);
-      case 'publication': return PulseTheme.magazineContent.withValues(alpha: 0.7);
-      case 'news': return PulseTheme.newsContent.withValues(alpha: 0.7);
-      case 'article': return PulseTheme.primaryLight;
-      default: return PulseTheme.primaryLight;
+      case 'course':
+        return PulseTheme.courseContent;
+      case 'event':
+        return PulseTheme.eventContent;
+      case 'publication':
+        return PulseTheme.magazineContent;
+      case 'news':
+        return PulseTheme.newsContent;
+      case 'article':
+        return PulseTheme.primary;
+      default:
+        return PulseTheme.primary;
     }
   }
 
   String _getButtonText(String type) {
     switch (type) {
-      case 'course': return 'Începe cursul';
-      case 'event': return 'Vezi detalii';
-      case 'publication': return 'Răsfoiește';
-      case 'news': return 'Citește știrea';
-      case 'article': return 'Citește articolul';
-      default: return 'Vezi detalii';
+      case 'course':
+        return 'Începe cursul';
+      case 'event':
+        return 'Vezi detalii';
+      case 'publication':
+        return 'Răsfoiește';
+      case 'news':
+        return 'Citește știrea';
+      case 'article':
+        return 'Citește articolul';
+      default:
+        return 'Vezi detalii';
     }
+  }
+
+  bool _isRemote(String value) =>
+      value.startsWith('http://') || value.startsWith('https://');
+
+  String? _chooseImageUrl(ContentItem item) {
+    final thumbnail = item.thumbnailUrl?.trim();
+    final hero = item.heroImageUrl?.trim();
+
+    if (thumbnail != null && thumbnail.isNotEmpty) return thumbnail;
+    if (hero != null && hero.isNotEmpty) return hero;
+    return null;
+  }
+
+  String _assetPathFor(String rawUrl) {
+    if (rawUrl.startsWith('assets/')) return rawUrl;
+    if (rawUrl.startsWith('images/')) return 'assets/$rawUrl';
+    return 'assets/images/$rawUrl';
+  }
+
+  Widget _buildBackgroundImage(ContentItem item, Color fallbackColor) {
+    final imageUrl = _chooseImageUrl(item);
+    if (imageUrl == null) {
+      return _buildFallbackBackground(fallbackColor);
+    }
+
+    final image = _isRemote(imageUrl)
+        ? Image.network(
+            imageUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                _buildFallbackBackgroundContent(fallbackColor),
+          )
+        : Image.asset(
+            _assetPathFor(imageUrl),
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                _buildFallbackBackgroundContent(fallbackColor),
+          );
+
+    return Positioned.fill(child: image);
+  }
+
+  Widget _buildFallbackBackground(Color colorPrimary) {
+    return Positioned.fill(
+      child: _buildFallbackBackgroundContent(colorPrimary),
+    );
+  }
+
+  Widget _buildFallbackBackgroundContent(Color colorPrimary) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            colorPrimary,
+            colorPrimary.withValues(alpha: 0.72),
+            Colors.black.withValues(alpha: 0.78),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -97,10 +158,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
                 builder: (context, value, child) {
                   return Transform.scale(
                     scale: value,
-                    child: Opacity(
-                      opacity: opacity,
-                      child: child,
-                    ),
+                    child: Opacity(opacity: opacity, child: child),
                   );
                 },
                 child: Padding(
@@ -124,7 +182,10 @@ class _FeaturedCardState extends State<FeaturedCard> {
       children: List.generate(_items.length, (index) {
         double distance = (_currentPage - index).abs().clamp(0.0, 1.0);
         Color dotColor = Color.lerp(
-          _getPrimaryColor(_items[_currentPage.round().clamp(0, _items.length - 1)].contentType),
+          _getPrimaryColor(
+            _items[_currentPage.round().clamp(0, _items.length - 1)]
+                .contentType,
+          ),
           PulseTheme.border,
           distance,
         )!;
@@ -154,31 +215,26 @@ class _FeaturedCardState extends State<FeaturedCard> {
   }
 
   Widget _buildCardItem(ContentItem item, int index) {
-    // Parallax offset for decorative circles
-    double parallaxOffset = (_currentPage - index) * 30;
-    
     final colorPrimary = _getPrimaryColor(item.contentType);
-    final colorLight = _getLightColor(item.contentType);
-    final String emcPoints = item.emcCredits != null ? '+${item.emcCredits}' : '';
+    final String emcPoints = item.emcCredits != null
+        ? '+${item.emcCredits}'
+        : '';
     final String buttonText = _getButtonText(item.contentType);
-    final String tagText = item.tag?.toUpperCase() ?? item.contentType.toUpperCase();
-    final String subtitleText = item.shortDescription ?? (item.body != null && item.body!.length > 100 ? '${item.body!.substring(0, 100)}...' : '');
-    final String? buttonIcon = item.contentType == 'article' ? 'assets/icons/AI.svg' : null;
+    final String tagText =
+        item.tag?.toUpperCase() ?? item.contentType.toUpperCase();
+    final String subtitleText =
+        item.shortDescription ??
+        (item.body != null && item.body!.length > 100
+            ? '${item.body!.substring(0, 100)}...'
+            : '');
+    final String? buttonIcon = item.contentType == 'article'
+        ? 'assets/icons/AI.svg'
+        : null;
 
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            colorPrimary,
-            colorLight,
-            colorPrimary.withValues(alpha: 0.85),
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ),
         boxShadow: [
           BoxShadow(
             color: colorPrimary.withValues(alpha: 0.35),
@@ -192,42 +248,23 @@ class _FeaturedCardState extends State<FeaturedCard> {
         borderRadius: BorderRadius.circular(28),
         child: Stack(
           children: [
-            // Parallax decorative circles
-            Positioned(
-              right: -40 + parallaxOffset,
-              top: -40,
+            _buildBackgroundImage(item, colorPrimary),
+            Positioned.fill(
               child: Container(
-                width: 200,
-                height: 200,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                     colors: [
-                      Colors.white.withValues(alpha: 0.15),
-                      Colors.white.withValues(alpha: 0.0),
+                      Colors.black.withValues(alpha: 0.18),
+                      colorPrimary.withValues(alpha: 0.22),
+                      Colors.black.withValues(alpha: 0.74),
                     ],
+                    stops: const [0.0, 0.42, 1.0],
                   ),
                 ),
               ),
             ),
-            Positioned(
-              left: -20 - parallaxOffset * 0.5,
-              bottom: -30,
-              child: Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      Colors.white.withValues(alpha: 0.1),
-                      Colors.white.withValues(alpha: 0.0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            // Subtle noise / texture layer
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
@@ -235,11 +272,11 @@ class _FeaturedCardState extends State<FeaturedCard> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.white.withValues(alpha: 0.05),
                       Colors.transparent,
-                      Colors.black.withValues(alpha: 0.08),
+                      Colors.black.withValues(alpha: 0.14),
+                      Colors.black.withValues(alpha: 0.44),
                     ],
-                    stops: const [0.0, 0.4, 1.0],
+                    stops: const [0.0, 0.48, 1.0],
                   ),
                 ),
               ),
@@ -258,12 +295,15 @@ class _FeaturedCardState extends State<FeaturedCard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: Colors.black.withValues(alpha: 0.26),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.2),
+                        color: Colors.white.withValues(alpha: 0.24),
                         width: 1,
                       ),
                     ),
@@ -385,12 +425,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
         ).createShader(bounds);
       },
       blendMode: BlendMode.srcIn,
-      child: SvgPicture.asset(
-        assetPath,
-        width: 20,
-        height: 20,
-      ),
+      child: SvgPicture.asset(assetPath, width: 20, height: 20),
     );
   }
 }
-

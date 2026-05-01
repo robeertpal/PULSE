@@ -466,8 +466,8 @@
       background: rgba(200, 50, 150, 0.5);
     }
 
-    /* On mobile-width screens, hide the overlay */
-    @media (max-width: 500px) {
+    /* On phone and tablet-width screens, hide the overlay */
+    @media (max-width: 1024px) {
       #desktop-overlay {
         display: none !important;
       }
@@ -564,7 +564,7 @@
         </div>
         <div class="cta-text">
           <span class="cta-label">Micșorează fereastra</span>
-          <span class="cta-sub">Sub 500px lățime pentru a continua</span>
+          <span class="cta-sub">Sub 1024px lățime pentru a continua</span>
         </div>
         <span class="cta-arrow">→</span>
       </div>
@@ -585,7 +585,7 @@
   <!-- Desktop overlay visibility logic -->
   <script>
     (function() {
-      var MOBILE_MAX = 500;
+      var MOBILE_MAX = 1024;
       var overlay = null;
 
       function checkWidth() {
