@@ -438,21 +438,11 @@ class _SponsorLogo extends StatelessWidget {
         maxHeight: 36,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: PulseTheme.borderLight.withValues(alpha: 0.22),
-          width: 1,
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: Image.network(
-          url,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
-        ),
+      color: Colors.transparent,
+      child: Image.network(
+        url,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
       ),
     );
   }

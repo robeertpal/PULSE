@@ -302,6 +302,15 @@ td {
     object-fit: cover;
 }
 
+#sponsor_logo_url_preview img {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    object-fit: contain;
+    outline: none;
+}
+
 .media-preview a {
     color: var(--primary);
     font-weight: 600;
@@ -628,18 +637,18 @@ td {
 .flutter-ad-logo {
     align-items: center;
     background: transparent;
-    border: 1px solid rgba(226, 232, 240, 0.22);
-    border-radius: 6px;
+    border: none;
+    box-shadow: none;
     display: inline-flex;
     flex: 0 1 140px;
     height: 36px;
     justify-content: center;
     max-width: 140px;
+    outline: none;
     padding: 4px 6px;
 }
 
 .flutter-ad-logo img {
-    border-radius: 4px;
     display: block;
     height: 100%;
     max-width: 100%;
