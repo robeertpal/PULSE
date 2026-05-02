@@ -314,7 +314,19 @@ function buildPayload() {
         };
     }
 
+    removeImmutableIds(payload);
     return payload;
+}
+
+function removeImmutableIds(payload) {
+    delete payload.id;
+    delete payload.content_item_id;
+
+    ['course', 'event', 'publication'].forEach(childKey => {
+        if (!payload[childKey]) return;
+        delete payload[childKey].id;
+        delete payload[childKey].content_item_id;
+    });
 }
 
 function validatePayload(payload) {

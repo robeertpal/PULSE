@@ -905,6 +905,22 @@ def get_content_item_or_404(db: Session, content_item_id: int):
         raise HTTPException(status_code=404, detail="Content item not found")
     return db_item
 
+
+def ensure_content_type(db_item: models.ContentItem, expected_type: str):
+    current_type = serialize_value(db_item.content_type)
+    if current_type != expected_type:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Content item {db_item.id} este '{current_type}', nu '{expected_type}'",
+        )
+
+
+def child_update_data(details: BaseModel, allowed_fields: set):
+    data = pydantic_dump(details, exclude_unset=True)
+    data.pop("id", None)
+    data.pop("content_item_id", None)
+    return {key: value for key, value in data.items() if key in allowed_fields}
+
 @app.get("/admin/dashboard/stats")
 def get_admin_dashboard_stats(db: Session = Depends(get_db)):
     try:
@@ -1026,7 +1042,17 @@ def admin_get_users(db: Session = Depends(get_db)):
 
 
 def update_course_details(db_course: models.Course, details: CourseDetailsPayload):
-    data = pydantic_dump(details, exclude_unset=True)
+    data = child_update_data(
+        details,
+        {
+            "emc_credits",
+            "valid_from",
+            "valid_until",
+            "enrollment_url",
+            "provider",
+            "course_status",
+        },
+    )
     if "course_status" in data:
         data["course_status"] = enum_value(models.CourseStatusEnum, data["course_status"], "course_status")
     for key, value in data.items():
@@ -1034,7 +1060,22 @@ def update_course_details(db_course: models.Course, details: CourseDetailsPayloa
 
 
 def update_event_details(db_event: models.Event, details: EventDetailsPayload, require_dates: bool = False):
-    data = pydantic_dump(details, exclude_unset=True)
+    data = child_update_data(
+        details,
+        {
+            "city_id",
+            "venue_name",
+            "attendance_mode",
+            "start_date",
+            "end_date",
+            "price_type",
+            "price_amount",
+            "emc_credits",
+            "accreditation_status",
+            "event_page_url",
+            "registration_url",
+        },
+    )
     if require_dates and not (data.get("start_date") and data.get("end_date")):
         raise HTTPException(status_code=400, detail="start_date și end_date sunt obligatorii pentru evenimente")
     if require_dates:
@@ -1051,7 +1092,18 @@ def update_event_details(db_event: models.Event, details: EventDetailsPayload, r
 
 
 def update_publication_details(db_publication: models.Publication, details: PublicationDetailsPayload, fallback_title: str):
-    data = pydantic_dump(details, exclude_unset=True)
+    data = child_update_data(
+        details,
+        {
+            "name",
+            "logo_url",
+            "description",
+            "emc_credits_text",
+            "creditation_text",
+            "indexing_text",
+            "subscription_url",
+        },
+    )
     if not data.get("name"):
         data["name"] = fallback_title
     for key, value in data.items():
@@ -1080,15 +1132,16 @@ def admin_create_event(item: EventAdminPayload, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@app.put("/admin/events/{id}")
-def admin_update_event(id: int, item: EventAdminPayload, db: Session = Depends(get_db)):
+@app.put("/admin/events/{content_item_id}")
+def admin_update_event(content_item_id: int, item: EventAdminPayload, db: Session = Depends(get_db)):
     try:
-        db_item = get_content_item_or_404(db, id)
+        db_item = get_content_item_or_404(db, content_item_id)
+        ensure_content_type(db_item, "event")
         update_content_item(db_item, item, "event")
-        is_new_event = db_item.event is None
-        db_event = db_item.event or models.Event(content_item_id=db_item.id)
-        update_event_details(db_event, item.event, require_dates=is_new_event)
-        db.add(db_event)
+        db_event = db.query(models.Event).filter(models.Event.content_item_id == content_item_id).first()
+        if not db_event:
+            raise HTTPException(status_code=404, detail="Event details not found for this content item")
+        update_event_details(db_event, item.event, require_dates=False)
         db.commit()
         db.refresh(db_item)
         return serialize_content_item(db_item)
@@ -1121,14 +1174,16 @@ def admin_create_course(item: CourseAdminPayload, db: Session = Depends(get_db))
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@app.put("/admin/courses/{id}")
-def admin_update_course(id: int, item: CourseAdminPayload, db: Session = Depends(get_db)):
+@app.put("/admin/courses/{content_item_id}")
+def admin_update_course(content_item_id: int, item: CourseAdminPayload, db: Session = Depends(get_db)):
     try:
-        db_item = get_content_item_or_404(db, id)
+        db_item = get_content_item_or_404(db, content_item_id)
+        ensure_content_type(db_item, "course")
         update_content_item(db_item, item, "course")
-        db_course = db_item.course or models.Course(content_item_id=db_item.id)
+        db_course = db.query(models.Course).filter(models.Course.content_item_id == content_item_id).first()
+        if not db_course:
+            raise HTTPException(status_code=404, detail="Course details not found for this content item")
         update_course_details(db_course, item.course)
-        db.add(db_course)
         db.commit()
         db.refresh(db_item)
         return serialize_content_item(db_item)
@@ -1161,14 +1216,16 @@ def admin_create_publication(item: PublicationAdminPayload, db: Session = Depend
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@app.put("/admin/publications/{id}")
-def admin_update_publication(id: int, item: PublicationAdminPayload, db: Session = Depends(get_db)):
+@app.put("/admin/publications/{content_item_id}")
+def admin_update_publication(content_item_id: int, item: PublicationAdminPayload, db: Session = Depends(get_db)):
     try:
-        db_item = get_content_item_or_404(db, id)
+        db_item = get_content_item_or_404(db, content_item_id)
+        ensure_content_type(db_item, "publication")
         update_content_item(db_item, item, "publication")
-        db_publication = db_item.publication or models.Publication(content_item_id=db_item.id)
+        db_publication = db.query(models.Publication).filter(models.Publication.content_item_id == content_item_id).first()
+        if not db_publication:
+            raise HTTPException(status_code=404, detail="Publication details not found for this content item")
         update_publication_details(db_publication, item.publication, db_item.title)
-        db.add(db_publication)
         db.commit()
         db.refresh(db_item)
         return serialize_content_item(db_item)
