@@ -897,6 +897,7 @@ td {
 .flutter-ad-title {
     color: #0F172A;
     display: -webkit-box;
+    font-family: var(--ad-title-font, var(--font-family));
     font-size: 17px;
     font-weight: 800;
     line-height: 1.12;

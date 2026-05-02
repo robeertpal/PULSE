@@ -20,6 +20,7 @@ const BADGE_TEXT_OPTIONS = ['Nou', 'Recomandat', 'Sponsor', 'Eveniment', 'Curs E
 const ACCENT_COLOR_OPTIONS = ['#2563EB', '#0F766E', '#7C3AED', '#DC2626', '#EA580C'];
 
 let adTemplates = [];
+let adFontPresets = [];
 let isSyncingDesignJson = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -32,7 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     bindFormEvents();
     populateDesignUIFromConfig({});
-    await loadAdTemplates();
+    await Promise.all([loadAdTemplates(), loadAdFontPresets()]);
     syncDesignJsonFromUI();
     updateAdPreview();
 
@@ -76,6 +77,7 @@ function bindFormEvents() {
         'sponsor_logo_url',
         'cta_label',
         'ad_design_template_id',
+        'title_font_preset_id',
         'sponsor_name',
     ].forEach(id => {
         document.getElementById(id).addEventListener('input', updateAdPreview);
@@ -140,6 +142,24 @@ async function loadAdTemplates() {
     });
 }
 
+async function loadAdFontPresets() {
+    const select = document.getElementById('title_font_preset_id');
+    select.innerHTML = '<option value="">Default PULSE</option>';
+    try {
+        adFontPresets = await API.get('/admin/ad-font-presets');
+    } catch (err) {
+        adFontPresets = [];
+        console.warn('Nu s-au putut încărca fonturile de titlu pentru reclame:', err);
+        return;
+    }
+    adFontPresets.forEach(font => {
+        const option = document.createElement('option');
+        option.value = font.id;
+        option.textContent = font.name || font.code || `Font #${font.id}`;
+        select.appendChild(option);
+    });
+}
+
 async function loadContentOptions(type, selectedId = null) {
     const group = document.getElementById('related-content-group');
     const select = document.getElementById('related_content_item_id');
@@ -188,6 +208,7 @@ async function loadAd(id) {
         document.getElementById('status').value = ad.status || 'draft';
         document.getElementById('placement').value = ad.placement || 'home_between_sections';
         document.getElementById('ad_design_template_id').value = ad.ad_design_template_id || '';
+        document.getElementById('title_font_preset_id').value = ad.title_font_preset_id || '';
         document.getElementById('image_url').value = ad.image_url || '';
         document.getElementById('mobile_image_url').value = ad.mobile_image_url || '';
         document.getElementById('background_image_url').value = ad.background_image_url || '';
@@ -395,6 +416,7 @@ function buildPayload() {
         status: document.getElementById('status').value,
         placement: document.getElementById('placement').value,
         ad_design_template_id: intOrNull('ad_design_template_id'),
+        title_font_preset_id: intOrNull('title_font_preset_id'),
         design_config: buildDesignConfigFromUI(),
         related_content_item_id: adType === 'other' ? null : intOrNull('related_content_item_id'),
         image_url: valueOrNull('image_url'),
@@ -520,6 +542,7 @@ function updateAdPreview() {
     const sponsorName = valueOrNull('sponsor_name');
     const ctaLabel = valueOrNull('cta_label');
     const selectedTemplate = getSelectedAdTemplate();
+    const selectedTitleFont = getSelectedAdFontPreset();
     const templateDefaultConfig = asPlainObject(selectedTemplate?.default_config || selectedTemplate?.template_default_config);
     let designConfig = {};
     try {
@@ -558,6 +581,7 @@ function updateAdPreview() {
         config: mergedConfig,
         designConfig,
         templateDefaultConfig,
+        titleFont: selectedTitleFont,
         templateKind,
         accentColor,
         onDark,
@@ -570,6 +594,7 @@ function updateAdPreview() {
         card.style.setProperty('--ad-accent-line', hexToRgba(accentColor, 0.18));
         card.style.setProperty('--ad-accent-dark', darkenHexColor(accentColor, 0.28));
         card.style.setProperty('--ad-card-radius', `${getCornerRadius(mergedConfig)}px`);
+        card.style.setProperty('--ad-title-font', getTitleFontCssFamily(selectedTitleFont));
     }
 
     document.getElementById('preview-template').textContent = selectedTemplate
@@ -580,6 +605,11 @@ function updateAdPreview() {
 function getSelectedAdTemplate() {
     const selectedId = document.getElementById('ad_design_template_id').value;
     return adTemplates.find(template => String(template.id) === selectedId) || null;
+}
+
+function getSelectedAdFontPreset() {
+    const selectedId = document.getElementById('title_font_preset_id').value;
+    return adFontPresets.find(font => String(font.id) === selectedId) || null;
 }
 
 function getPreferredAdImageUrl() {
@@ -778,6 +808,22 @@ function getOverlayClass(value) {
     if (overlay === 'light') return 'overlay-light';
     if (overlay === 'light_gradient') return 'overlay-light-gradient';
     return 'overlay-dark-gradient';
+}
+
+function getTitleFontCssFamily(fontPreset) {
+    const source = asPlainObject(fontPreset);
+    const explicitFamily = source.css_font_family || source.web_font_family;
+    if (explicitFamily) return explicitFamily;
+
+    const fontCode = String(source.code || source.font_key || '').trim();
+    return {
+        default_pulse: 'var(--font-family)',
+        default: 'var(--font-family)',
+        elegant_serif: 'Georgia, "Times New Roman", serif',
+        editorial_serif: '"Palatino Linotype", Palatino, Georgia, serif',
+        modern_sans: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        premium_condensed: '"Arial Narrow", "Roboto Condensed", "Helvetica Neue Condensed", sans-serif',
+    }[fontCode] || 'var(--font-family)';
 }
 
 function getCornerRadius(config) {

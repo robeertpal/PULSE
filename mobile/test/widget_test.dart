@@ -54,6 +54,24 @@ void main() {
     expect(item.mergedConfig['show_sponsor_logo'], isFalse);
   });
 
+  test('AdItem parses title font metadata from ads payload', () {
+    final item = AdItem.fromJson({
+      'id': 12,
+      'title': 'Ad font',
+      'title_font_preset_id': 3,
+      'title_font_code': 'elegant_serif',
+      'title_font_key': 'elegant_serif',
+      'title_font_name': 'Elegant Serif',
+      'title_flutter_font_family': 'Georgia',
+    });
+
+    expect(item.titleFontPresetId, 3);
+    expect(item.titleFontCode, 'elegant_serif');
+    expect(item.titleFontKey, 'elegant_serif');
+    expect(item.titleFontName, 'Elegant Serif');
+    expect(item.titleFlutterFontFamily, 'Georgia');
+  });
+
   testWidgets('AdvertisementCard hides badge when design show_badge is false', (
     tester,
   ) async {
@@ -234,6 +252,8 @@ void main() {
             'show_badge': false,
             'badge_text': '',
           },
+          titleFontKey: 'elegant_serif',
+          titleFlutterFontFamily: 'Georgia',
           designConfig: {'text_position': 'center'},
         ),
       ),
@@ -256,6 +276,7 @@ void main() {
     );
     final title = tester.widget<Text>(find.text('Campanie mega hero'));
     expect(title.textAlign, TextAlign.center);
+    expect(title.style?.fontFamily, 'Georgia');
     expect(find.text('Promovat'), findsNothing);
   });
 

@@ -152,6 +152,43 @@ class _AdvertisementCardState extends State<AdvertisementCard>
     return TextAlign.left;
   }
 
+  String? get _titleFontFamily {
+    final key = _titleFontIdentifier;
+    if (key == null || key == 'default' || key == 'default_pulse') return null;
+
+    final explicitFamily = widget.ad.titleFlutterFontFamily?.trim();
+    if (explicitFamily != null && explicitFamily.isNotEmpty) {
+      return explicitFamily;
+    }
+
+    return switch (key) {
+      'elegant_serif' => 'Georgia',
+      'editorial_serif' => 'Times New Roman',
+      'premium_condensed' => 'Arial Narrow',
+      'modern_sans' => null,
+      _ => null,
+    };
+  }
+
+  List<String>? get _titleFontFamilyFallback {
+    final key = _titleFontIdentifier;
+    return switch (key) {
+      'elegant_serif' => const ['Times New Roman', 'serif'],
+      'editorial_serif' => const ['Georgia', 'serif'],
+      'premium_condensed' => const ['Roboto Condensed', 'Roboto', 'sans-serif'],
+      'modern_sans' => const ['Roboto', 'Arial', 'sans-serif'],
+      _ => null,
+    };
+  }
+
+  String? get _titleFontIdentifier {
+    final key = widget.ad.titleFontKey?.trim();
+    if (key != null && key.isNotEmpty) return key;
+    final code = widget.ad.titleFontCode?.trim();
+    if (code != null && code.isNotEmpty) return code;
+    return null;
+  }
+
   String? _stringConfig(String key, {String? fallback}) {
     final value = _config[key];
     if (value == null) return fallback;
@@ -510,6 +547,8 @@ class _AdvertisementCardState extends State<AdvertisementCard>
           textAlign: _textAlign,
           style: TextStyle(
             color: titleColor,
+            fontFamily: _titleFontFamily,
+            fontFamilyFallback: _titleFontFamilyFallback,
             fontSize:
                 titleFontSize ??
                 (_isMegaHero || _isHero || _isGradient ? 21 : 16.5),

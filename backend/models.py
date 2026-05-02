@@ -635,6 +635,19 @@ class AdDesignTemplate(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
+class AdFontPreset(Base):
+    __tablename__ = "ad_font_presets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(100), unique=True, nullable=False)
+    font_key = Column(String(100), nullable=False)
+    name = Column(String(150), nullable=False)
+    flutter_font_family = Column(String(150))
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 class Ad(Base):
     __tablename__ = "ads"
 
@@ -649,6 +662,7 @@ class Ad(Base):
         default=AdPlacement.home_between_sections,
     )
     ad_design_template_id = Column(Integer, ForeignKey("ad_design_templates.id", ondelete="SET NULL"))
+    title_font_preset_id = Column(Integer, ForeignKey("ad_font_presets.id", ondelete="SET NULL"))
     design_config = Column(JSONB, nullable=False, default=dict)
     related_content_item_id = Column(Integer, ForeignKey("content_items.id", ondelete="SET NULL"))
     image_url = Column(Text)
@@ -669,4 +683,5 @@ class Ad(Base):
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     template = relationship("AdDesignTemplate")
+    title_font = relationship("AdFontPreset")
     related_content_item = relationship("ContentItem")

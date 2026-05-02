@@ -24,6 +24,11 @@ class AdItem {
   final String? templateVariant;
   final Map<String, dynamic> templateDefaultConfig;
   final Map<String, dynamic> designConfig;
+  final int? titleFontPresetId;
+  final String? titleFontCode;
+  final String? titleFontKey;
+  final String? titleFontName;
+  final String? titleFlutterFontFamily;
 
   const AdItem({
     required this.id,
@@ -51,6 +56,11 @@ class AdItem {
     this.templateVariant,
     this.templateDefaultConfig = const {},
     this.designConfig = const {},
+    this.titleFontPresetId,
+    this.titleFontCode,
+    this.titleFontKey,
+    this.titleFontName,
+    this.titleFlutterFontFamily,
   });
 
   factory AdItem.fromJson(Map<String, dynamic> json) {
@@ -80,6 +90,11 @@ class AdItem {
       templateVariant: _asString(json['template_variant']),
       templateDefaultConfig: _asMap(json['template_default_config']),
       designConfig: _asMap(json['design_config']),
+      titleFontPresetId: _asInt(json['title_font_preset_id']),
+      titleFontCode: _asString(json['title_font_code']),
+      titleFontKey: _asString(json['title_font_key']),
+      titleFontName: _asString(json['title_font_name']),
+      titleFlutterFontFamily: _asString(json['title_flutter_font_family']),
     );
   }
 

@@ -389,37 +389,60 @@ def get_public_ads(
         query = text(
             """
             SELECT
-                id,
-                title,
-                description,
-                ad_type::text AS ad_type,
-                placement::text AS placement,
-                related_content_item_id,
-                related_content_type::text AS related_content_type,
-                related_content_slug,
-                related_content_title,
-                image_url,
-                mobile_image_url,
-                background_image_url,
-                sponsor_name,
-                sponsor_logo_url,
-                cta_label,
-                cta_url,
-                priority,
-                starts_at,
-                ends_at,
-                ad_design_template_id,
-                template_code,
-                template_name,
-                template_layout,
-                template_variant,
-                template_default_config,
-                design_config,
-                created_at,
-                updated_at
-            FROM active_ads_public
-            WHERE (:placement IS NULL OR placement::text = :placement)
-            ORDER BY priority DESC, created_at DESC
+                public_ads.id,
+                public_ads.title,
+                public_ads.description,
+                public_ads.ad_type::text AS ad_type,
+                public_ads.placement::text AS placement,
+                public_ads.related_content_item_id,
+                public_ads.related_content_type::text AS related_content_type,
+                public_ads.related_content_slug,
+                public_ads.related_content_title,
+                public_ads.image_url,
+                public_ads.mobile_image_url,
+                public_ads.background_image_url,
+                public_ads.sponsor_name,
+                public_ads.sponsor_logo_url,
+                public_ads.cta_label,
+                public_ads.cta_url,
+                public_ads.priority,
+                public_ads.starts_at,
+                public_ads.ends_at,
+                public_ads.ad_design_template_id,
+                public_ads.template_code,
+                public_ads.template_name,
+                public_ads.template_layout,
+                public_ads.template_variant,
+                public_ads.template_default_config,
+                public_ads.design_config,
+                ads.title_font_preset_id,
+                COALESCE(selected_font.code, default_font.code) AS title_font_code,
+                COALESCE(selected_font.font_key, default_font.font_key) AS title_font_key,
+                COALESCE(selected_font.name, default_font.name) AS title_font_name,
+                COALESCE(selected_font.flutter_font_family, default_font.flutter_font_family) AS title_flutter_font_family,
+                public_ads.created_at,
+                public_ads.updated_at
+            FROM active_ads_public AS public_ads
+            JOIN ads ON ads.id = public_ads.id
+            LEFT JOIN ad_font_presets AS selected_font
+                ON selected_font.id = ads.title_font_preset_id
+                AND selected_font.is_active = TRUE
+            LEFT JOIN LATERAL (
+                SELECT code, font_key, name, flutter_font_family
+                FROM ad_font_presets
+                WHERE is_active = TRUE
+                ORDER BY
+                    CASE
+                        WHEN code = 'default_pulse' THEN 0
+                        WHEN font_key = 'default' THEN 1
+                        ELSE 2
+                    END,
+                    id ASC,
+                    name ASC
+                LIMIT 1
+            ) AS default_font ON TRUE
+            WHERE (:placement IS NULL OR public_ads.placement::text = :placement)
+            ORDER BY public_ads.priority DESC, public_ads.created_at DESC
             LIMIT :limit
             """
         )
@@ -989,6 +1012,17 @@ class AdDesignTemplateRead(BaseModel):
     updated_at: Optional[datetime] = None
 
 
+class AdFontPresetRead(BaseModel):
+    id: int
+    code: str
+    font_key: str
+    name: str
+    flutter_font_family: Optional[str] = None
+    is_active: bool
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
 class AdBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -998,6 +1032,7 @@ class AdBase(BaseModel):
     status: Optional[str] = None
     placement: Optional[str] = None
     ad_design_template_id: Optional[int] = None
+    title_font_preset_id: Optional[int] = None
     design_config: Optional[Dict[str, Any]] = None
     related_content_item_id: Optional[int] = None
     image_url: Optional[str] = None
@@ -1153,6 +1188,7 @@ AD_FIELDS = [
     "status",
     "placement",
     "ad_design_template_id",
+    "title_font_preset_id",
     "design_config",
     "related_content_item_id",
     "image_url",
@@ -1205,6 +1241,12 @@ def serialize_ad_template(template: models.AdDesignTemplate):
     return serialize_model(template)
 
 
+def serialize_ad_font_preset(font: models.AdFontPreset):
+    if not font:
+        return None
+    return serialize_model(font)
+
+
 def serialize_content_option(item: models.ContentItem):
     return {
         "id": item.id,
@@ -1220,11 +1262,17 @@ def serialize_content_option(item: models.ContentItem):
 def serialize_ad(ad: models.Ad):
     data = serialize_model(ad)
     template = serialize_ad_template(ad.template)
+    title_font = serialize_ad_font_preset(ad.title_font)
     related_content = ad.related_content_item
 
     data["template"] = template
     data["template_name"] = template.get("name") if template else None
     data["template_code"] = template.get("code") if template else None
+    data["title_font"] = title_font
+    data["title_font_code"] = title_font.get("code") if title_font else None
+    data["title_font_key"] = title_font.get("font_key") if title_font else None
+    data["title_font_name"] = title_font.get("name") if title_font else None
+    data["title_flutter_font_family"] = title_font.get("flutter_font_family") if title_font else None
     data["related_content_title"] = related_content.title if related_content else None
     data["related_content_type"] = serialize_value(related_content.content_type) if related_content else None
     data["related_content_slug"] = related_content.slug if related_content else None
@@ -1234,7 +1282,11 @@ def serialize_ad(ad: models.Ad):
 def get_ad_or_404(db: Session, ad_id: int):
     ad = (
         db.query(models.Ad)
-        .options(joinedload(models.Ad.template), joinedload(models.Ad.related_content_item))
+        .options(
+            joinedload(models.Ad.template),
+            joinedload(models.Ad.title_font),
+            joinedload(models.Ad.related_content_item),
+        )
         .filter(models.Ad.id == ad_id)
         .filter(models.Ad.deleted_at.is_(None))
         .first()
@@ -1256,6 +1308,20 @@ def validate_ad_template(db: Session, template_id: Optional[int]):
     if not template:
         raise HTTPException(status_code=400, detail="ad_design_template_id nu există")
     return template
+
+
+def validate_ad_font_preset(db: Session, font_preset_id: Optional[int]):
+    if font_preset_id is None:
+        return None
+    font = (
+        db.query(models.AdFontPreset)
+        .filter(models.AdFontPreset.id == font_preset_id)
+        .filter(models.AdFontPreset.is_active == True)
+        .first()
+    )
+    if not font:
+        raise HTTPException(status_code=400, detail="title_font_preset_id nu există")
+    return font
 
 
 def validate_related_content(db: Session, content_item_id: Optional[int], ad_type: str):
@@ -1304,6 +1370,7 @@ def validate_ad_payload(db: Session, data: dict, existing_ad: Optional[models.Ad
 
     validate_ad_dates(starts_at, ends_at)
     validate_ad_template(db, candidate.get("ad_design_template_id"))
+    validate_ad_font_preset(db, candidate.get("title_font_preset_id"))
     validate_related_content(db, related_content_item_id, ad_type)
     validate_ad_target(status, ad_type, related_content_item_id, cta_url)
 
@@ -1323,6 +1390,20 @@ def admin_get_ad_design_templates(db: Session = Depends(get_db)):
             .all()
         )
         return [serialize_model(template) for template in templates]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/admin/ad-font-presets")
+def admin_get_ad_font_presets(db: Session = Depends(get_db)):
+    try:
+        presets = (
+            db.query(models.AdFontPreset)
+            .filter(models.AdFontPreset.is_active == True)
+            .order_by(models.AdFontPreset.id.asc(), models.AdFontPreset.name.asc())
+            .all()
+        )
+        return [serialize_model(preset) for preset in presets]
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -1364,7 +1445,11 @@ def admin_get_ads(db: Session = Depends(get_db)):
     try:
         ads = (
             db.query(models.Ad)
-            .options(joinedload(models.Ad.template), joinedload(models.Ad.related_content_item))
+            .options(
+                joinedload(models.Ad.template),
+                joinedload(models.Ad.title_font),
+                joinedload(models.Ad.related_content_item),
+            )
             .filter(models.Ad.deleted_at.is_(None))
             .order_by(models.Ad.created_at.desc().nullslast())
             .all()
