@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/ad_item.dart';
 import '../theme/pulse_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AdvertisementCard extends StatefulWidget {
   final AdItem ad;
@@ -152,33 +153,24 @@ class _AdvertisementCardState extends State<AdvertisementCard>
     return TextAlign.left;
   }
 
-  String? get _titleFontFamily {
+  TextStyle _adTitleStyle(TextStyle baseStyle) {
     final key = _titleFontIdentifier;
-    if (key == null || key == 'default' || key == 'default_pulse') return null;
-
-    final explicitFamily = widget.ad.titleFlutterFontFamily?.trim();
-    if (explicitFamily != null && explicitFamily.isNotEmpty) {
-      return explicitFamily;
+    if (key == null || key == 'default' || key == 'default_pulse') {
+      return baseStyle;
     }
 
-    return switch (key) {
-      'elegant_serif' => 'Georgia',
-      'editorial_serif' => 'Times New Roman',
-      'premium_condensed' => 'Arial Narrow',
-      'modern_sans' => null,
-      _ => null,
-    };
-  }
-
-  List<String>? get _titleFontFamilyFallback {
-    final key = _titleFontIdentifier;
-    return switch (key) {
-      'elegant_serif' => const ['Times New Roman', 'serif'],
-      'editorial_serif' => const ['Georgia', 'serif'],
-      'premium_condensed' => const ['Roboto Condensed', 'Roboto', 'sans-serif'],
-      'modern_sans' => const ['Roboto', 'Arial', 'sans-serif'],
-      _ => null,
-    };
+    switch (key) {
+      case 'elegant_serif':
+        return GoogleFonts.lora(textStyle: baseStyle);
+      case 'editorial_serif':
+        return GoogleFonts.playfairDisplay(textStyle: baseStyle);
+      case 'modern_sans':
+        return GoogleFonts.inter(textStyle: baseStyle);
+      case 'premium_condensed':
+        return GoogleFonts.robotoCondensed(textStyle: baseStyle);
+      default:
+        return baseStyle;
+    }
   }
 
   String? get _titleFontIdentifier {
@@ -545,17 +537,15 @@ class _AdvertisementCardState extends State<AdvertisementCard>
           maxLines: titleMaxLines,
           overflow: TextOverflow.ellipsis,
           textAlign: _textAlign,
-          style: TextStyle(
+          style: _adTitleStyle(TextStyle(
             color: titleColor,
-            fontFamily: _titleFontFamily,
-            fontFamilyFallback: _titleFontFamilyFallback,
             fontSize:
                 titleFontSize ??
                 (_isMegaHero || _isHero || _isGradient ? 21 : 16.5),
             fontWeight: FontWeight.w800,
             height: 1.13,
             letterSpacing: 0,
-          ),
+          )),
         ),
         if (description != null && description.isNotEmpty) ...[
           const SizedBox(height: 6),
