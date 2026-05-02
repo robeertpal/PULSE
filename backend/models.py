@@ -300,16 +300,34 @@ class ContentItem(Base):
 
     category = relationship("ContentCategory", backref="content_items")
     specialization = relationship("Specialization", backref="content_items")
-    event = relationship("Event", uselist=False, back_populates="content_item")
-    course = relationship("Course", uselist=False, back_populates="content_item")
-    publication = relationship("Publication", uselist=False, back_populates="content_item")
+    event = relationship(
+        "Event",
+        uselist=False,
+        back_populates="content_item",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    course = relationship(
+        "Course",
+        uselist=False,
+        back_populates="content_item",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    publication = relationship(
+        "Publication",
+        uselist=False,
+        back_populates="content_item",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class Event(Base):
     __tablename__ = "events"
 
     id = Column(Integer, primary_key=True, index=True)
-    content_item_id = Column(Integer, ForeignKey("content_items.id"), unique=True, nullable=False)
+    content_item_id = Column(Integer, ForeignKey("content_items.id", ondelete="CASCADE"), unique=True, nullable=False)
     city_id = Column(Integer, ForeignKey("cities.id"))
     venue_name = Column(String(255))
     attendance_mode = Column(Enum(AttendanceMode, name="attendance_mode"), nullable=False, default=AttendanceMode.onsite)
@@ -344,7 +362,7 @@ class Course(Base):
     __tablename__ = "courses"
 
     id = Column(Integer, primary_key=True, index=True)
-    content_item_id = Column(Integer, ForeignKey("content_items.id"), unique=True, nullable=False)
+    content_item_id = Column(Integer, ForeignKey("content_items.id", ondelete="CASCADE"), unique=True, nullable=False)
     emc_credits = Column(Integer)
     valid_from = Column(DateTime(timezone=True))
     valid_until = Column(DateTime(timezone=True))
@@ -386,7 +404,7 @@ class Publication(Base):
     __tablename__ = "publications"
 
     id = Column(Integer, primary_key=True, index=True)
-    content_item_id = Column(Integer, ForeignKey("content_items.id"), unique=True, nullable=False)
+    content_item_id = Column(Integer, ForeignKey("content_items.id", ondelete="CASCADE"), unique=True, nullable=False)
     name = Column(String(255), nullable=False)
     logo_url = Column(Text)
     description = Column(Text)

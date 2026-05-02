@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 import enum
+import logging
 import os
 import re
 from pathlib import Path
@@ -18,6 +19,7 @@ import models
 load_dotenv()
 
 app = FastAPI(title="PULSE Backend API")
+logger = logging.getLogger("pulse.admin")
 
 app.add_middleware(
     CORSMiddleware,
@@ -921,6 +923,17 @@ def child_update_data(details: BaseModel, allowed_fields: set):
     data.pop("content_item_id", None)
     return {key: value for key, value in data.items() if key in allowed_fields}
 
+
+def log_admin_action(method: str, path: str, target_id: int, payload=None, update_data=None):
+    logger.warning(
+        "admin_action method=%s path=%s target_id=%s payload=%s update_data=%s",
+        method,
+        path,
+        target_id,
+        payload,
+        update_data,
+    )
+
 @app.get("/admin/dashboard/stats")
 def get_admin_dashboard_stats(db: Session = Depends(get_db)):
     try:
@@ -984,6 +997,7 @@ def admin_update_content_item(id: int, item: ContentItemUpdate, db: Session = De
     try:
         db_item = get_content_item_or_404(db, id)
         update_data = normalize_content_item_data(content_item_data(item, exclude_unset=True))
+        log_admin_action("PUT", f"/admin/content-items/{id}", id, pydantic_dump(item, exclude_unset=True), update_data)
 
         for key, value in update_data.items():
             setattr(db_item, key, value)
@@ -1001,6 +1015,13 @@ def admin_update_content_item(id: int, item: ContentItemUpdate, db: Session = De
 def admin_archive_content_item(id: int, db: Session = Depends(get_db)):
     try:
         db_item = get_content_item_or_404(db, id)
+        log_admin_action(
+            "PATCH",
+            f"/admin/content-items/{id}/archive",
+            id,
+            payload={},
+            update_data={"status": "archived", "is_active": False},
+        )
         db_item.status = models.ContentStatus.archived
         db_item.is_active = False
         db.commit()
@@ -1015,6 +1036,7 @@ def admin_archive_content_item(id: int, db: Session = Depends(get_db)):
 def admin_delete_content_item(id: int, db: Session = Depends(get_db)):
     try:
         db_item = get_content_item_or_404(db, id)
+        log_admin_action("DELETE", f"/admin/content-items/{id}", id, payload=None, update_data={"delete": "content_items only"})
         db.delete(db_item)
         db.commit()
         return {"success": True}
@@ -1055,6 +1077,12 @@ def update_course_details(db_course: models.Course, details: CourseDetailsPayloa
     )
     if "course_status" in data:
         data["course_status"] = enum_value(models.CourseStatusEnum, data["course_status"], "course_status")
+    logger.warning(
+        "child_update model=Course child_id=%s content_item_id=%s update_data=%s",
+        db_course.id,
+        db_course.content_item_id,
+        data,
+    )
     for key, value in data.items():
         setattr(db_course, key, value)
 
@@ -1087,6 +1115,12 @@ def update_event_details(db_event: models.Event, details: EventDetailsPayload, r
         data["price_type"] = enum_value(models.PriceTypeEnum, data["price_type"], "price_type")
     if "accreditation_status" in data:
         data["accreditation_status"] = enum_value(models.AccreditationStatusEnum, data["accreditation_status"], "accreditation_status")
+    logger.warning(
+        "child_update model=Event child_id=%s content_item_id=%s update_data=%s",
+        db_event.id,
+        db_event.content_item_id,
+        data,
+    )
     for key, value in data.items():
         setattr(db_event, key, value)
 
@@ -1106,6 +1140,12 @@ def update_publication_details(db_publication: models.Publication, details: Publ
     )
     if not data.get("name"):
         data["name"] = fallback_title
+    logger.warning(
+        "child_update model=Publication child_id=%s content_item_id=%s update_data=%s",
+        db_publication.id,
+        db_publication.content_item_id,
+        data,
+    )
     for key, value in data.items():
         setattr(db_publication, key, value)
 
@@ -1137,6 +1177,12 @@ def admin_update_event(content_item_id: int, item: EventAdminPayload, db: Sessio
     try:
         db_item = get_content_item_or_404(db, content_item_id)
         ensure_content_type(db_item, "event")
+        log_admin_action(
+            "PUT",
+            f"/admin/events/{content_item_id}",
+            content_item_id,
+            pydantic_dump(item, exclude_unset=True),
+        )
         update_content_item(db_item, item, "event")
         db_event = db.query(models.Event).filter(models.Event.content_item_id == content_item_id).first()
         if not db_event:
@@ -1179,6 +1225,12 @@ def admin_update_course(content_item_id: int, item: CourseAdminPayload, db: Sess
     try:
         db_item = get_content_item_or_404(db, content_item_id)
         ensure_content_type(db_item, "course")
+        log_admin_action(
+            "PUT",
+            f"/admin/courses/{content_item_id}",
+            content_item_id,
+            pydantic_dump(item, exclude_unset=True),
+        )
         update_content_item(db_item, item, "course")
         db_course = db.query(models.Course).filter(models.Course.content_item_id == content_item_id).first()
         if not db_course:
@@ -1221,6 +1273,12 @@ def admin_update_publication(content_item_id: int, item: PublicationAdminPayload
     try:
         db_item = get_content_item_or_404(db, content_item_id)
         ensure_content_type(db_item, "publication")
+        log_admin_action(
+            "PUT",
+            f"/admin/publications/{content_item_id}",
+            content_item_id,
+            pydantic_dump(item, exclude_unset=True),
+        )
         update_content_item(db_item, item, "publication")
         db_publication = db.query(models.Publication).filter(models.Publication.content_item_id == content_item_id).first()
         if not db_publication:
