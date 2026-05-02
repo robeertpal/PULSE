@@ -143,10 +143,89 @@
                             <label style="margin:0;">Activ</label>
                         </div>
 
-                        <div class="form-group">
-                            <label>Design config JSON</label>
-                            <textarea id="design_config" rows="7">{}</textarea>
-                        </div>
+                        <section class="details-section active design-settings-panel">
+                            <h3>Setări design reclamă</h3>
+
+                            <div class="form-grid">
+                                <div class="form-group checkbox-group">
+                                    <input type="checkbox" id="show_badge" checked>
+                                    <label for="show_badge">Afișează badge</label>
+                                </div>
+                                <div class="form-group checkbox-group">
+                                    <input type="checkbox" id="show_sponsor_logo" checked>
+                                    <label for="show_sponsor_logo">Afișează logo sponsor</label>
+                                </div>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Text badge</label>
+                                    <select id="badge_text_preset">
+                                        <option value="Nou">Nou</option>
+                                        <option value="Recomandat">Recomandat</option>
+                                        <option value="Sponsor">Sponsor</option>
+                                        <option value="Eveniment">Eveniment</option>
+                                        <option value="Curs EMC">Curs EMC</option>
+                                        <option value="Revistă">Revistă</option>
+                                        <option value="Promovat">Promovat</option>
+                                        <option value="custom">Custom</option>
+                                    </select>
+                                    <input type="text" id="badge_text_custom" class="conditional-input" placeholder="Text badge custom">
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Culoare accent</label>
+                                    <select id="accent_color_preset">
+                                        <option value="#2563EB">Albastru PULSE (#2563EB)</option>
+                                        <option value="#0F766E">Verde medical (#0F766E)</option>
+                                        <option value="#7C3AED">Mov eveniment (#7C3AED)</option>
+                                        <option value="#DC2626">Roșu revistă (#DC2626)</option>
+                                        <option value="#EA580C">Portocaliu promo (#EA580C)</option>
+                                        <option value="custom">Custom</option>
+                                    </select>
+                                    <div id="accent_color_custom_group" class="color-custom-row conditional-input">
+                                        <input type="color" id="accent_color_picker" value="#2563EB" aria-label="Culoare accent custom">
+                                        <input type="text" id="accent_color_custom" placeholder="#2563EB">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Animație</label>
+                                    <select id="animation">
+                                        <option value="none">Fără animație</option>
+                                        <option value="fade_in">Fade in</option>
+                                        <option value="soft_pulse">Pulse subtil</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Poziție text</label>
+                                    <select id="text_position">
+                                        <option value="bottom_left">Jos stânga</option>
+                                        <option value="center">Centru</option>
+                                        <option value="top_left">Sus stânga</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Overlay imagine</label>
+                                <select id="image_overlay">
+                                    <option value="dark_gradient">Gradient întunecat</option>
+                                    <option value="none">Fără overlay</option>
+                                </select>
+                            </div>
+
+                            <details class="advanced-json">
+                                <summary>Setări avansate JSON</summary>
+                                <div class="form-group">
+                                    <textarea id="design_config" rows="7">{}</textarea>
+                                    <div id="design_config_status" class="upload-status"></div>
+                                </div>
+                            </details>
+                        </section>
                     </form>
                 </div>
 
@@ -159,6 +238,7 @@
                                 <img id="preview-logo" class="ad-preview-logo" style="display:none;" alt="Logo sponsor">
                                 <span id="preview-template">Fără template</span>
                             </div>
+                            <span class="ad-preview-badge" id="preview-badge">Nou</span>
                             <div class="ad-preview-title" id="preview-title">Titlu reclamă</div>
                             <div class="ad-preview-description" id="preview-description">Descrierea reclamei apare aici.</div>
                             <span class="ad-preview-cta" id="preview-cta">Află mai mult</span>

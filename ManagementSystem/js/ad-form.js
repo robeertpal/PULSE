@@ -16,8 +16,11 @@ const AD_PLACEMENTS = [
     'event_detail',
     'course_detail',
 ];
+const BADGE_TEXT_OPTIONS = ['Nou', 'Recomandat', 'Sponsor', 'Eveniment', 'Curs EMC', 'Revistă', 'Promovat'];
+const ACCENT_COLOR_OPTIONS = ['#2563EB', '#0F766E', '#7C3AED', '#DC2626', '#EA580C'];
 
 let adTemplates = [];
+let isSyncingDesignJson = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
     UI.init('ads', 'Adaugă / Editează Reclamă');
@@ -28,6 +31,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('placement').value = 'home_between_sections';
 
     bindFormEvents();
+    populateDesignUIFromConfig({});
     await loadAdTemplates();
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -40,6 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     toggleRelatedContent();
+    syncDesignJsonFromUI();
     updateAdPreview();
 });
 
@@ -75,9 +80,44 @@ function bindFormEvents() {
         document.getElementById(id).addEventListener('change', updateAdPreview);
     });
 
+    [
+        'show_badge',
+        'badge_text_preset',
+        'badge_text_custom',
+        'accent_color_preset',
+        'accent_color_picker',
+        'accent_color_custom',
+        'animation',
+        'text_position',
+        'image_overlay',
+        'show_sponsor_logo',
+    ].forEach(id => {
+        document.getElementById(id).addEventListener('input', handleDesignUIChange);
+        document.getElementById(id).addEventListener('change', handleDesignUIChange);
+    });
+
+    document.getElementById('accent_color_picker').addEventListener('input', () => {
+        document.getElementById('accent_color_custom').value = document.getElementById('accent_color_picker').value.toUpperCase();
+    });
+
+    document.getElementById('accent_color_custom').addEventListener('input', () => {
+        const value = document.getElementById('accent_color_custom').value.trim();
+        if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+            document.getElementById('accent_color_picker').value = value;
+        }
+    });
+
+    document.getElementById('design_config').addEventListener('input', handleAdvancedJsonInput);
+
     ['image_url', 'mobile_image_url', 'background_image_url', 'sponsor_logo_url'].forEach(id => {
         document.getElementById(id).addEventListener('input', () => updateImagePreview(id));
     });
+}
+
+function handleDesignUIChange() {
+    toggleDesignCustomInputs();
+    syncDesignJsonFromUI();
+    updateAdPreview();
 }
 
 async function loadAdTemplates() {
@@ -151,11 +191,12 @@ async function loadAd(id) {
         document.getElementById('starts_at').value = toDateTimeLocal(ad.starts_at);
         document.getElementById('ends_at').value = toDateTimeLocal(ad.ends_at);
         document.getElementById('is_active').checked = ad.is_active !== false;
-        document.getElementById('design_config').value = JSON.stringify(ad.design_config || {}, null, 2);
+        populateDesignUIFromConfig(ad.design_config || {});
 
         toggleRelatedContent();
         await loadContentOptions(ad.ad_type || 'all', ad.related_content_item_id);
         ['image_url', 'mobile_image_url', 'background_image_url', 'sponsor_logo_url'].forEach(updateImagePreview);
+        syncDesignJsonFromUI();
         updateAdPreview();
     } catch (err) {
         showAlert('Eroare la încărcarea reclamei: ' + err.message, 'error');
@@ -189,8 +230,7 @@ function toDateTimeLocal(value) {
     ].join('-') + `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function parseDesignConfig() {
-    const raw = document.getElementById('design_config').value.trim();
+function parseDesignConfig(raw = document.getElementById('design_config').value.trim()) {
     if (!raw) return {};
     try {
         const parsed = JSON.parse(raw);
@@ -203,8 +243,140 @@ function parseDesignConfig() {
     }
 }
 
+function normalizeHexColor(value) {
+    const color = (value || '').trim();
+    if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+        throw new Error('Culoarea accent custom trebuie să fie în format hex, de exemplu #2563EB.');
+    }
+    return color.toUpperCase();
+}
+
+function getBadgeTextFromUI() {
+    const preset = document.getElementById('badge_text_preset').value;
+    if (preset === 'custom') {
+        return valueOrNull('badge_text_custom') || 'Custom';
+    }
+    return preset || 'Nou';
+}
+
+function getAccentColorFromUI() {
+    const preset = document.getElementById('accent_color_preset').value;
+    if (preset === 'custom') {
+        return normalizeHexColor(valueOrNull('accent_color_custom') || document.getElementById('accent_color_picker').value);
+    }
+    return preset || '#2563EB';
+}
+
+function buildDesignConfigFromUI() {
+    const baseConfig = parseDesignConfig();
+    return {
+        ...baseConfig,
+        show_badge: document.getElementById('show_badge').checked,
+        badge_text: getBadgeTextFromUI(),
+        accent_color: getAccentColorFromUI(),
+        animation: document.getElementById('animation').value || 'none',
+        text_position: document.getElementById('text_position').value || 'bottom_left',
+        image_overlay: document.getElementById('image_overlay').value || 'dark_gradient',
+        show_sponsor_logo: document.getElementById('show_sponsor_logo').checked,
+    };
+}
+
+function populateDesignUIFromConfig(config, syncJson = true) {
+    const safeConfig = config && typeof config === 'object' && !Array.isArray(config) ? config : {};
+    const badgeText = safeConfig.badge_text || 'Nou';
+    const accentColor = (safeConfig.accent_color || '#2563EB').toUpperCase();
+
+    document.getElementById('show_badge').checked = safeConfig.show_badge !== false;
+    if (BADGE_TEXT_OPTIONS.includes(badgeText)) {
+        document.getElementById('badge_text_preset').value = badgeText;
+        document.getElementById('badge_text_custom').value = '';
+    } else {
+        document.getElementById('badge_text_preset').value = 'custom';
+        document.getElementById('badge_text_custom').value = badgeText;
+    }
+
+    if (ACCENT_COLOR_OPTIONS.includes(accentColor)) {
+        document.getElementById('accent_color_preset').value = accentColor;
+        document.getElementById('accent_color_custom').value = accentColor;
+    } else {
+        document.getElementById('accent_color_preset').value = 'custom';
+        document.getElementById('accent_color_custom').value = /^#[0-9A-Fa-f]{6}$/.test(accentColor) ? accentColor : '#2563EB';
+    }
+    document.getElementById('accent_color_picker').value = /^#[0-9A-Fa-f]{6}$/.test(accentColor) ? accentColor : '#2563EB';
+
+    document.getElementById('animation').value = safeConfig.animation || 'none';
+    document.getElementById('text_position').value = safeConfig.text_position || 'bottom_left';
+    document.getElementById('image_overlay').value = safeConfig.image_overlay || 'dark_gradient';
+    document.getElementById('show_sponsor_logo').checked = safeConfig.show_sponsor_logo !== false;
+
+    toggleDesignCustomInputs();
+    if (syncJson) {
+        writeDesignJson({
+            ...safeConfig,
+            show_badge: document.getElementById('show_badge').checked,
+            badge_text: getBadgeTextFromUI(),
+            accent_color: getAccentColorFromUI(),
+            animation: document.getElementById('animation').value,
+            text_position: document.getElementById('text_position').value,
+            image_overlay: document.getElementById('image_overlay').value,
+            show_sponsor_logo: document.getElementById('show_sponsor_logo').checked,
+        });
+    }
+}
+
+function toggleDesignCustomInputs() {
+    document.getElementById('badge_text_custom').classList.toggle(
+        'active',
+        document.getElementById('badge_text_preset').value === 'custom',
+    );
+    document.getElementById('accent_color_custom_group').classList.toggle(
+        'active',
+        document.getElementById('accent_color_preset').value === 'custom',
+    );
+}
+
+function writeDesignJson(config) {
+    isSyncingDesignJson = true;
+    document.getElementById('design_config').value = JSON.stringify(config, null, 2);
+    isSyncingDesignJson = false;
+    setDesignJsonStatus('JSON valid.', 'success');
+}
+
+function syncDesignJsonFromUI() {
+    try {
+        writeDesignJson(buildDesignConfigFromUI());
+    } catch (err) {
+        setDesignJsonStatus(err.message, 'error');
+    }
+}
+
+function validateDesignConfig() {
+    const config = parseDesignConfig();
+    setDesignJsonStatus('JSON valid.', 'success');
+    return config;
+}
+
+function handleAdvancedJsonInput() {
+    if (isSyncingDesignJson) return;
+    try {
+        const config = validateDesignConfig();
+        populateDesignUIFromConfig(config, false);
+        updateAdPreview();
+    } catch (err) {
+        setDesignJsonStatus(err.message, 'error');
+    }
+}
+
+function setDesignJsonStatus(message, type = '') {
+    const status = document.getElementById('design_config_status');
+    if (!status) return;
+    status.textContent = message;
+    status.className = `upload-status ${type}`.trim();
+}
+
 function buildPayload() {
     const adType = document.getElementById('ad_type').value;
+    validateDesignConfig();
     return {
         title: valueOrNull('title'),
         description: valueOrNull('description'),
@@ -212,7 +384,7 @@ function buildPayload() {
         status: document.getElementById('status').value,
         placement: document.getElementById('placement').value,
         ad_design_template_id: intOrNull('ad_design_template_id'),
-        design_config: parseDesignConfig(),
+        design_config: buildDesignConfigFromUI(),
         related_content_item_id: adType === 'other' ? null : intOrNull('related_content_item_id'),
         image_url: valueOrNull('image_url'),
         mobile_image_url: valueOrNull('mobile_image_url'),
@@ -335,19 +507,48 @@ function updateAdPreview() {
     const imageUrl = valueOrNull('image_url');
     const logoUrl = valueOrNull('sponsor_logo_url');
     const ctaLabel = valueOrNull('cta_label') || 'Află mai mult';
+    let designConfig = {};
+    try {
+        designConfig = buildDesignConfigFromUI();
+    } catch (err) {
+        designConfig = {
+            show_badge: document.getElementById('show_badge').checked,
+            badge_text: getBadgeTextFromUI(),
+            accent_color: '#2563EB',
+            animation: 'none',
+            text_position: 'bottom_left',
+            image_overlay: 'dark_gradient',
+            show_sponsor_logo: document.getElementById('show_sponsor_logo').checked,
+        };
+    }
     const selectedTemplate = adTemplates.find(template => String(template.id) === document.getElementById('ad_design_template_id').value);
+    const previewCard = document.querySelector('.ad-preview-card');
+    const previewBody = document.querySelector('.ad-preview-body');
 
     const previewImage = document.getElementById('preview-image');
     previewImage.innerHTML = imageUrl ? `<img src="${escapeAttr(imageUrl)}" alt="Imagine reclamă">` : 'Fără imagine';
+    previewImage.classList.toggle('dark_gradient', designConfig.image_overlay === 'dark_gradient');
+    previewImage.classList.toggle('none', designConfig.image_overlay === 'none');
 
     const previewLogo = document.getElementById('preview-logo');
-    if (logoUrl) {
+    if (logoUrl && designConfig.show_sponsor_logo) {
         previewLogo.src = logoUrl;
         previewLogo.style.display = 'block';
     } else {
         previewLogo.removeAttribute('src');
         previewLogo.style.display = 'none';
     }
+
+    previewCard.classList.toggle('fade_in', designConfig.animation === 'fade_in');
+    previewCard.classList.toggle('soft_pulse', designConfig.animation === 'soft_pulse');
+    previewCard.style.setProperty('--ad-accent', designConfig.accent_color || '#2563EB');
+    previewBody.classList.toggle('center', designConfig.text_position === 'center');
+    previewBody.classList.toggle('top_left', designConfig.text_position === 'top_left');
+    previewBody.classList.toggle('bottom_left', designConfig.text_position === 'bottom_left');
+
+    const previewBadge = document.getElementById('preview-badge');
+    previewBadge.textContent = designConfig.badge_text || 'Nou';
+    previewBadge.style.display = designConfig.show_badge ? 'inline-flex' : 'none';
 
     document.getElementById('preview-template').textContent = selectedTemplate
         ? `${selectedTemplate.name} (${selectedTemplate.code})`

@@ -429,6 +429,14 @@ td {
     background: #FFFFFF;
 }
 
+.ad-preview-card.fade_in {
+    animation: adFadeIn 0.6s ease-out;
+}
+
+.ad-preview-card.soft_pulse {
+    animation: adSoftPulse 1.8s ease-in-out infinite;
+}
+
 .ad-preview-image {
     min-height: 150px;
     background: var(--background);
@@ -437,6 +445,8 @@ td {
     justify-content: center;
     color: var(--text-secondary);
     font-size: 14px;
+    position: relative;
+    overflow: hidden;
 }
 
 .ad-preview-image img {
@@ -446,8 +456,35 @@ td {
     display: block;
 }
 
+.ad-preview-image.dark_gradient::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0.58));
+    pointer-events: none;
+}
+
 .ad-preview-body {
     padding: 16px;
+}
+
+.ad-preview-body.center {
+    text-align: center;
+}
+
+.ad-preview-body.top_left {
+    border-top: 4px solid var(--ad-accent, var(--primary));
+}
+
+.ad-preview-badge {
+    display: inline-flex;
+    background: var(--ad-accent, var(--primary));
+    color: white;
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    margin-bottom: 10px;
 }
 
 .ad-preview-meta {
@@ -482,12 +519,73 @@ td {
 
 .ad-preview-cta {
     display: inline-flex;
-    background: var(--primary);
+    background: var(--ad-accent, var(--primary));
     color: white;
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 13px;
     font-weight: 700;
+}
+
+.design-settings-panel {
+    display: block;
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.checkbox-group input {
+    width: auto;
+}
+
+.checkbox-group label {
+    margin: 0;
+}
+
+.conditional-input {
+    display: none;
+    margin-top: 10px;
+}
+
+.conditional-input.active {
+    display: block;
+}
+
+.color-custom-row.active {
+    display: flex;
+    gap: 10px;
+}
+
+.color-custom-row input[type="color"] {
+    width: 56px;
+    min-width: 56px;
+    padding: 4px;
+}
+
+.advanced-json {
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+    padding-top: 16px;
+}
+
+.advanced-json summary {
+    color: var(--primary);
+    cursor: pointer;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+@keyframes adFadeIn {
+    from { opacity: 0.35; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes adSoftPulse {
+    0%, 100% { box-shadow: 0 0 0 rgba(37, 99, 235, 0); }
+    50% { box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12); }
 }
 
 @media (max-width: 1100px) {

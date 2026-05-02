@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Enum,
+    func,
     Numeric,
     JSON,
 )
@@ -630,8 +631,8 @@ class AdDesignTemplate(Base):
     default_config = Column(JSONB, nullable=False, default=dict)
     preview_image_url = Column(Text)
     is_active = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime(timezone=True))
-    updated_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
 class Ad(Base):
@@ -663,9 +664,9 @@ class Ad(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     updated_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
-    created_at = Column(DateTime(timezone=True))
-    updated_at = Column(DateTime(timezone=True))
-    deleted_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     template = relationship("AdDesignTemplate")
     related_content_item = relationship("ContentItem")

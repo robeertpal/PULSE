@@ -1117,7 +1117,11 @@ RELEVANT_AD_CONTENT_TYPES = {"publication", "event", "course", "article", "news"
 
 def ad_data(item: BaseModel, exclude_unset: bool = False):
     data = pydantic_dump(item, exclude_unset=exclude_unset)
-    return {key: data[key] for key in AD_FIELDS if key in data}
+    payload = {key: data[key] for key in AD_FIELDS if key in data}
+    for nullable_actor_field in ("created_by_user_id", "updated_by_user_id"):
+        if payload.get(nullable_actor_field) is None:
+            payload.pop(nullable_actor_field, None)
+    return payload
 
 
 def normalize_ad_data(data: dict):
