@@ -54,7 +54,7 @@ void main() {
     expect(item.mergedConfig['show_sponsor_logo'], isFalse);
   });
 
-  testWidgets('AdvertisementCard hides badge when show_badge is false', (
+  testWidgets('AdvertisementCard hides badge when design show_badge is false', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -63,11 +63,12 @@ void main() {
           id: 1,
           title: 'Reclama fara badge',
           templateDefaultConfig: {'show_badge': true, 'badge_text': 'Template'},
-          designConfig: {'show_badge': false},
+          designConfig: {'show_badge': false, 'badge_text': 'Nou'},
         ),
       ),
     );
 
+    expect(find.text('Nou'), findsNothing);
     expect(find.text('Template'), findsNothing);
     expect(find.text('Promovat'), findsNothing);
     expect(find.text('Reclama fara badge'), findsOneWidget);
@@ -98,7 +99,6 @@ void main() {
         const AdItem(
           id: 7,
           title: 'Reclama fara text badge',
-          templateDefaultConfig: {'show_badge': true, 'badge_text': 'Template'},
           designConfig: {'show_badge': true, 'badge_text': ''},
         ),
       ),
@@ -108,6 +108,66 @@ void main() {
     expect(find.text('Promovat'), findsNothing);
     expect(find.text('Reclama fara text badge'), findsOneWidget);
   });
+
+  testWidgets(
+    'AdvertisementCard falls back to template badge text when asked',
+    (tester) async {
+      await tester.pumpWidget(
+        _adHost(
+          const AdItem(
+            id: 8,
+            title: 'Reclama cu badge din template',
+            templateDefaultConfig: {
+              'show_badge': true,
+              'badge_text': 'Template',
+            },
+            designConfig: {'show_badge': true, 'badge_text': ''},
+          ),
+        ),
+      );
+
+      expect(find.text('Template'), findsOneWidget);
+      expect(find.text('Promovat'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'AdvertisementCard uses template show_badge false when design omits it',
+    (tester) async {
+      await tester.pumpWidget(
+        _adHost(
+          const AdItem(
+            id: 9,
+            title: 'Reclama template fara badge',
+            templateDefaultConfig: {'show_badge': false, 'badge_text': 'Nou'},
+            designConfig: {},
+          ),
+        ),
+      );
+
+      expect(find.text('Nou'), findsNothing);
+      expect(find.text('Promovat'), findsNothing);
+      expect(find.text('Reclama template fara badge'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'AdvertisementCard does not show Promovat for empty design config',
+    (tester) async {
+      await tester.pumpWidget(
+        _adHost(
+          const AdItem(
+            id: 10,
+            title: 'Reclama fara config badge',
+            designConfig: {},
+          ),
+        ),
+      );
+
+      expect(find.text('Promovat'), findsNothing);
+      expect(find.text('Reclama fara config badge'), findsOneWidget);
+    },
+  );
 
   testWidgets('AdvertisementCard supports centered text_position', (
     tester,

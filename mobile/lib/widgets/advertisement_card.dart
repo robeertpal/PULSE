@@ -65,11 +65,17 @@ class _AdvertisementCardState extends State<AdvertisementCard>
     PulseTheme.primary,
   );
 
-  bool get _showBadge => _boolConfig('show_badge', fallback: false);
+  bool get _showBadge {
+    final designValue = _boolFromMap(widget.ad.designConfig, 'show_badge');
+    if (designValue != null) return designValue;
+    return _boolFromMap(widget.ad.templateDefaultConfig, 'show_badge') ?? false;
+  }
 
   bool get _showSponsorLogo => _boolConfig('show_sponsor_logo', fallback: true);
 
-  String? get _badgeText => _stringConfig('badge_text');
+  String? get _badgeText =>
+      _stringFromMap(widget.ad.designConfig, 'badge_text') ??
+      _stringFromMap(widget.ad.templateDefaultConfig, 'badge_text');
 
   bool get _shouldShowBadge => _showBadge && _badgeText != null;
 
@@ -152,9 +158,30 @@ class _AdvertisementCardState extends State<AdvertisementCard>
 
   bool _boolConfig(String key, {required bool fallback}) {
     final value = _config[key];
+    return _boolFromValue(value) ?? fallback;
+  }
+
+  bool? _boolFromMap(Map<String, dynamic> config, String key) {
+    if (!config.containsKey(key)) return null;
+    return _boolFromValue(config[key]);
+  }
+
+  bool? _boolFromValue(dynamic value) {
     if (value is bool) return value;
-    if (value is String) return value.toLowerCase() == 'true';
-    return fallback;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      if (normalized == 'true') return true;
+      if (normalized == 'false') return false;
+    }
+    return null;
+  }
+
+  String? _stringFromMap(Map<String, dynamic> config, String key) {
+    if (!config.containsKey(key)) return null;
+    final value = config[key];
+    if (value == null) return null;
+    final text = value.toString().trim();
+    return text.isEmpty ? null : text;
   }
 
   @override
@@ -185,7 +212,7 @@ class _AdvertisementCardState extends State<AdvertisementCard>
 
     return Semantics(
       button: widget.onTap != null,
-      label: 'Reclamă promovată: ${widget.ad.title}',
+      label: 'Reclamă: ${widget.ad.title}',
       child: card,
     );
   }
