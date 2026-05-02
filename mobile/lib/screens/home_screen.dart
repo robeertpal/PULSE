@@ -10,7 +10,7 @@ import '../widgets/home_header.dart';
 import '../widgets/featured_card.dart';
 import '../widgets/content_section.dart';
 import '../widgets/content_card.dart';
-import '../widgets/advertisement_card.dart';
+import '../widgets/advertisement_feed_slot.dart';
 import '../widgets/premium_loading_indicator.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -240,19 +240,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
 
-  Widget _buildAdSlot(String placement) {
-    final ads = _adsByPlacement[placement] ?? const <AdItem>[];
-    if (ads.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 2, bottom: 24),
-      child: AdvertisementCard(
-        ad: ads.first,
-        onTap: () => _handleAdTap(ads.first),
-      ),
-    );
-  }
-
   // Acasă Feed
 
   Widget _buildAcasaFeed() {
@@ -310,10 +297,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
 
-        _buildAdSlot('home_after_news'),
-
-        if ((_adsByPlacement['home_after_news'] ?? const <AdItem>[]).isEmpty)
-          const SizedBox(height: 24),
+        AdvertisementFeedSlot(
+          ads: _adsByPlacement['home_after_news'] ?? const <AdItem>[],
+          onAdTap: _handleAdTap,
+        ),
 
         // Reviste Section
         _animatedSection(
@@ -330,11 +317,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
 
-        _buildAdSlot('home_after_publications'),
-
-        if ((_adsByPlacement['home_after_publications'] ?? const <AdItem>[])
-            .isEmpty)
-          const SizedBox(height: 24),
+        AdvertisementFeedSlot(
+          ads: _adsByPlacement['home_after_publications'] ?? const <AdItem>[],
+          onAdTap: _handleAdTap,
+        ),
 
         // Evenimente Section
         _animatedSection(
@@ -351,10 +337,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
 
-        _buildAdSlot('home_after_events'),
-
-        if ((_adsByPlacement['home_after_events'] ?? const <AdItem>[]).isEmpty)
-          const SizedBox(height: 24),
+        AdvertisementFeedSlot(
+          ads: _adsByPlacement['home_after_events'] ?? const <AdItem>[],
+          onAdTap: _handleAdTap,
+        ),
 
         // Cursuri Section
         _animatedSection(
@@ -371,7 +357,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
 
-        _buildAdSlot('home_after_courses'),
+        AdvertisementFeedSlot(
+          ads: _adsByPlacement['home_after_courses'] ?? const <AdItem>[],
+          onAdTap: _handleAdTap,
+        ),
 
         const SizedBox(height: 100),
       ],
