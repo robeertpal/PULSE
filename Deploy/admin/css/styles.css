@@ -627,8 +627,8 @@ td {
 
 .flutter-ad-logo {
     align-items: center;
-    background: #FFFFFF;
-    border: 1px solid rgba(226, 232, 240, 0.5);
+    background: transparent;
+    border: 1px solid rgba(226, 232, 240, 0.22);
     border-radius: 6px;
     display: inline-flex;
     flex: 0 1 140px;

@@ -439,10 +439,10 @@ class _SponsorLogo extends StatelessWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: PulseTheme.borderLight.withValues(alpha: 0.5),
+          color: PulseTheme.borderLight.withValues(alpha: 0.22),
           width: 1,
         ),
       ),
