@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Reclame - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="header-actions">
+                <div class="filters-row">
+                    <input type="text" id="search-input" placeholder="Caută după titlu...">
+                    <select id="status-filter">
+                        <option value="">Toate statusurile</option>
+                        <option value="draft">Draft</option>
+                        <option value="active">Active</option>
+                        <option value="paused">Pauzate</option>
+                        <option value="archived">Arhivate</option>
+                    </select>
+                    <select id="type-filter">
+                        <option value="">Toate tipurile</option>
+                        <option value="publication">Publication</option>
+                        <option value="event">Event</option>
+                        <option value="course">Course</option>
+                        <option value="article">Article</option>
+                        <option value="news">News</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <select id="placement-filter">
+                        <option value="">Toate plasările</option>
+                    </select>
+                </div>
+                <a href="ad-form.html" class="btn btn-primary">Adaugă reclamă</a>
+            </div>
+
+            <div id="error-msg" class="alert error"></div>
+
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Titlu</th>
+                            <th>Tip</th>
+                            <th>Status</th>
+                            <th>Placement</th>
+                            <th>Template</th>
+                            <th>Prioritate</th>
+                            <th>Start</th>
+                            <th>Final</th>
+                            <th>Activ</th>
+                            <th>Content asociat</th>
+                            <th>Acțiuni</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ads-table-body">
+                        <tr><td colspan="11">Se încarcă...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/ads.js"></script>
+</body>
+</html>

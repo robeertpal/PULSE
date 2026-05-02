@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 import models
@@ -98,6 +98,93 @@ def visible_content_query(db: Session):
     )
 
 
+def visible_content_card_query(db: Session):
+    return visible_content_query(db).options(
+        joinedload(models.ContentItem.category),
+        joinedload(models.ContentItem.specialization),
+        joinedload(models.ContentItem.event).joinedload(models.Event.city),
+        joinedload(models.ContentItem.course),
+        joinedload(models.ContentItem.publication),
+    )
+
+
+def public_content_ordering():
+    return (
+        models.ContentItem.is_featured.desc(),
+        models.ContentItem.published_at.desc().nullslast(),
+        models.ContentItem.created_at.desc().nullslast(),
+    )
+
+
+def serialize_content_card(item):
+    data = {
+        "id": item.id,
+        "title": item.title,
+        "slug": item.slug,
+        "content_type": serialize_value(item.content_type),
+        "short_description": item.short_description,
+        "thumbnail_url": item.thumbnail_url,
+        "hero_image_url": item.hero_image_url,
+        "category_name": item.category.name if item.category else None,
+        "specialization_name": item.specialization.name if item.specialization else None,
+        "published_at": serialize_value(item.published_at),
+        "created_at": serialize_value(item.created_at),
+        "is_featured": item.is_featured,
+        "source_url": item.source_url,
+        "author_name": item.author_name,
+    }
+
+    if item.event:
+        data["event"] = {
+            "start_date": serialize_value(item.event.start_date),
+            "city_name": item.event.city.name if item.event.city else None,
+            "venue_name": item.event.venue_name,
+            "emc_credits": item.event.emc_credits,
+            "event_page_url": item.event.event_page_url,
+            "registration_url": item.event.registration_url,
+        }
+        data.update(
+            {
+                "start_date": data["event"]["start_date"],
+                "city_name": data["event"]["city_name"],
+                "venue_name": item.event.venue_name,
+                "emc_credits": item.event.emc_credits,
+            }
+        )
+
+    if item.course:
+        data["course"] = {
+            "emc_credits": item.course.emc_credits,
+            "provider": item.course.provider,
+            "valid_until": serialize_value(item.course.valid_until),
+            "enrollment_url": item.course.enrollment_url,
+        }
+        data.update(
+            {
+                "emc_credits": item.course.emc_credits,
+                "provider": item.course.provider,
+                "valid_until": data["course"]["valid_until"],
+            }
+        )
+
+    if item.publication:
+        data["publication"] = {
+            "name": item.publication.name,
+            "logo_url": item.publication.logo_url,
+            "description": item.publication.description,
+            "subscription_url": item.publication.subscription_url,
+        }
+        data.update(
+            {
+                "name": item.publication.name,
+                "logo_url": item.publication.logo_url,
+                "description": item.publication.description,
+            }
+        )
+
+    return data
+
+
 @app.get("/")
 def root():
     return {
@@ -144,22 +231,21 @@ def get_content_items(
 
 @app.get("/featured-content")
 def get_featured_content(
-    limit: int = Query(default=5, le=50),
+    limit: int = Query(default=10, le=50),
     db: Session = Depends(get_db),
 ):
     try:
-        effective_limit = min(limit, 5)
         items = (
-            visible_content_query(db)
+            visible_content_card_query(db)
             .filter(models.ContentItem.is_featured == True)
             .order_by(
                 models.ContentItem.published_at.desc().nullslast(),
                 models.ContentItem.created_at.desc().nullslast(),
             )
-            .limit(effective_limit)
+            .limit(limit)
             .all()
         )
-        return [serialize_model(item, include_relationships=True) for item in items]
+        return [serialize_content_card(item) for item in items]
     except Exception as e:
         return {"error": str(e)}
 
@@ -192,14 +278,14 @@ def get_news(
 ):
     try:
         items = (
-            visible_content_query(db)
+            visible_content_card_query(db)
             .filter(models.ContentItem.content_type == models.ContentItemType.news)
-            .order_by(models.ContentItem.published_at.desc())
+            .order_by(*public_content_ordering())
             .offset(skip)
             .limit(limit)
             .all()
         )
-        return [serialize_model(item) for item in items]
+        return [serialize_content_card(item) for item in items]
     except Exception as e:
         return {"error": str(e)}
 
@@ -212,14 +298,14 @@ def get_courses(
 ):
     try:
         items = (
-            visible_content_query(db)
+            visible_content_card_query(db)
             .filter(models.ContentItem.content_type == models.ContentItemType.course)
-            .order_by(models.ContentItem.published_at.desc())
+            .order_by(*public_content_ordering())
             .offset(skip)
             .limit(limit)
             .all()
         )
-        return [serialize_model(item, include_relationships=True) for item in items]
+        return [serialize_content_card(item) for item in items]
     except Exception as e:
         return {"error": str(e)}
 
@@ -232,14 +318,14 @@ def get_events(
 ):
     try:
         items = (
-            visible_content_query(db)
+            visible_content_card_query(db)
             .filter(models.ContentItem.content_type == models.ContentItemType.event)
-            .order_by(models.ContentItem.published_at.desc())
+            .order_by(*public_content_ordering())
             .offset(skip)
             .limit(limit)
             .all()
         )
-        return [serialize_model(item, include_relationships=True) for item in items]
+        return [serialize_content_card(item) for item in items]
     except Exception as e:
         return {"error": str(e)}
 
@@ -252,18 +338,18 @@ def get_courses_events(
 ):
     try:
         items = (
-            visible_content_query(db)
+            visible_content_card_query(db)
             .filter(
                 models.ContentItem.content_type.in_(
                     [models.ContentItemType.course, models.ContentItemType.event]
                 )
             )
-            .order_by(models.ContentItem.published_at.desc())
+            .order_by(*public_content_ordering())
             .offset(skip)
             .limit(limit)
             .all()
         )
-        return [serialize_model(item, include_relationships=True) for item in items]
+        return [serialize_content_card(item) for item in items]
     except Exception as e:
         return {"error": str(e)}
 
@@ -276,14 +362,14 @@ def get_publications(
 ):
     try:
         items = (
-            visible_content_query(db)
+            visible_content_card_query(db)
             .filter(models.ContentItem.content_type == models.ContentItemType.publication)
-            .order_by(models.ContentItem.published_at.desc())
+            .order_by(*public_content_ordering())
             .offset(skip)
             .limit(limit)
             .all()
         )
-        return [serialize_model(item, include_relationships=True) for item in items]
+        return [serialize_content_card(item) for item in items]
     except Exception as e:
         return {"error": str(e)}
 
@@ -623,8 +709,8 @@ def get_audit_logs(db: Session = Depends(get_db)):
 # ADMIN ENDPOINTS
 # -------------------------
 
-from pydantic import BaseModel, Field
-from typing import Optional, List
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, Dict, Optional, List
 from sqlalchemy import func
 
 IMAGE_ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
@@ -831,6 +917,73 @@ class PublicationAdminPayload(ContentItemBase):
     publication: PublicationDetailsPayload = Field(default_factory=PublicationDetailsPayload)
 
 
+class AdDesignTemplateRead(BaseModel):
+    id: int
+    code: str
+    name: str
+    description: Optional[str] = None
+    layout: str
+    variant: str
+    default_config: Dict[str, Any] = Field(default_factory=dict)
+    preview_image_url: Optional[str] = None
+    is_active: bool
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class AdBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: Optional[str] = None
+    description: Optional[str] = None
+    ad_type: Optional[str] = None
+    status: Optional[str] = None
+    placement: Optional[str] = None
+    ad_design_template_id: Optional[int] = None
+    design_config: Optional[Dict[str, Any]] = None
+    related_content_item_id: Optional[int] = None
+    image_url: Optional[str] = None
+    mobile_image_url: Optional[str] = None
+    background_image_url: Optional[str] = None
+    sponsor_name: Optional[str] = None
+    sponsor_logo_url: Optional[str] = None
+    cta_label: Optional[str] = None
+    cta_url: Optional[str] = None
+    priority: Optional[int] = None
+    starts_at: Optional[datetime] = None
+    ends_at: Optional[datetime] = None
+    is_active: Optional[bool] = None
+    created_by_user_id: Optional[int] = None
+    updated_by_user_id: Optional[int] = None
+
+
+class AdCreate(AdBase):
+    title: str
+    ad_type: str = "other"
+    status: str = "draft"
+    placement: str = "home_between_sections"
+    design_config: Dict[str, Any] = Field(default_factory=dict)
+    priority: int = 0
+    is_active: bool = True
+
+
+class AdUpdate(AdBase):
+    pass
+
+
+class AdRead(AdBase):
+    id: int
+    ad_type: str
+    status: str
+    placement: str
+    design_config: Dict[str, Any] = Field(default_factory=dict)
+    priority: int
+    is_active: bool
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
+
+
 CONTENT_ITEM_FIELDS = [
     "title",
     "slug",
@@ -933,6 +1086,329 @@ def log_admin_action(method: str, path: str, target_id: int, payload=None, updat
         payload,
         update_data,
     )
+
+
+AD_FIELDS = [
+    "title",
+    "description",
+    "ad_type",
+    "status",
+    "placement",
+    "ad_design_template_id",
+    "design_config",
+    "related_content_item_id",
+    "image_url",
+    "mobile_image_url",
+    "background_image_url",
+    "sponsor_name",
+    "sponsor_logo_url",
+    "cta_label",
+    "cta_url",
+    "priority",
+    "starts_at",
+    "ends_at",
+    "is_active",
+    "created_by_user_id",
+    "updated_by_user_id",
+]
+
+RELEVANT_AD_CONTENT_TYPES = {"publication", "event", "course", "article", "news"}
+
+
+def ad_data(item: BaseModel, exclude_unset: bool = False):
+    data = pydantic_dump(item, exclude_unset=exclude_unset)
+    return {key: data[key] for key in AD_FIELDS if key in data}
+
+
+def normalize_ad_data(data: dict):
+    normalized = dict(data)
+    if "ad_type" in normalized:
+        normalized["ad_type"] = enum_value(models.AdType, normalized["ad_type"], "ad_type")
+    if "status" in normalized:
+        normalized["status"] = enum_value(models.AdStatus, normalized["status"], "status")
+    if "placement" in normalized:
+        normalized["placement"] = enum_value(models.AdPlacement, normalized["placement"], "placement")
+    if normalized.get("design_config") is None:
+        normalized["design_config"] = {}
+    return normalized
+
+
+def enum_or_value(value):
+    return serialize_value(value)
+
+
+def serialize_ad_template(template: models.AdDesignTemplate):
+    if not template:
+        return None
+    return serialize_model(template)
+
+
+def serialize_content_option(item: models.ContentItem):
+    return {
+        "id": item.id,
+        "title": item.title,
+        "content_type": serialize_value(item.content_type),
+        "slug": item.slug,
+        "status": serialize_value(item.status),
+        "is_active": item.is_active,
+        "published_at": serialize_value(item.published_at),
+    }
+
+
+def serialize_ad(ad: models.Ad):
+    data = serialize_model(ad)
+    template = serialize_ad_template(ad.template)
+    related_content = ad.related_content_item
+
+    data["template"] = template
+    data["template_name"] = template.get("name") if template else None
+    data["template_code"] = template.get("code") if template else None
+    data["related_content_title"] = related_content.title if related_content else None
+    data["related_content_type"] = serialize_value(related_content.content_type) if related_content else None
+    data["related_content_slug"] = related_content.slug if related_content else None
+    return data
+
+
+def get_ad_or_404(db: Session, ad_id: int):
+    ad = (
+        db.query(models.Ad)
+        .options(joinedload(models.Ad.template), joinedload(models.Ad.related_content_item))
+        .filter(models.Ad.id == ad_id)
+        .filter(models.Ad.deleted_at.is_(None))
+        .first()
+    )
+    if not ad:
+        raise HTTPException(status_code=404, detail="Reclamă negăsită")
+    return ad
+
+
+def validate_ad_dates(starts_at, ends_at):
+    if starts_at and ends_at and starts_at > ends_at:
+        raise HTTPException(status_code=400, detail="starts_at trebuie să fie înainte de ends_at")
+
+
+def validate_ad_template(db: Session, template_id: Optional[int]):
+    if template_id is None:
+        return None
+    template = db.query(models.AdDesignTemplate).filter(models.AdDesignTemplate.id == template_id).first()
+    if not template:
+        raise HTTPException(status_code=400, detail="ad_design_template_id nu există")
+    return template
+
+
+def validate_related_content(db: Session, content_item_id: Optional[int], ad_type: str):
+    if content_item_id is None:
+        return None
+
+    content_item = (
+        db.query(models.ContentItem)
+        .filter(models.ContentItem.id == content_item_id)
+        .filter(models.ContentItem.deleted_at.is_(None))
+        .first()
+    )
+    if not content_item:
+        raise HTTPException(status_code=400, detail="related_content_item_id nu există")
+
+    content_type = serialize_value(content_item.content_type)
+    if ad_type != "other" and content_type != ad_type:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Content asociat incompatibil: reclama este '{ad_type}', content item este '{content_type}'",
+        )
+    return content_item
+
+
+def validate_ad_target(status: str, ad_type: str, related_content_item_id: Optional[int], cta_url: Optional[str]):
+    if status == "active" and ad_type != "other" and not related_content_item_id and not cta_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Pentru reclame active non-other este necesar related_content_item_id sau cta_url",
+        )
+
+
+def validate_ad_payload(db: Session, data: dict, existing_ad: Optional[models.Ad] = None):
+    candidate = {}
+    if existing_ad:
+        for field in AD_FIELDS:
+            candidate[field] = getattr(existing_ad, field)
+    candidate.update(data)
+
+    ad_type = enum_or_value(candidate.get("ad_type") or models.AdType.other)
+    status = enum_or_value(candidate.get("status") or models.AdStatus.draft)
+    starts_at = candidate.get("starts_at")
+    ends_at = candidate.get("ends_at")
+    related_content_item_id = candidate.get("related_content_item_id")
+    cta_url = candidate.get("cta_url")
+
+    validate_ad_dates(starts_at, ends_at)
+    validate_ad_template(db, candidate.get("ad_design_template_id"))
+    validate_related_content(db, related_content_item_id, ad_type)
+    validate_ad_target(status, ad_type, related_content_item_id, cta_url)
+
+
+def apply_ad_data(db_ad: models.Ad, data: dict):
+    for key, value in data.items():
+        setattr(db_ad, key, value)
+
+
+@app.get("/admin/ad-design-templates")
+def admin_get_ad_design_templates(db: Session = Depends(get_db)):
+    try:
+        templates = (
+            db.query(models.AdDesignTemplate)
+            .filter(models.AdDesignTemplate.is_active == True)
+            .order_by(models.AdDesignTemplate.id.asc(), models.AdDesignTemplate.code.asc(), models.AdDesignTemplate.name.asc())
+            .all()
+        )
+        return [serialize_model(template) for template in templates]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/admin/content-options")
+def admin_get_content_options(
+    type: str = Query(default="all"),
+    db: Session = Depends(get_db),
+):
+    requested_type = (type or "all").lower()
+    allowed = RELEVANT_AD_CONTENT_TYPES | {"all"}
+    if requested_type not in allowed:
+        allowed_values = ", ".join(sorted(allowed))
+        raise HTTPException(status_code=400, detail=f"type invalid. Valori acceptate: {allowed_values}")
+
+    try:
+        query = (
+            db.query(models.ContentItem)
+            .filter(models.ContentItem.deleted_at.is_(None))
+            .filter(models.ContentItem.content_type.in_([models.ContentItemType(value) for value in RELEVANT_AD_CONTENT_TYPES]))
+            .order_by(
+                models.ContentItem.published_at.desc().nullslast(),
+                models.ContentItem.created_at.desc().nullslast(),
+                models.ContentItem.title.asc(),
+            )
+        )
+        if requested_type != "all":
+            query = query.filter(models.ContentItem.content_type == models.ContentItemType(requested_type))
+
+        return [serialize_content_option(item) for item in query.all()]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/admin/ads")
+def admin_get_ads(db: Session = Depends(get_db)):
+    try:
+        ads = (
+            db.query(models.Ad)
+            .options(joinedload(models.Ad.template), joinedload(models.Ad.related_content_item))
+            .filter(models.Ad.deleted_at.is_(None))
+            .order_by(models.Ad.created_at.desc().nullslast())
+            .all()
+        )
+        return [serialize_ad(ad) for ad in ads]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/admin/ads/{id}")
+def admin_get_ad(id: int, db: Session = Depends(get_db)):
+    try:
+        ad = get_ad_or_404(db, id)
+        return serialize_ad(ad)
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/admin/ads")
+def admin_create_ad(item: AdCreate, db: Session = Depends(get_db)):
+    try:
+        data = normalize_ad_data(ad_data(item))
+        data.setdefault("status", models.AdStatus.draft)
+        data.setdefault("placement", models.AdPlacement.home_between_sections)
+        data.setdefault("priority", 0)
+        data.setdefault("is_active", True)
+        data.setdefault("design_config", {})
+
+        validate_ad_payload(db, data)
+        db_ad = models.Ad(**data)
+        db.add(db_ad)
+        db.commit()
+        db.refresh(db_ad)
+        return serialize_ad(db_ad)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/admin/ads/{id}")
+def admin_update_ad(id: int, item: AdUpdate, db: Session = Depends(get_db)):
+    try:
+        db_ad = get_ad_or_404(db, id)
+        data = normalize_ad_data(ad_data(item, exclude_unset=True))
+        validate_ad_payload(db, data, existing_ad=db_ad)
+        log_admin_action("PUT", f"/admin/ads/{id}", id, pydantic_dump(item, exclude_unset=True), data)
+
+        apply_ad_data(db_ad, data)
+        db.commit()
+        db.refresh(db_ad)
+        return serialize_ad(db_ad)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.patch("/admin/ads/{id}/archive")
+def admin_archive_ad(id: int, db: Session = Depends(get_db)):
+    try:
+        db_ad = get_ad_or_404(db, id)
+        log_admin_action(
+            "PATCH",
+            f"/admin/ads/{id}/archive",
+            id,
+            payload={},
+            update_data={"status": "archived", "is_active": False},
+        )
+        db_ad.status = models.AdStatus.archived
+        db_ad.is_active = False
+        db.commit()
+        db.refresh(db_ad)
+        return serialize_ad(db_ad)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.delete("/admin/ads/{id}")
+def admin_delete_ad(id: int, db: Session = Depends(get_db)):
+    try:
+        db_ad = get_ad_or_404(db, id)
+        log_admin_action(
+            "DELETE",
+            f"/admin/ads/{id}",
+            id,
+            payload=None,
+            update_data={"deleted_at": "CURRENT_TIMESTAMP", "is_active": False, "status": "archived"},
+        )
+        db_ad.deleted_at = func.now()
+        db_ad.is_active = False
+        db_ad.status = models.AdStatus.archived
+        db.commit()
+        return {"success": True}
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 @app.get("/admin/dashboard/stats")
 def get_admin_dashboard_stats(db: Session = Depends(get_db)):

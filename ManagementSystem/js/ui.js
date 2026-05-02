@@ -11,6 +11,7 @@ const UI = {
                     <li><a href="events.html" class="${activePage === 'events' ? 'active' : ''}">Evenimente</a></li>
                     <li><a href="courses.html" class="${activePage === 'courses' ? 'active' : ''}">Cursuri</a></li>
                     <li><a href="publications.html" class="${activePage === 'publications' ? 'active' : ''}">Publicații</a></li>
+                    <li><a href="ads.html" class="${activePage === 'ads' ? 'active' : ''}">Reclame</a></li>
                     <li><a href="users.html" class="${activePage === 'users' ? 'active' : ''}">Utilizatori</a></li>
                 </ul>
                 <div class="sidebar-footer">

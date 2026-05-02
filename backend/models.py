@@ -12,6 +12,7 @@ from sqlalchemy import (
     JSON,
 )
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import ENUM as PGEnum, JSONB
 import enum
 
 from database import Base
@@ -95,6 +96,39 @@ class LessonContentType(enum.Enum):
     quiz = "quiz"
     pdf = "pdf"
     external_link = "external_link"
+
+
+class AdType(enum.Enum):
+    publication = "publication"
+    event = "event"
+    course = "course"
+    article = "article"
+    news = "news"
+    other = "other"
+
+
+class AdStatus(enum.Enum):
+    draft = "draft"
+    active = "active"
+    paused = "paused"
+    archived = "archived"
+
+
+class AdPlacement(enum.Enum):
+    home_top = "home_top"
+    home_between_sections = "home_between_sections"
+    home_after_news = "home_after_news"
+    home_after_publications = "home_after_publications"
+    home_after_events = "home_after_events"
+    home_after_courses = "home_after_courses"
+    news_feed = "news_feed"
+    publications_feed = "publications_feed"
+    events_feed = "events_feed"
+    courses_feed = "courses_feed"
+    article_detail = "article_detail"
+    publication_detail = "publication_detail"
+    event_detail = "event_detail"
+    course_detail = "course_detail"
 
 
 class County(Base):
@@ -582,3 +616,56 @@ class EventGallery(Base):
     title = Column(String(255), nullable=False)
     image_url = Column(Text, nullable=False)
     display_order = Column(Integer, nullable=False, default=0)
+
+
+class AdDesignTemplate(Base):
+    __tablename__ = "ad_design_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(100), unique=True, nullable=False)
+    name = Column(String(150), nullable=False)
+    description = Column(Text)
+    layout = Column(String(50), nullable=False)
+    variant = Column(String(50), nullable=False)
+    default_config = Column(JSONB, nullable=False, default=dict)
+    preview_image_url = Column(Text)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True))
+    updated_at = Column(DateTime(timezone=True))
+
+
+class Ad(Base):
+    __tablename__ = "ads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    ad_type = Column(PGEnum(AdType, name="ad_type", create_type=False), nullable=False, default=AdType.other)
+    status = Column(PGEnum(AdStatus, name="ad_status", create_type=False), nullable=False, default=AdStatus.draft)
+    placement = Column(
+        PGEnum(AdPlacement, name="ad_placement", create_type=False),
+        nullable=False,
+        default=AdPlacement.home_between_sections,
+    )
+    ad_design_template_id = Column(Integer, ForeignKey("ad_design_templates.id", ondelete="SET NULL"))
+    design_config = Column(JSONB, nullable=False, default=dict)
+    related_content_item_id = Column(Integer, ForeignKey("content_items.id", ondelete="SET NULL"))
+    image_url = Column(Text)
+    mobile_image_url = Column(Text)
+    background_image_url = Column(Text)
+    sponsor_name = Column(String(255))
+    sponsor_logo_url = Column(Text)
+    cta_label = Column(String(100))
+    cta_url = Column(Text)
+    priority = Column(Integer, nullable=False, default=0)
+    starts_at = Column(DateTime(timezone=True))
+    ends_at = Column(DateTime(timezone=True))
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    updated_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    created_at = Column(DateTime(timezone=True))
+    updated_at = Column(DateTime(timezone=True))
+    deleted_at = Column(DateTime(timezone=True))
+
+    template = relationship("AdDesignTemplate")
+    related_content_item = relationship("ContentItem")

@@ -52,51 +52,51 @@ class ContentSection extends StatelessWidget {
                   ),
                 ],
               ),
-              // Vezi toate capsule button
-              GestureDetector(
-                onTap: onActionTap,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: categoryColor.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: categoryColor.withValues(alpha: 0.12),
-                      width: 1,
+              if (actionText.isNotEmpty)
+                GestureDetector(
+                  onTap: onActionTap,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: categoryColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: categoryColor.withValues(alpha: 0.12),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          actionText,
+                          style: TextStyle(
+                            color: categoryColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        SvgPicture.asset(
+                          'assets/icons/arrow.right.svg',
+                          width: 12,
+                          height: 12,
+                          colorFilter: ColorFilter.mode(
+                            categoryColor,
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        actionText,
-                        style: TextStyle(
-                          color: categoryColor,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                          letterSpacing: -0.1,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      SvgPicture.asset(
-                        'assets/icons/arrow.right.svg',
-                        width: 12,
-                        height: 12,
-                        colorFilter: ColorFilter.mode(
-                          categoryColor,
-                          BlendMode.srcIn,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
-              ),
             ],
           ),
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: 260,
+          height: 300,
           child: children.isEmpty
               ? Padding(
                   padding: const EdgeInsets.only(left: 20.0),
@@ -120,4 +120,3 @@ class ContentSection extends StatelessWidget {
     );
   }
 }
-

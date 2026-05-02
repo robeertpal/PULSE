@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Editare Reclamă - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="header-actions">
+                <a href="ads.html" class="btn" style="background:#E2E8F0; color:#0F172A; text-decoration:none;">← Înapoi</a>
+                <button type="button" class="btn btn-primary" onclick="saveAd()">Salvează</button>
+            </div>
+
+            <div id="alert-msg" class="alert"></div>
+
+            <div class="ad-form-layout">
+                <div class="form-card">
+                    <form id="ad-form">
+                        <input type="hidden" id="ad-id">
+
+                        <div class="form-group">
+                            <label>Titlu *</label>
+                            <input type="text" id="title" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Descriere</label>
+                            <textarea id="description" rows="3"></textarea>
+                        </div>
+
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Tip reclamă *</label>
+                                <select id="ad_type" required></select>
+                            </div>
+                            <div class="form-group">
+                                <label>Status *</label>
+                                <select id="status" required></select>
+                            </div>
+                        </div>
+
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Placement *</label>
+                                <select id="placement" required></select>
+                            </div>
+                            <div class="form-group">
+                                <label>Template design</label>
+                                <select id="ad_design_template_id">
+                                    <option value="">Fără template</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group" id="related-content-group">
+                            <label>Content asociat</label>
+                            <select id="related_content_item_id">
+                                <option value="">Fără content asociat</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>URL imagine reclamă</label>
+                            <input type="url" id="image_url">
+                            <div class="upload-row">
+                                <input type="file" id="image_file" accept="image/jpeg,image/png,image/webp">
+                                <button type="button" class="btn" onclick="uploadImageFromInput('image_file', 'image_url')">Încarcă imagine</button>
+                            </div>
+                            <div id="image_url_upload_status" class="upload-status"></div>
+                            <div id="image_url_preview" class="media-preview"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>URL imagine mobil</label>
+                            <input type="url" id="mobile_image_url">
+                            <div class="upload-row">
+                                <input type="file" id="mobile_image_file" accept="image/jpeg,image/png,image/webp">
+                                <button type="button" class="btn" onclick="uploadImageFromInput('mobile_image_file', 'mobile_image_url')">Încarcă imagine</button>
+                            </div>
+                            <div id="mobile_image_url_upload_status" class="upload-status"></div>
+                            <div id="mobile_image_url_preview" class="media-preview"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>URL background image</label>
+                            <input type="url" id="background_image_url">
+                            <div class="upload-row">
+                                <input type="file" id="background_image_file" accept="image/jpeg,image/png,image/webp">
+                                <button type="button" class="btn" onclick="uploadImageFromInput('background_image_file', 'background_image_url')">Încarcă imagine</button>
+                            </div>
+                            <div id="background_image_url_upload_status" class="upload-status"></div>
+                            <div id="background_image_url_preview" class="media-preview"></div>
+                        </div>
+
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Sponsor name</label>
+                                <input type="text" id="sponsor_name">
+                            </div>
+                            <div class="form-group">
+                                <label>Prioritate</label>
+                                <input type="number" id="priority" min="0" step="1" value="0">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>URL logo sponsor</label>
+                            <input type="url" id="sponsor_logo_url">
+                            <div class="upload-row">
+                                <input type="file" id="sponsor_logo_file" accept="image/jpeg,image/png,image/webp">
+                                <button type="button" class="btn" onclick="uploadImageFromInput('sponsor_logo_file', 'sponsor_logo_url')">Încarcă logo</button>
+                            </div>
+                            <div id="sponsor_logo_url_upload_status" class="upload-status"></div>
+                            <div id="sponsor_logo_url_preview" class="media-preview"></div>
+                        </div>
+
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>CTA label</label>
+                                <input type="text" id="cta_label">
+                            </div>
+                            <div class="form-group">
+                                <label>CTA URL</label>
+                                <input type="url" id="cta_url">
+                            </div>
+                        </div>
+
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Începe la</label>
+                                <input type="datetime-local" id="starts_at">
+                            </div>
+                            <div class="form-group">
+                                <label>Se termină la</label>
+                                <input type="datetime-local" id="ends_at">
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+                            <input type="checkbox" id="is_active" style="width:auto;" checked>
+                            <label style="margin:0;">Activ</label>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Design config JSON</label>
+                            <textarea id="design_config" rows="7">{}</textarea>
+                        </div>
+                    </form>
+                </div>
+
+                <aside class="preview-panel">
+                    <h3>Preview</h3>
+                    <div class="ad-preview-card">
+                        <div class="ad-preview-image" id="preview-image">Fără imagine</div>
+                        <div class="ad-preview-body">
+                            <div class="ad-preview-meta">
+                                <img id="preview-logo" class="ad-preview-logo" style="display:none;" alt="Logo sponsor">
+                                <span id="preview-template">Fără template</span>
+                            </div>
+                            <div class="ad-preview-title" id="preview-title">Titlu reclamă</div>
+                            <div class="ad-preview-description" id="preview-description">Descrierea reclamei apare aici.</div>
+                            <span class="ad-preview-cta" id="preview-cta">Află mai mult</span>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/ad-form.js"></script>
+</body>
+</html>

@@ -1,30 +1,32 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:mobile/main.dart';
+import 'package:mobile/models/content_item.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const PulseApp());
+  test('ContentItem parses public card payload metadata', () {
+    final item = ContentItem.fromJson({
+      'id': 1,
+      'title': 'Congres medical',
+      'slug': 'congres-medical',
+      'content_type': 'event',
+      'short_description': 'Eveniment EMC',
+      'published_at': '2026-05-02T10:00:00Z',
+      'is_featured': true,
+      'event': {
+        'start_date': '2026-06-10T08:00:00Z',
+        'city_name': 'București',
+        'venue_name': 'Palatul Parlamentului',
+        'emc_credits': 12,
+        'registration_url': 'https://example.com/register',
+      },
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(item.contentType, 'event');
+    expect(item.tag, 'Eveniment');
+    expect(item.isFeatured, isTrue);
+    expect(item.cityName, 'București');
+    expect(item.venueName, 'Palatul Parlamentului');
+    expect(item.emcCredits, 12);
+    expect(item.contentUrl, 'https://example.com/register');
   });
 }

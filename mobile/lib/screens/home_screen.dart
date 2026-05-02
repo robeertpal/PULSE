@@ -9,10 +9,6 @@ import '../widgets/featured_card.dart';
 import '../widgets/content_section.dart';
 import '../widgets/content_card.dart';
 import '../widgets/premium_loading_indicator.dart';
-import '../widgets/subscription_ad_banner.dart';
-import '../widgets/event_gallery_section.dart';
-import '../widgets/activity_section.dart';
-import '../models/event_gallery_item.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,21 +19,18 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _selectedIndex = 0; // Bottom nav index
-  int _feedTab = 0; // 0 = Acasă, 1 = Pentru tine
-  late PageController _feedPageController;
   late AnimationController _entranceController;
   late List<Animation<double>> _fadeAnimations;
   late List<Animation<Offset>> _slideAnimations;
 
   final ApiService _apiService = ApiService();
-  List<ContentItem> _articles = [];
   List<ContentItem> _courses = [];
   List<ContentItem> _events = [];
   List<ContentItem> _publications = [];
   List<ContentItem> _news = [];
-  List<EventGalleryItem> _galleryItems = [];
   List<ContentItem> _featuredItems = [];
   bool _isLoading = true;
+  bool _isFeaturedLoading = true;
   String? _errorMessage;
 
   static const int _sectionCount = 10;
@@ -45,7 +38,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _feedPageController = PageController();
     _entranceController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -90,35 +82,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _errorMessage = null;
     });
 
+    _loadFeaturedContent();
+
     try {
       final results = await Future.wait([
-        _apiService.getArticles(),
-        _apiService.getCourses(),
-        _apiService.getEvents(),
-        _apiService.getPublications(),
-        _apiService.getNews(),
-        _apiService.getEventGallery(),
-        _apiService.getFeaturedContent(limit: 5),
+        _apiService.getNews(limit: 10),
+        _apiService.getPublications(limit: 10),
+        _apiService.getEvents(limit: 10),
+        _apiService.getCourses(limit: 10),
       ]);
 
       if (mounted) {
         setState(() {
-          _articles = results[0] as List<ContentItem>;
-          _courses = results[1] as List<ContentItem>;
-          _events = results[2] as List<ContentItem>;
-          _publications = results[3] as List<ContentItem>;
-          _news = results[4] as List<ContentItem>;
-          _galleryItems = results[5] as List<EventGalleryItem>;
-          _featuredItems = results[6] as List<ContentItem>;
-
-          if (_featuredItems.isEmpty && _articles.isNotEmpty) {
-            // Fallback to top articles if no featured items available
-            _featuredItems = _articles.where((i) => i.isFeatured).toList();
-            if (_featuredItems.isEmpty) {
-              _featuredItems = _articles.take(5).toList();
-            }
-          }
-
+          _news = results[0];
+          _publications = results[1];
+          _events = results[2];
+          _courses = results[3];
           _isLoading = false;
         });
       }
@@ -132,9 +111,33 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
 
+  Future<void> _loadFeaturedContent() async {
+    if (!mounted) return;
+    setState(() {
+      _isFeaturedLoading = true;
+    });
+
+    try {
+      final items = await _apiService.getFeaturedContent(limit: 3);
+      if (mounted) {
+        setState(() {
+          _featuredItems = items.take(3).toList();
+          _isFeaturedLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading featured carousel: $e');
+      if (mounted) {
+        setState(() {
+          _featuredItems = [];
+          _isFeaturedLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
-    _feedPageController.dispose();
     _entranceController.dispose();
     super.dispose();
   }
@@ -143,120 +146,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return FadeTransition(
       opacity: _fadeAnimations[index],
       child: SlideTransition(position: _slideAnimations[index], child: child),
-    );
-  }
-
-  // Feed Tab Switcher (Acasă / Pentru tine)
-
-  Widget _buildFeedTabSwitcher() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: PulseTheme.border.withValues(alpha: 0.35),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final tabWidth = constraints.maxWidth / 2;
-            return Stack(
-              children: [
-                // Sliding pill indicator
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 350),
-                  curve: Curves.easeOutCubic,
-                  left: _feedTab == 0 ? 0 : tabWidth,
-                  top: 0,
-                  bottom: 0,
-                  width: tabWidth,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: PulseTheme.surface,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.06),
-                          blurRadius: 12,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Tab labels (on top of pill)
-                Row(
-                  children: [
-                    _buildFeedTab(0, 'assets/icons/house.svg', 'Acasă'),
-                    _buildFeedTab(
-                      1,
-                      'assets/icons/sharedwithyou.svg',
-                      'Pentru tine',
-                    ),
-                  ],
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFeedTab(int index, String iconPath, String label) {
-    final bool isActive = _feedTab == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          if (_feedTab != index) {
-            setState(() {
-              _feedTab = index;
-            });
-            _feedPageController.animateToPage(
-              index,
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutCubic,
-            );
-          }
-        },
-        child: Container(
-          color: Colors.transparent,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                style: const TextStyle(fontSize: 0),
-                child: SvgPicture.asset(
-                  iconPath,
-                  width: 18,
-                  height: 18,
-                  colorFilter: ColorFilter.mode(
-                    isActive
-                        ? PulseTheme.textPrimary
-                        : PulseTheme.textSecondary.withValues(alpha: 0.6),
-                    BlendMode.srcIn,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isActive
-                      ? PulseTheme.textPrimary
-                      : PulseTheme.textSecondary.withValues(alpha: 0.6),
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  fontSize: 14,
-                  letterSpacing: -0.2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -300,39 +189,41 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Featured Carousel
-        if (_featuredItems.isNotEmpty)
-          _animatedSection(2, FeaturedCard(items: _featuredItems))
-        else
-          const SizedBox(height: 1), // spacer if empty
+        const SizedBox(height: 8),
 
-        const SizedBox(height: 30),
-
-        // Subscription Ad Banner
         _animatedSection(
-          3,
-          const SubscriptionAdBanner(
-            imageUrl:
-                'https://storageforpulse.blob.core.windows.net/ads/vitaly-gariev-XqMo4OlBnh0-unsplash.jpg',
+          1,
+          FeaturedCard(items: _featuredItems, isLoading: _isFeaturedLoading),
+        ),
+
+        if (_isFeaturedLoading || _featuredItems.isNotEmpty)
+          const SizedBox(height: 30),
+
+        // Știri Section
+        _animatedSection(
+          2,
+          ContentSection(
+            title: 'Știri',
+            emptyMessage: 'Nu există încă știri publicate.',
+            emptyIconAsset: 'assets/icons/newspaper.svg',
+            categoryColor: PulseTheme.newsContent,
+            onActionTap: () => _navigateToTab(4),
+            children: _news.map((item) => ContentCard.fromModel(item)).toList(),
           ),
         ),
 
-        const SizedBox(height: 36),
+        const SizedBox(height: 24),
 
-        _animatedSection(4, EventGallerySection(items: _galleryItems)),
-
-        const SizedBox(height: 36),
-
-        // Cursuri Section
+        // Reviste Section
         _animatedSection(
-          5,
+          3,
           ContentSection(
-            title: 'Cursuri',
-            emptyMessage: 'Cursurile vor apărea aici',
-            emptyIconAsset: 'assets/icons/graduation.svg',
-            categoryColor: PulseTheme.courseContent,
-            onActionTap: () => _navigateToTab(1), // Navighează către Cursuri
-            children: _courses
+            title: 'Reviste',
+            emptyMessage: 'Nu există încă reviste publicate.',
+            emptyIconAsset: 'assets/icons/books.svg',
+            categoryColor: PulseTheme.magazineContent,
+            onActionTap: () => _navigateToTab(2),
+            children: _publications
                 .map((item) => ContentCard.fromModel(item))
                 .toList(),
           ),
@@ -342,13 +233,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
         // Evenimente Section
         _animatedSection(
-          6,
+          4,
           ContentSection(
             title: 'Evenimente',
-            emptyMessage: 'Evenimentele vor apărea aici',
+            emptyMessage: 'Nu există încă evenimente publicate.',
             emptyIconAsset: 'assets/icons/events.svg',
             categoryColor: PulseTheme.eventContent,
-            onActionTap: () => _navigateToTab(3), // Navighează către Evenimente
+            onActionTap: () => _navigateToTab(3),
             children: _events
                 .map((item) => ContentCard.fromModel(item))
                 .toList(),
@@ -357,195 +248,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
         const SizedBox(height: 24),
 
-        // Reviste Section
-        _animatedSection(
-          7,
-          ContentSection(
-            title: 'Reviste',
-            emptyMessage: 'Nu există reviste disponibile momentan',
-            emptyIconAsset: 'assets/icons/books.svg',
-            categoryColor: PulseTheme.magazineContent,
-            onActionTap: () => _navigateToTab(2), // Navighează către Reviste
-            children: _publications
-                .map((item) => ContentCard.fromModel(item))
-                .toList(),
-          ),
-        ),
-
-        const SizedBox(height: 24),
-
-        // Știri Medicale
-        _animatedSection(
-          8,
-          ContentSection(
-            title: 'Știri',
-            emptyMessage: 'Știrile medicale vor apărea aici',
-            emptyIconAsset: 'assets/icons/newspaper.svg',
-            categoryColor: PulseTheme.newsContent,
-            onActionTap: () => _navigateToTab(4), // Navighează către Știri
-            children: _news.map((item) => ContentCard.fromModel(item)).toList(),
-          ),
-        ),
-
-        const SizedBox(height: 36),
-
-        _animatedSection(9, ActivitySection()),
-
-        const SizedBox(height: 100),
-      ],
-    );
-  }
-
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Pentru Tine Feed (AI Curated) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  Widget _buildPentruTineFeed() {
-    if (_isLoading) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 150.0),
-        child: PremiumLoadingIndicator(text: 'AI-ul analizează curicula...'),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 8),
-
-        // AI Intro Card
-        _animatedSection(
-          2,
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF2563EB),
-                    Color(0xFF7C3AED),
-                    Color(0xFFEC4899),
-                  ],
-                  stops: [0.0, 0.5, 1.0],
-                ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
-                    blurRadius: 24,
-                    offset: const Offset(0, 12),
-                    spreadRadius: -4,
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  // AI Icon with glass circle
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.15),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        width: 1,
-                      ),
-                    ),
-                    child: Center(
-                      child: SvgPicture.asset(
-                        'assets/icons/AI.svg',
-                        width: 24,
-                        height: 24,
-                        colorFilter: const ColorFilter.mode(
-                          Colors.white,
-                          BlendMode.srcIn,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Selectat de AI pentru tine',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Bazat pe specialitatea și interesele tale',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 28),
-
-        // Recomandate pentru tine - Cursuri
-        _animatedSection(
-          3,
-          ContentSection(
-            title: 'Recomandate',
-            emptyMessage: 'Recomandările vor apărea aici',
-            emptyIconAsset: 'assets/icons/sharedwithyou.svg',
-            categoryColor: PulseTheme.primary,
-            onActionTap: () => _navigateToTab(1), // Navighează către Cursuri
-            children: _articles
-                .where((i) => i.isFeatured)
-                .map((i) => ContentCard.fromModel(i))
-                .toList(),
-          ),
-        ),
-
-        const SizedBox(height: 24),
-
-        // Articole relevante
-        _animatedSection(
-          4,
-          ContentSection(
-            title: 'Articole relevante',
-            emptyMessage: 'Articolele relevante vor apărea aici',
-            emptyIconAsset: 'assets/icons/newspaper.svg',
-            categoryColor: PulseTheme.courseContent,
-            onActionTap: () =>
-                _navigateToTab(4), // Navighează către Articole (Știri)
-            children: _articles.map((i) => ContentCard.fromModel(i)).toList(),
-          ),
-        ),
-
-        const SizedBox(height: 24),
-
-        // Evenimente sugerate
+        // Cursuri Section
         _animatedSection(
           5,
           ContentSection(
-            title: 'Evenimente sugerate',
-            emptyMessage: 'Evenimentele sugerate vor apărea aici',
-            emptyIconAsset: 'assets/icons/events.svg',
-            categoryColor: PulseTheme.eventContent,
-            onActionTap: () => _navigateToTab(3), // Navighează către Evenimente
-            children: _events
-                .take(1)
-                .map((i) => ContentCard.fromModel(i))
+            title: 'Cursuri',
+            emptyMessage: 'Nu există încă cursuri publicate.',
+            emptyIconAsset: 'assets/icons/graduation.svg',
+            categoryColor: PulseTheme.courseContent,
+            onActionTap: () => _navigateToTab(1),
+            children: _courses
+                .map((item) => ContentCard.fromModel(item))
                 .toList(),
           ),
         ),
@@ -558,68 +271,72 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Main Home Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Widget _buildHomeContent() {
-    return NestedScrollView(
-      physics: const BouncingScrollPhysics(),
-      headerSliverBuilder: (context, innerBoxIsScrolled) {
-        return [
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Feed Tab Switcher (Acasă / Pentru tine)
-                _animatedSection(
-                  1,
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 24.0),
-                    child: _buildFeedTabSwitcher(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ];
-      },
-      body: PageView(
-        controller: _feedPageController,
-        physics: const BouncingScrollPhysics(),
-        onPageChanged: (index) {
-          setState(() {
-            _feedTab = index;
-          });
-        },
-        children: [
-          SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: _buildAcasaFeed(),
-          ),
-          SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: _buildPentruTineFeed(),
-          ),
-        ],
+    return RefreshIndicator(
+      color: PulseTheme.primary,
+      onRefresh: _loadData,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        child: _buildAcasaFeed(),
       ),
     );
   }
 
-  Widget _buildPlaceholder(String title) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: PulseTheme.textPrimary,
-            ),
+  Widget _buildCategoryContent({
+    required String title,
+    required String emptyMessage,
+    required String emptyIconAsset,
+    required Color categoryColor,
+    required List<ContentItem> items,
+  }) {
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 150.0),
+        child: PremiumLoadingIndicator(text: 'Se pregătește feed-ul...'),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 100.0),
+          child: Column(
+            children: [
+              Text(
+                _errorMessage!,
+                style: const TextStyle(color: PulseTheme.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: _loadData,
+                child: const Text("Reîncearcă"),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Pagină în construcție',
-            style: TextStyle(fontSize: 14, color: PulseTheme.textSecondary),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      color: PulseTheme.primary,
+      onRefresh: _loadData,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 8.0, bottom: 100.0),
+          child: ContentSection(
+            title: title,
+            actionText: '',
+            emptyMessage: emptyMessage,
+            emptyIconAsset: emptyIconAsset,
+            categoryColor: categoryColor,
+            onActionTap: () {},
+            children: items.map((item) => ContentCard.fromModel(item)).toList(),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -646,10 +363,34 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 index: _selectedIndex,
                 children: [
                   _buildHomeContent(),
-                  _buildPlaceholder('Cursuri'),
-                  _buildPlaceholder('Reviste'),
-                  _buildPlaceholder('Evenimente'),
-                  _buildPlaceholder('Știri'),
+                  _buildCategoryContent(
+                    title: 'Cursuri',
+                    emptyMessage: 'Nu există încă cursuri publicate.',
+                    emptyIconAsset: 'assets/icons/graduation.svg',
+                    categoryColor: PulseTheme.courseContent,
+                    items: _courses,
+                  ),
+                  _buildCategoryContent(
+                    title: 'Reviste',
+                    emptyMessage: 'Nu există încă reviste publicate.',
+                    emptyIconAsset: 'assets/icons/books.svg',
+                    categoryColor: PulseTheme.magazineContent,
+                    items: _publications,
+                  ),
+                  _buildCategoryContent(
+                    title: 'Evenimente',
+                    emptyMessage: 'Nu există încă evenimente publicate.',
+                    emptyIconAsset: 'assets/icons/events.svg',
+                    categoryColor: PulseTheme.eventContent,
+                    items: _events,
+                  ),
+                  _buildCategoryContent(
+                    title: 'Știri',
+                    emptyMessage: 'Nu există încă știri publicate.',
+                    emptyIconAsset: 'assets/icons/newspaper.svg',
+                    categoryColor: PulseTheme.newsContent,
+                    items: _news,
+                  ),
                 ],
               ),
             ),
@@ -709,19 +450,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return GestureDetector(
       onTap: () {
         if (_selectedIndex == index) {
-          // Dacă apeși iar pe "Acasă" și ești pe alt sub-tab, te duce la sub-tabul principal
-          if (index == 0 && _feedTab != 0) {
-            setState(() {
-              _feedTab = 0;
-            });
-            if (_feedPageController.hasClients) {
-              _feedPageController.animateToPage(
-                0,
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeOutCubic,
-              );
-            }
-          }
           return;
         }
 

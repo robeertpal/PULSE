@@ -526,7 +526,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                                     width: 26,
                                     height: 26,
                                     decoration: BoxDecoration(
-                                      color: PulseTheme.primary,
+                                      color: iconColor,
                                       shape: BoxShape.circle,
                                       border: Border.all(color: item.isRead ? PulseTheme.surface : PulseTheme.surfaceElevated, width: 2.5),
                                     ),

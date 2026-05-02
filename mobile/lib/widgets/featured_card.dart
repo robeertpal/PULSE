@@ -1,131 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../models/content_item.dart';
 import '../theme/pulse_theme.dart';
 import 'emc_badge.dart';
 
-import '../models/content_item.dart';
-
 class FeaturedCard extends StatefulWidget {
   final List<ContentItem> items;
+  final bool isLoading;
 
-  const FeaturedCard({super.key, required this.items});
+  const FeaturedCard({super.key, required this.items, this.isLoading = false});
 
   @override
   State<FeaturedCard> createState() => _FeaturedCardState();
 }
 
 class _FeaturedCardState extends State<FeaturedCard> {
-  late PageController _pageController;
+  late final PageController _pageController;
   double _currentPage = 0;
-
-  List<ContentItem> get _items => widget.items;
-
-  Color _getPrimaryColor(String type) {
-    switch (type) {
-      case 'course':
-        return PulseTheme.courseContent;
-      case 'event':
-        return PulseTheme.eventContent;
-      case 'publication':
-        return PulseTheme.magazineContent;
-      case 'news':
-        return PulseTheme.newsContent;
-      case 'article':
-        return PulseTheme.primary;
-      default:
-        return PulseTheme.primary;
-    }
-  }
-
-  String _getButtonText(String type) {
-    switch (type) {
-      case 'course':
-        return 'Începe cursul';
-      case 'event':
-        return 'Vezi detalii';
-      case 'publication':
-        return 'Răsfoiește';
-      case 'news':
-        return 'Citește știrea';
-      case 'article':
-        return 'Citește articolul';
-      default:
-        return 'Vezi detalii';
-    }
-  }
-
-  bool _isRemote(String value) =>
-      value.startsWith('http://') || value.startsWith('https://');
-
-  String? _chooseImageUrl(ContentItem item) {
-    final thumbnail = item.thumbnailUrl?.trim();
-    final hero = item.heroImageUrl?.trim();
-
-    if (thumbnail != null && thumbnail.isNotEmpty) return thumbnail;
-    if (hero != null && hero.isNotEmpty) return hero;
-    return null;
-  }
-
-  String _assetPathFor(String rawUrl) {
-    if (rawUrl.startsWith('assets/')) return rawUrl;
-    if (rawUrl.startsWith('images/')) return 'assets/$rawUrl';
-    return 'assets/images/$rawUrl';
-  }
-
-  Widget _buildBackgroundImage(ContentItem item, Color fallbackColor) {
-    final imageUrl = _chooseImageUrl(item);
-    if (imageUrl == null) {
-      return _buildFallbackBackground(fallbackColor);
-    }
-
-    final image = _isRemote(imageUrl)
-        ? Image.network(
-            imageUrl,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) =>
-                _buildFallbackBackgroundContent(fallbackColor),
-          )
-        : Image.asset(
-            _assetPathFor(imageUrl),
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) =>
-                _buildFallbackBackgroundContent(fallbackColor),
-          );
-
-    return Positioned.fill(child: image);
-  }
-
-  Widget _buildFallbackBackground(Color colorPrimary) {
-    return Positioned.fill(
-      child: _buildFallbackBackgroundContent(colorPrimary),
-    );
-  }
-
-  Widget _buildFallbackBackgroundContent(Color colorPrimary) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            colorPrimary,
-            colorPrimary.withValues(alpha: 0.72),
-            Colors.black.withValues(alpha: 0.78),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(viewportFraction: 0.88);
+    _pageController = PageController(viewportFraction: 0.92);
     _pageController.addListener(() {
+      if (!mounted) return;
       setState(() {
         _currentPage = _pageController.page ?? 0;
       });
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant FeaturedCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.items.isEmpty && widget.items.isNotEmpty) {
+      _currentPage = 0;
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(0);
+      }
+      return;
+    }
+
+    if (widget.items.length < oldWidget.items.length &&
+        widget.items.isNotEmpty) {
+      _currentPage = _currentPage.clamp(0, widget.items.length - 1).toDouble();
+    }
   }
 
   @override
@@ -136,110 +55,103 @@ class _FeaturedCardState extends State<FeaturedCard> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SizedBox(
-          height: 270,
-          child: PageView.builder(
-            clipBehavior: Clip.none,
-            controller: _pageController,
-            itemCount: _items.length,
-            itemBuilder: (context, index) {
-              final item = _items[index];
-              // Calculate scale and opacity based on distance from current page
-              double distance = (_currentPage - index).abs();
-              double scale = 1.0 - (distance * 0.08).clamp(0.0, 0.08);
-              double opacity = 1.0 - (distance * 0.3).clamp(0.0, 0.3);
+    if (!widget.isLoading && widget.items.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
-              return TweenAnimationBuilder<double>(
-                tween: Tween(begin: scale, end: scale),
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOutCubic,
-                builder: (context, value, child) {
-                  return Transform.scale(
-                    scale: value,
-                    child: Opacity(opacity: opacity, child: child),
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: _buildCardItem(item, index),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.clamp(0.0, 760.0);
+        final height = constraints.maxWidth >= 700 ? 300.0 : 252.0;
+
+        return Center(
+          child: SizedBox(
+            width: width,
+            child: Column(
+              children: [
+                SizedBox(
+                  height: height,
+                  child: widget.isLoading
+                      ? const _FeaturedSkeleton()
+                      : PageView.builder(
+                          clipBehavior: Clip.none,
+                          controller: _pageController,
+                          itemCount: widget.items.length,
+                          itemBuilder: (context, index) {
+                            final item = widget.items[index];
+                            final distance = (_currentPage - index).abs();
+                            final scale =
+                                1 - (distance * 0.045).clamp(0.0, 0.045);
+
+                            return Transform.scale(
+                              scale: scale,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                ),
+                                child: _FeaturedSlide(item: item),
+                              ),
+                            );
+                          },
+                        ),
                 ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 20),
-        // â”€â”€ Page Indicators â”€â”€
-        _buildPageIndicators(),
-      ],
-    );
-  }
-
-  Widget _buildPageIndicators() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(_items.length, (index) {
-        double distance = (_currentPage - index).abs().clamp(0.0, 1.0);
-        Color dotColor = Color.lerp(
-          _getPrimaryColor(
-            _items[_currentPage.round().clamp(0, _items.length - 1)]
-                .contentType,
-          ),
-          PulseTheme.border,
-          distance,
-        )!;
-
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          width: distance < 0.5 ? 24 : 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: dotColor,
-            borderRadius: BorderRadius.circular(4),
-            boxShadow: distance < 0.5
-                ? [
-                    BoxShadow(
-                      color: dotColor.withValues(alpha: 0.4),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                if (!widget.isLoading && widget.items.length > 1) ...[
+                  const SizedBox(height: 14),
+                  _FeaturedIndicators(
+                    count: widget.items.length,
+                    currentIndex: _currentPage.round().clamp(
+                      0,
+                      widget.items.length - 1,
                     ),
-                  ]
-                : [],
+                    activeColor: _colorForType(
+                      widget
+                          .items[_currentPage.round().clamp(
+                            0,
+                            widget.items.length - 1,
+                          )]
+                          .contentType,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         );
-      }),
+      },
     );
   }
+}
 
-  Widget _buildCardItem(ContentItem item, int index) {
-    final colorPrimary = _getPrimaryColor(item.contentType);
-    final String emcPoints = item.emcCredits != null
-        ? '+${item.emcCredits}'
-        : '';
-    final String buttonText = _getButtonText(item.contentType);
-    final String tagText =
-        item.tag?.toUpperCase() ?? item.contentType.toUpperCase();
-    final String subtitleText =
+class _FeaturedSlide extends StatelessWidget {
+  final ContentItem item;
+
+  const _FeaturedSlide({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _colorForType(item.contentType);
+    final imageUrl = _chooseImageUrl(item);
+    final subtitle =
         item.shortDescription ??
-        (item.body != null && item.body!.length > 100
-            ? '${item.body!.substring(0, 100)}...'
-            : '');
-    final String? buttonIcon = item.contentType == 'article'
-        ? 'assets/icons/AI.svg'
-        : null;
+        item.publicationDescription ??
+        item.specializationName ??
+        item.categoryName ??
+        '';
 
     return Container(
-      width: double.infinity,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: colorPrimary.withValues(alpha: 0.35),
+            color: color.withValues(alpha: 0.24),
             blurRadius: 28,
             offset: const Offset(0, 14),
+            spreadRadius: -6,
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
             spreadRadius: -4,
           ),
         ],
@@ -247,161 +159,100 @@ class _FeaturedCardState extends State<FeaturedCard> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(28),
         child: Stack(
+          fit: StackFit.expand,
           children: [
-            _buildBackgroundImage(item, colorPrimary),
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.18),
-                      colorPrimary.withValues(alpha: 0.22),
-                      Colors.black.withValues(alpha: 0.74),
-                    ],
-                    stops: const [0.0, 0.42, 1.0],
-                  ),
+            if (imageUrl != null)
+              _FeaturedImage(imageUrl: imageUrl, fallbackColor: color)
+            else
+              _FeaturedFallback(color: color),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.05),
+                    Colors.black.withValues(alpha: 0.26),
+                    Colors.black.withValues(alpha: 0.78),
+                  ],
+                  stops: const [0.0, 0.44, 1.0],
                 ),
               ),
             ),
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.14),
-                      Colors.black.withValues(alpha: 0.44),
-                    ],
-                    stops: const [0.0, 0.48, 1.0],
-                  ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.42),
+                    Colors.transparent,
+                  ],
                 ),
               ),
             ),
-            // EMC Badge
-            if (emcPoints.isNotEmpty)
+            if (item.emcCredits != null)
               Positioned(
                 right: 16,
                 top: 16,
-                child: EmcBadge(points: emcPoints),
+                child: EmcBadge(points: '+${item.emcCredits}'),
               ),
-            // Content
-            Padding(
-              padding: const EdgeInsets.all(24.0),
+            Positioned(
+              left: 22,
+              right: 22,
+              bottom: 22,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.26),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.24),
-                        width: 1,
+                  Row(
+                    children: [
+                      _TypeBadge(
+                        label: item.tag ?? _labelForType(item.contentType),
+                        color: color,
                       ),
-                    ),
-                    child: Text(
-                      tagText,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
+                      const SizedBox(width: 10),
+                      if (item.publishedAt != null)
+                        Flexible(
+                          child: Text(
+                            _formatDate(item.publishedAt!),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.78),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Text(
-                    item.title,
+                    item.publicationName ?? item.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 22,
                       fontWeight: FontWeight.w800,
-                      height: 1.2,
-                      letterSpacing: -0.5,
+                      height: 1.15,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: Text(
-                      subtitleText,
-                      maxLines: 3,
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.85),
+                        color: Colors.white.withValues(alpha: 0.84),
                         fontSize: 14,
-                        height: 1.5,
+                        fontWeight: FontWeight.w500,
+                        height: 1.35,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Premium CTA button
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: ElevatedButton(
-                      onPressed: () {},
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: colorPrimary,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 14,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Show gradient AI icon or arrow based on buttonIcon
-                          if (buttonIcon != null) ...[
-                            _buildGradientIcon(buttonIcon, colorPrimary),
-                            const SizedBox(width: 8),
-                          ],
-                          Text(
-                            buttonText,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          if (buttonIcon == null) ...[
-                            const SizedBox(width: 6),
-                            SvgPicture.asset(
-                              'assets/icons/arrow.right.svg',
-                              width: 16,
-                              height: 16,
-                              colorFilter: ColorFilter.mode(
-                                colorPrimary,
-                                BlendMode.srcIn,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -410,22 +261,227 @@ class _FeaturedCardState extends State<FeaturedCard> {
       ),
     );
   }
+}
 
-  Widget _buildGradientIcon(String assetPath, Color primaryColor) {
-    return ShaderMask(
-      shaderCallback: (Rect bounds) {
-        return const LinearGradient(
+class _FeaturedImage extends StatelessWidget {
+  final String imageUrl;
+  final Color fallbackColor;
+
+  const _FeaturedImage({required this.imageUrl, required this.fallbackColor});
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isRemote(imageUrl)) {
+      return Image.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _FeaturedFallback(color: fallbackColor);
+        },
+      );
+    }
+
+    if (imageUrl.startsWith('assets/') || imageUrl.startsWith('images/')) {
+      final assetPath = imageUrl.startsWith('assets/')
+          ? imageUrl
+          : 'assets/$imageUrl';
+      return Image.asset(
+        assetPath,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _FeaturedFallback(color: fallbackColor);
+        },
+      );
+    }
+
+    return _FeaturedFallback(color: fallbackColor);
+  }
+}
+
+class _FeaturedFallback extends StatelessWidget {
+  final Color color;
+
+  const _FeaturedFallback({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFF2563EB), // Blue
-            Color(0xFF8B5CF6), // Violet
-            Color(0xFFEC4899), // Pink
+            color.withValues(alpha: 0.92),
+            PulseTheme.primary.withValues(alpha: 0.84),
+            PulseTheme.textPrimary,
           ],
-        ).createShader(bounds);
-      },
-      blendMode: BlendMode.srcIn,
-      child: SvgPicture.asset(assetPath, width: 20, height: 20),
+        ),
+      ),
+      child: Center(
+        child: Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+          ),
+          child: Center(
+            child: SvgPicture.asset(
+              'assets/icons/newspaper.svg',
+              width: 34,
+              height: 34,
+              colorFilter: const ColorFilter.mode(
+                Colors.white,
+                BlendMode.srcIn,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
+}
+
+class _TypeBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _TypeBadge({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+}
+
+class _FeaturedIndicators extends StatelessWidget {
+  final int count;
+  final int currentIndex;
+  final Color activeColor;
+
+  const _FeaturedIndicators({
+    required this.count,
+    required this.currentIndex,
+    required this.activeColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(count, (index) {
+        final isActive = index == currentIndex;
+        return AnimatedContainer(
+          duration: PulseTheme.animMedium,
+          curve: PulseTheme.animCurve,
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          width: isActive ? 24 : 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: isActive ? activeColor : PulseTheme.border,
+            borderRadius: BorderRadius.circular(8),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _FeaturedSkeleton extends StatelessWidget {
+  const _FeaturedSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: PulseTheme.shimmerGradient,
+        boxShadow: PulseTheme.cardShadow,
+      ),
+    );
+  }
+}
+
+String? _chooseImageUrl(ContentItem item) {
+  final thumbnail = item.thumbnailUrl?.trim();
+  final hero = item.heroImageUrl?.trim();
+  final logo = item.publicationLogoUrl?.trim();
+
+  if (thumbnail != null && thumbnail.isNotEmpty) return thumbnail;
+  if (hero != null && hero.isNotEmpty) return hero;
+  if (logo != null && logo.isNotEmpty) return logo;
+  return null;
+}
+
+bool _isRemote(String value) {
+  return value.startsWith('http://') || value.startsWith('https://');
+}
+
+Color _colorForType(String type) {
+  switch (type) {
+    case 'course':
+      return PulseTheme.courseContent;
+    case 'event':
+      return PulseTheme.eventContent;
+    case 'publication':
+      return PulseTheme.magazineContent;
+    case 'news':
+      return PulseTheme.newsContent;
+    case 'article':
+      return PulseTheme.primary;
+    default:
+      return PulseTheme.primary;
+  }
+}
+
+String _labelForType(String type) {
+  switch (type) {
+    case 'course':
+      return 'Curs';
+    case 'event':
+      return 'Eveniment';
+    case 'publication':
+      return 'Revistă';
+    case 'news':
+      return 'Știre';
+    case 'article':
+      return 'Articol';
+    default:
+      return type;
+  }
+}
+
+String _formatDate(DateTime date) {
+  const months = [
+    'ian',
+    'feb',
+    'mar',
+    'apr',
+    'mai',
+    'iun',
+    'iul',
+    'aug',
+    'sep',
+    'oct',
+    'nov',
+    'dec',
+  ];
+  return '${date.day} ${months[date.month - 1]} ${date.year}';
 }
