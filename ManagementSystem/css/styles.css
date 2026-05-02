@@ -470,6 +470,11 @@ td {
     position: relative;
 }
 
+.flutter-ad-preview.mega-hero {
+    height: 388px;
+    position: relative;
+}
+
 .flutter-ad-preview.compact,
 .flutter-ad-preview.sponsor {
     display: flex;
@@ -551,7 +556,8 @@ td {
     width: 20px;
 }
 
-.flutter-ad-preview.hero .flutter-ad-media {
+.flutter-ad-preview.hero .flutter-ad-media,
+.flutter-ad-preview.mega-hero .flutter-ad-media {
     inset: 0;
     position: absolute;
 }
@@ -617,7 +623,8 @@ td {
     flex: 1 1 auto;
 }
 
-.flutter-ad-preview.hero .flutter-ad-content {
+.flutter-ad-preview.hero .flutter-ad-content,
+.flutter-ad-preview.mega-hero .flutter-ad-content {
     bottom: 20px;
     left: 22px;
     max-width: 500px;
@@ -625,13 +632,26 @@ td {
     right: auto;
 }
 
-.flutter-ad-preview.hero.text-top-left .flutter-ad-content {
+.flutter-ad-preview.mega-hero .flutter-ad-content {
+    bottom: 30px;
+    left: 30px;
+    max-width: 560px;
+}
+
+.flutter-ad-preview.hero.text-top-left .flutter-ad-content,
+.flutter-ad-preview.mega-hero.text-top-left .flutter-ad-content {
     bottom: auto;
     left: 22px;
     top: 20px;
 }
 
-.flutter-ad-preview.hero.text-top-center .flutter-ad-content {
+.flutter-ad-preview.mega-hero.text-top-left .flutter-ad-content {
+    left: 30px;
+    top: 30px;
+}
+
+.flutter-ad-preview.hero.text-top-center .flutter-ad-content,
+.flutter-ad-preview.mega-hero.text-top-center .flutter-ad-content {
     bottom: auto;
     left: 50%;
     max-width: min(560px, calc(100% - 44px));
@@ -640,21 +660,38 @@ td {
     width: max-content;
 }
 
-.flutter-ad-preview.hero.text-top-right .flutter-ad-content {
+.flutter-ad-preview.mega-hero.text-top-center .flutter-ad-content {
+    max-width: min(620px, calc(100% - 60px));
+    top: 30px;
+}
+
+.flutter-ad-preview.hero.text-top-right .flutter-ad-content,
+.flutter-ad-preview.mega-hero.text-top-right .flutter-ad-content {
     bottom: auto;
     left: auto;
     right: 22px;
     top: 20px;
 }
 
-.flutter-ad-preview.hero.text-center-left .flutter-ad-content {
+.flutter-ad-preview.mega-hero.text-top-right .flutter-ad-content {
+    right: 30px;
+    top: 30px;
+}
+
+.flutter-ad-preview.hero.text-center-left .flutter-ad-content,
+.flutter-ad-preview.mega-hero.text-center-left .flutter-ad-content {
     bottom: auto;
     left: 22px;
     top: 50%;
     transform: translateY(-50%);
 }
 
-.flutter-ad-preview.hero.text-center .flutter-ad-content {
+.flutter-ad-preview.mega-hero.text-center-left .flutter-ad-content {
+    left: 30px;
+}
+
+.flutter-ad-preview.hero.text-center .flutter-ad-content,
+.flutter-ad-preview.mega-hero.text-center .flutter-ad-content {
     bottom: auto;
     left: 50%;
     max-width: min(560px, calc(100% - 44px));
@@ -663,7 +700,12 @@ td {
     width: max-content;
 }
 
-.flutter-ad-preview.hero.text-center-right .flutter-ad-content {
+.flutter-ad-preview.mega-hero.text-center .flutter-ad-content {
+    max-width: min(620px, calc(100% - 60px));
+}
+
+.flutter-ad-preview.hero.text-center-right .flutter-ad-content,
+.flutter-ad-preview.mega-hero.text-center-right .flutter-ad-content {
     bottom: auto;
     left: auto;
     right: 22px;
@@ -671,7 +713,12 @@ td {
     transform: translateY(-50%);
 }
 
-.flutter-ad-preview.hero.text-bottom-center .flutter-ad-content {
+.flutter-ad-preview.mega-hero.text-center-right .flutter-ad-content {
+    right: 30px;
+}
+
+.flutter-ad-preview.hero.text-bottom-center .flutter-ad-content,
+.flutter-ad-preview.mega-hero.text-bottom-center .flutter-ad-content {
     bottom: 20px;
     left: 50%;
     max-width: min(560px, calc(100% - 44px));
@@ -679,9 +726,20 @@ td {
     width: max-content;
 }
 
-.flutter-ad-preview.hero.text-bottom-right .flutter-ad-content {
+.flutter-ad-preview.mega-hero.text-bottom-center .flutter-ad-content {
+    bottom: 30px;
+    max-width: min(620px, calc(100% - 60px));
+}
+
+.flutter-ad-preview.hero.text-bottom-right .flutter-ad-content,
+.flutter-ad-preview.mega-hero.text-bottom-right .flutter-ad-content {
     left: auto;
     right: 22px;
+}
+
+.flutter-ad-preview.mega-hero.text-bottom-right .flutter-ad-content {
+    bottom: 30px;
+    right: 30px;
 }
 
 .flutter-ad-preview.text-top-center .flutter-ad-content,
@@ -853,8 +911,14 @@ td {
 }
 
 .flutter-ad-preview.hero .flutter-ad-title,
+.flutter-ad-preview.mega-hero .flutter-ad-title,
 .flutter-ad-preview.gradient .flutter-ad-title {
     font-size: 21px;
+}
+
+.flutter-ad-preview.mega-hero .flutter-ad-title {
+    font-size: 28px;
+    -webkit-line-clamp: 3;
 }
 
 .flutter-ad-preview.on-dark .flutter-ad-title {
@@ -876,6 +940,11 @@ td {
 .flutter-ad-preview.hero .flutter-ad-description {
     font-size: 13.2px;
     -webkit-line-clamp: 2;
+}
+
+.flutter-ad-preview.mega-hero .flutter-ad-description {
+    font-size: 13.2px;
+    -webkit-line-clamp: 3;
 }
 
 .flutter-ad-preview.gradient .flutter-ad-description {
@@ -911,6 +980,59 @@ td {
 .flutter-ad-preview.on-dark .flutter-ad-cta {
     background: rgba(255, 255, 255, 0.16);
     border-color: rgba(255, 255, 255, 0.22);
+}
+
+@media (max-width: 640px) {
+    .flutter-ad-preview.mega-hero {
+        height: 320px;
+    }
+
+    .flutter-ad-preview.mega-hero .flutter-ad-content {
+        bottom: 24px;
+        left: 22px;
+        max-width: min(430px, calc(100% - 44px));
+    }
+
+    .flutter-ad-preview.mega-hero.text-top-left .flutter-ad-content {
+        left: 22px;
+        top: 24px;
+    }
+
+    .flutter-ad-preview.mega-hero.text-top-center .flutter-ad-content,
+    .flutter-ad-preview.mega-hero.text-center .flutter-ad-content,
+    .flutter-ad-preview.mega-hero.text-bottom-center .flutter-ad-content {
+        max-width: min(430px, calc(100% - 44px));
+    }
+
+    .flutter-ad-preview.mega-hero.text-top-center .flutter-ad-content {
+        top: 24px;
+    }
+
+    .flutter-ad-preview.mega-hero.text-top-right .flutter-ad-content {
+        right: 22px;
+        top: 24px;
+    }
+
+    .flutter-ad-preview.mega-hero.text-center-left .flutter-ad-content {
+        left: 22px;
+    }
+
+    .flutter-ad-preview.mega-hero.text-center-right .flutter-ad-content {
+        right: 22px;
+    }
+
+    .flutter-ad-preview.mega-hero.text-bottom-center .flutter-ad-content {
+        bottom: 24px;
+    }
+
+    .flutter-ad-preview.mega-hero.text-bottom-right .flutter-ad-content {
+        bottom: 24px;
+        right: 22px;
+    }
+
+    .flutter-ad-preview.mega-hero .flutter-ad-title {
+        font-size: 24px;
+    }
 }
 
 .design-settings-panel {

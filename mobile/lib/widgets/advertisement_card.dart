@@ -94,6 +94,9 @@ class _AdvertisementCardState extends State<AdvertisementCard>
   bool get _isGradient =>
       _templateCode == 'gradient_card' || _templateVariant == 'gradient';
 
+  bool get _isMegaHero =>
+      _templateCode == 'mega_hero_banner' || _templateVariant == 'mega_hero';
+
   bool get _isHero =>
       _templateCode == 'hero_banner' ||
       _templateVariant == 'hero' ||
@@ -103,7 +106,7 @@ class _AdvertisementCardState extends State<AdvertisementCard>
   bool get _isSponsor => _templateCode == 'sponsor_banner';
 
   bool get _isCompact =>
-      !_isHero && !_isGradient ||
+      !_isMegaHero && !_isHero && !_isGradient ||
       _templateCode == 'compact_card' ||
       _templateVariant == 'compact';
 
@@ -218,6 +221,7 @@ class _AdvertisementCardState extends State<AdvertisementCard>
   }
 
   Widget _buildCard({required bool isWide}) {
+    if (_isMegaHero) return _tapWrapper(_buildMegaHeroCard(isWide: isWide));
     if (_isGradient) return _tapWrapper(_buildGradientCard(isWide: isWide));
     if (_isHero) return _tapWrapper(_buildHeroCard(isWide: isWide));
     if (_isSponsor) return _tapWrapper(_buildSponsorCard(isWide: isWide));
@@ -240,6 +244,47 @@ class _AdvertisementCardState extends State<AdvertisementCard>
     final value = _config['corner_radius'];
     if (value is num) return value.toDouble().clamp(16.0, 28.0);
     return 22;
+  }
+
+  Widget _buildMegaHeroCard({required bool isWide}) {
+    return Container(
+      height: _megaHeroHeight(isWide: isWide),
+      decoration: _outerDecoration(),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(_cornerRadius),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildImageBackground(),
+            ?_buildImageOverlay(),
+            Positioned.fill(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  isWide ? 30 : 22,
+                  isWide ? 30 : 24,
+                  isWide ? 30 : 22,
+                  isWide ? 30 : 24,
+                ),
+                child: Align(
+                  alignment: _textBlockAlignment,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: _textBlockMaxWidth(isWide: isWide),
+                    ),
+                    child: _buildTextBlock(
+                      onDark: _hasImage,
+                      titleFontSize: isWide ? 28 : 24,
+                      descriptionMaxLines: 3,
+                      titleMaxLines: 3,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildHeroCard({required bool isWide}) {
@@ -416,7 +461,22 @@ class _AdvertisementCardState extends State<AdvertisementCard>
     return 2;
   }
 
+  double _megaHeroHeight({required bool isWide}) {
+    final height = _stringConfig('height', fallback: 'large') ?? 'large';
+    return switch (height.toLowerCase()) {
+      'small' || 'medium' => isWide ? 360 : 300,
+      'xl' || 'extra_large' => isWide ? 420 : 340,
+      _ => isWide ? 388 : 320,
+    };
+  }
+
   double _textBlockMaxWidth({required bool isWide}) {
+    if (_isMegaHero) {
+      if (_textPosition.endsWith('_center') || _textPosition == 'center') {
+        return isWide ? 620 : 430;
+      }
+      return isWide ? 560 : 380;
+    }
     if (_textPosition.endsWith('_center') || _textPosition == 'center') {
       return isWide ? 560 : 420;
     }
@@ -450,7 +510,9 @@ class _AdvertisementCardState extends State<AdvertisementCard>
           textAlign: _textAlign,
           style: TextStyle(
             color: titleColor,
-            fontSize: titleFontSize ?? (_isHero || _isGradient ? 21 : 16.5),
+            fontSize:
+                titleFontSize ??
+                (_isMegaHero || _isHero || _isGradient ? 21 : 16.5),
             fontWeight: FontWeight.w800,
             height: 1.13,
             letterSpacing: 0,
@@ -465,7 +527,7 @@ class _AdvertisementCardState extends State<AdvertisementCard>
             textAlign: _textAlign,
             style: TextStyle(
               color: bodyColor,
-              fontSize: _isHero || _isGradient ? 13.2 : 12.8,
+              fontSize: _isMegaHero || _isHero || _isGradient ? 13.2 : 12.8,
               fontWeight: FontWeight.w500,
               height: 1.32,
             ),

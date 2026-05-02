@@ -543,7 +543,9 @@ function updateAdPreview() {
     const templateKind = getPreviewTemplateKind(templateInfo);
     const accentColor = sanitizeHexColor(mergedConfig.accent_color, '#2563EB');
     const hasImage = Boolean(imageUrl);
-    const onDark = templateKind === 'gradient' || (templateKind === 'hero' && hasImage);
+    const onDark =
+        templateKind === 'gradient'
+        || ((templateKind === 'hero' || templateKind === 'megaHero') && hasImage);
     const previewRoot = document.getElementById('ad-preview-root');
 
     previewRoot.innerHTML = buildAdPreviewHtml({
@@ -602,6 +604,7 @@ function getPreviewTemplateKind(templateInfo) {
     const layout = templateInfo.layout;
     const variant = templateInfo.variant;
 
+    if (code === 'mega_hero_banner' || variant === 'mega_hero') return 'megaHero';
     if (code === 'gradient_card' || variant === 'gradient' || layout === 'gradient') return 'gradient';
     if (
         code === 'hero_banner'
@@ -622,7 +625,8 @@ function buildAdPreviewHtml(state) {
     const darkClass = state.onDark ? 'on-dark' : '';
     const mediaHtml = state.templateKind === 'gradient' ? '' : buildMediaHtml(state.imageUrl);
     const overlayClass = getOverlayClass(state.config.image_overlay);
-    const overlayHtml = state.templateKind === 'hero' && state.imageUrl && overlayClass
+    const hasImageBackground = state.templateKind === 'hero' || state.templateKind === 'megaHero';
+    const overlayHtml = hasImageBackground && state.imageUrl && overlayClass
         ? `<div class="flutter-ad-overlay ${overlayClass}"></div>`
         : '';
     const contentHtml = buildTextBlockHtml(state);
@@ -639,6 +643,16 @@ function buildAdPreviewHtml(state) {
     if (state.templateKind === 'hero') {
         return `
             <div class="flutter-ad-preview hero ${animationClass} ${positionClass} ${darkClass}">
+                ${mediaHtml}
+                ${overlayHtml}
+                <div class="flutter-ad-content">${contentHtml}</div>
+            </div>
+        `;
+    }
+
+    if (state.templateKind === 'megaHero') {
+        return `
+            <div class="flutter-ad-preview mega-hero ${animationClass} ${positionClass} ${darkClass}">
                 ${mediaHtml}
                 ${overlayHtml}
                 <div class="flutter-ad-content">${contentHtml}</div>

@@ -218,6 +218,47 @@ void main() {
     expect(title.textAlign, TextAlign.center);
   });
 
+  testWidgets('AdvertisementCard renders mega hero centered and taller', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _adHost(
+        const AdItem(
+          id: 11,
+          title: 'Campanie mega hero',
+          templateCode: 'mega_hero_banner',
+          templateVariant: 'mega_hero',
+          templateDefaultConfig: {
+            'height': 'large',
+            'text_position': 'center',
+            'show_badge': false,
+            'badge_text': '',
+          },
+          designConfig: {'text_position': 'center'},
+        ),
+      ),
+    );
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Container &&
+            widget.constraints?.minHeight == 388 &&
+            widget.constraints?.maxHeight == 388,
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Align && widget.alignment == Alignment.center,
+      ),
+      findsWidgets,
+    );
+    final title = tester.widget<Text>(find.text('Campanie mega hero'));
+    expect(title.textAlign, TextAlign.center);
+    expect(find.text('Promovat'), findsNothing);
+  });
+
   testWidgets('AdvertisementCard respects show_sponsor_logo', (tester) async {
     await tester.pumpWidget(
       _adHost(
