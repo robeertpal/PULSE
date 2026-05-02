@@ -83,10 +83,15 @@ class AdItem {
     );
   }
 
-  Map<String, dynamic> get mergedConfig => {
-    ...templateDefaultConfig,
-    ...designConfig,
-  };
+  Map<String, dynamic> get mergedConfig =>
+      mergeConfig(templateDefaultConfig, designConfig);
+
+  static Map<String, dynamic> mergeConfig(
+    Map<String, dynamic> templateDefaultConfig,
+    Map<String, dynamic> designConfig,
+  ) {
+    return {...templateDefaultConfig, ...designConfig};
+  }
 
   String? get preferredImageUrl {
     for (final url in [mobileImageUrl, imageUrl, backgroundImageUrl]) {
