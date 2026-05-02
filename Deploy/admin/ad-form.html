@@ -148,7 +148,7 @@
 
                             <div class="form-grid">
                                 <div class="form-group checkbox-group">
-                                    <input type="checkbox" id="show_badge" checked>
+                                    <input type="checkbox" id="show_badge">
                                     <label for="show_badge">Afișează badge</label>
                                 </div>
                                 <div class="form-group checkbox-group">
@@ -161,6 +161,7 @@
                                 <div class="form-group">
                                     <label>Text badge</label>
                                     <select id="badge_text_preset">
+                                        <option value="">Fără badge text</option>
                                         <option value="Nou">Nou</option>
                                         <option value="Recomandat">Recomandat</option>
                                         <option value="Sponsor">Sponsor</option>
@@ -203,9 +204,15 @@
                                 <div class="form-group">
                                     <label>Poziție text</label>
                                     <select id="text_position">
-                                        <option value="bottom_left">Jos stânga</option>
-                                        <option value="center">Centru</option>
                                         <option value="top_left">Sus stânga</option>
+                                        <option value="top_center">Sus centru</option>
+                                        <option value="top_right">Sus dreapta</option>
+                                        <option value="center_left">Centru stânga</option>
+                                        <option value="center">Centru</option>
+                                        <option value="center_right">Centru dreapta</option>
+                                        <option value="bottom_left">Jos stânga</option>
+                                        <option value="bottom_center">Jos centru</option>
+                                        <option value="bottom_right">Jos dreapta</option>
                                     </select>
                                 </div>
                             </div>

@@ -262,9 +262,9 @@ function normalizeHexColor(value) {
 function getBadgeTextFromUI() {
     const preset = document.getElementById('badge_text_preset').value;
     if (preset === 'custom') {
-        return valueOrNull('badge_text_custom') || 'Custom';
+        return valueOrNull('badge_text_custom');
     }
-    return preset || 'Nou';
+    return preset || null;
 }
 
 function getAccentColorFromUI() {
@@ -291,12 +291,15 @@ function buildDesignConfigFromUI() {
 
 function populateDesignUIFromConfig(config, syncJson = true) {
     const safeConfig = config && typeof config === 'object' && !Array.isArray(config) ? config : {};
-    const badgeText = safeConfig.badge_text || 'Nou';
+    const badgeText = typeof safeConfig.badge_text === 'string' ? safeConfig.badge_text.trim() : '';
     const accentColor = (safeConfig.accent_color || '#2563EB').toUpperCase();
 
-    document.getElementById('show_badge').checked = safeConfig.show_badge !== false;
+    document.getElementById('show_badge').checked = safeConfig.show_badge === true;
     if (BADGE_TEXT_OPTIONS.includes(badgeText)) {
         document.getElementById('badge_text_preset').value = badgeText;
+        document.getElementById('badge_text_custom').value = '';
+    } else if (!badgeText) {
+        document.getElementById('badge_text_preset').value = '';
         document.getElementById('badge_text_custom').value = '';
     } else {
         document.getElementById('badge_text_preset').value = 'custom';
@@ -514,9 +517,10 @@ function updateAdPreview() {
     const description = valueOrNull('description');
     const imageUrl = getPreferredAdImageUrl();
     const logoUrl = valueOrNull('sponsor_logo_url');
-    const sponsorName = valueOrNull('sponsor_name') || 'Promovat';
+    const sponsorName = valueOrNull('sponsor_name');
     const ctaLabel = valueOrNull('cta_label');
     const selectedTemplate = getSelectedAdTemplate();
+    const templateDefaultConfig = asPlainObject(selectedTemplate?.default_config || selectedTemplate?.template_default_config);
     let designConfig = {};
     try {
         designConfig = buildDesignConfigFromUI();
@@ -532,7 +536,7 @@ function updateAdPreview() {
         };
     }
     const mergedConfig = {
-        ...asPlainObject(selectedTemplate?.default_config || selectedTemplate?.template_default_config),
+        ...templateDefaultConfig,
         ...asPlainObject(designConfig),
     };
     const templateInfo = normalizeTemplateInfo(selectedTemplate);
@@ -550,6 +554,8 @@ function updateAdPreview() {
         sponsorName,
         ctaLabel,
         config: mergedConfig,
+        designConfig,
+        templateDefaultConfig,
         templateKind,
         accentColor,
         onDark,
@@ -615,8 +621,9 @@ function buildAdPreviewHtml(state) {
     const positionClass = getTextPositionClass(state.config.text_position);
     const darkClass = state.onDark ? 'on-dark' : '';
     const mediaHtml = state.templateKind === 'gradient' ? '' : buildMediaHtml(state.imageUrl);
-    const overlayHtml = state.templateKind === 'hero' && state.imageUrl && state.config.image_overlay !== 'none'
-        ? '<div class="flutter-ad-overlay"></div>'
+    const overlayClass = getOverlayClass(state.config.image_overlay);
+    const overlayHtml = state.templateKind === 'hero' && state.imageUrl && overlayClass
+        ? `<div class="flutter-ad-overlay ${overlayClass}"></div>`
         : '';
     const contentHtml = buildTextBlockHtml(state);
 
@@ -662,10 +669,10 @@ function buildMediaHtml(imageUrl) {
     return `<div class="flutter-ad-media ${imageUrl ? '' : 'missing'}">${imageHtml}</div>`;
 }
 
-function buildTextBlockHtml({ title, description, logoUrl, sponsorName, ctaLabel, config, templateKind }) {
-    const showBadge = config.show_badge !== false;
+function buildTextBlockHtml({ title, description, logoUrl, sponsorName, ctaLabel, config, designConfig, templateDefaultConfig }) {
+    const showBadge = shouldShowBadge(designConfig, templateDefaultConfig);
     const showSponsorLogo = config.show_sponsor_logo !== false && Boolean(logoUrl);
-    const badgeText = config.badge_text || getDefaultBadgeText(templateKind);
+    const badgeText = getBadgeText(designConfig, templateDefaultConfig);
     const sponsorLogoHtml = showSponsorLogo
         ? `
             <span class="flutter-ad-logo">
@@ -673,7 +680,19 @@ function buildTextBlockHtml({ title, description, logoUrl, sponsorName, ctaLabel
             </span>
         `
         : '';
-    const badgeHtml = showBadge ? `<span class="flutter-ad-badge">${escapeHtml(badgeText)}</span>` : '';
+    const metaItems = [];
+    if (showBadge && badgeText) {
+        metaItems.push(`<span class="flutter-ad-badge">${escapeHtml(badgeText)}</span>`);
+    }
+    if (sponsorName) {
+        metaItems.push(`<span class="flutter-ad-sponsor-name">${escapeHtml(sponsorName)}</span>`);
+    }
+    if (sponsorLogoHtml) {
+        metaItems.push(sponsorLogoHtml);
+    }
+    const metaHtml = metaItems.length
+        ? `<div class="flutter-ad-meta">${metaItems.join('')}</div>`
+        : '';
     const descriptionHtml = description
         ? `<div class="flutter-ad-description">${escapeHtml(description)}</div>`
         : '';
@@ -682,30 +701,69 @@ function buildTextBlockHtml({ title, description, logoUrl, sponsorName, ctaLabel
         : '';
 
     return `
-        <div class="flutter-ad-meta">
-            ${badgeHtml}
-            <span class="flutter-ad-sponsor-name">${escapeHtml(sponsorName)}</span>
-            ${sponsorLogoHtml}
-        </div>
+        ${metaHtml}
         <div class="flutter-ad-title">${escapeHtml(title)}</div>
         ${descriptionHtml}
         ${ctaHtml}
     `;
 }
 
-function getDefaultBadgeText(templateKind) {
-    const templateInfo = normalizeTemplateInfo(getSelectedAdTemplate());
-    if (templateInfo.code === 'event_promo') return 'Eveniment';
-    if (templateInfo.code === 'course_promo') return 'Curs EMC';
-    if (templateInfo.code === 'publication_promo') return 'Revistă';
-    if (templateInfo.code === 'sponsor_banner' || templateKind === 'sponsor') return 'Sponsor';
-    return 'Promovat';
+function shouldShowBadge(designConfig, templateDefaultConfig) {
+    const designValue = boolFromConfig(designConfig, 'show_badge');
+    const templateValue = boolFromConfig(templateDefaultConfig, 'show_badge');
+    return designValue ?? templateValue ?? false;
+}
+
+function getBadgeText(designConfig, templateDefaultConfig) {
+    return stringFromConfig(designConfig, 'badge_text')
+        || stringFromConfig(templateDefaultConfig, 'badge_text');
+}
+
+function boolFromConfig(config, key) {
+    const source = asPlainObject(config);
+    if (!Object.prototype.hasOwnProperty.call(source, key)) return null;
+    const value = source[key];
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'true') return true;
+        if (normalized === 'false') return false;
+    }
+    return null;
+}
+
+function stringFromConfig(config, key) {
+    const source = asPlainObject(config);
+    if (!Object.prototype.hasOwnProperty.call(source, key)) return null;
+    const value = source[key];
+    if (value === null || value === undefined) return null;
+    const text = String(value).trim();
+    return text ? text : null;
 }
 
 function getTextPositionClass(position) {
-    if (position === 'center') return 'text-center';
-    if (position === 'top_left') return 'text-top-left';
-    return 'text-bottom-left';
+    const supportedPositions = new Set([
+        'top_left',
+        'top_center',
+        'top_right',
+        'center_left',
+        'center',
+        'center_right',
+        'bottom_left',
+        'bottom_center',
+        'bottom_right',
+    ]);
+    const safePosition = supportedPositions.has(position) ? position : 'bottom_left';
+    return `text-${safePosition.replace('_', '-')}`;
+}
+
+function getOverlayClass(value) {
+    const overlay = String(value || 'dark_gradient').trim().toLowerCase();
+    if (overlay === 'none') return '';
+    if (overlay === 'dark') return 'overlay-dark';
+    if (overlay === 'light') return 'overlay-light';
+    if (overlay === 'light_gradient') return 'overlay-light-gradient';
+    return 'overlay-dark-gradient';
 }
 
 function getCornerRadius(config) {
