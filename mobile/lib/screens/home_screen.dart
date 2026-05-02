@@ -1,13 +1,16 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/pulse_theme.dart';
+import '../models/ad_item.dart';
 import '../models/content_item.dart';
 import '../services/api_service.dart';
 import '../widgets/home_header.dart';
 import '../widgets/featured_card.dart';
 import '../widgets/content_section.dart';
 import '../widgets/content_card.dart';
+import '../widgets/advertisement_card.dart';
 import '../widgets/premium_loading_indicator.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -29,11 +32,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<ContentItem> _publications = [];
   List<ContentItem> _news = [];
   List<ContentItem> _featuredItems = [];
+  Map<String, List<AdItem>> _adsByPlacement = {};
   bool _isLoading = true;
   bool _isFeaturedLoading = true;
   String? _errorMessage;
 
   static const int _sectionCount = 10;
+  static const List<String> _homeAdPlacements = [
+    'home_after_news',
+    'home_after_publications',
+    'home_after_events',
+    'home_after_courses',
+  ];
 
   @override
   void initState() {
@@ -83,6 +93,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
 
     _loadFeaturedContent();
+    _loadAds();
 
     try {
       final results = await Future.wait([
@@ -108,6 +119,33 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _errorMessage = "A apărut o eroare la încărcarea datelor";
         });
       }
+    }
+  }
+
+  Future<void> _loadAds() async {
+    try {
+      final entries = await Future.wait(
+        _homeAdPlacements.map((placement) async {
+          try {
+            final ads = await _apiService.fetchAds(
+              placement: placement,
+              limit: 1,
+            );
+            return MapEntry(placement, ads);
+          } catch (e) {
+            debugPrint('Error loading ads for $placement: $e');
+            return MapEntry(placement, <AdItem>[]);
+          }
+        }),
+      );
+
+      if (mounted) {
+        setState(() {
+          _adsByPlacement = Map.fromEntries(entries);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading home ads: $e');
     }
   }
 
@@ -153,6 +191,66 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     setState(() {
       _selectedIndex = index;
     });
+  }
+
+  int _tabIndexForContentType(String? type) {
+    switch (type) {
+      case 'course':
+        return 1;
+      case 'publication':
+        return 2;
+      case 'event':
+        return 3;
+      case 'news':
+      case 'article':
+        return 4;
+      default:
+        return 0;
+    }
+  }
+
+  Future<void> _handleAdTap(AdItem ad) async {
+    if (ad.relatedContentItemId != null) {
+      final targetTab = _tabIndexForContentType(ad.relatedContentType);
+      if (targetTab != 0) _navigateToTab(targetTab);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ad.relatedContentTitle?.isNotEmpty == true
+                ? 'Detaliile pentru "${ad.relatedContentTitle}" vor fi disponibile în curând.'
+                : 'Detalii disponibile în curând.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final ctaUrl = ad.ctaUrl?.trim();
+    if (ctaUrl != null && ctaUrl.isNotEmpty) {
+      final uri = Uri.tryParse(ctaUrl);
+      if (uri != null) {
+        final opened = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (opened) return;
+      }
+    }
+  }
+
+  Widget _buildAdSlot(String placement) {
+    final ads = _adsByPlacement[placement] ?? const <AdItem>[];
+    if (ads.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 24),
+      child: AdvertisementCard(
+        ad: ads.first,
+        onTap: () => _handleAdTap(ads.first),
+      ),
+    );
   }
 
   // Acasă Feed
@@ -212,7 +310,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
 
-        const SizedBox(height: 24),
+        _buildAdSlot('home_after_news'),
+
+        if ((_adsByPlacement['home_after_news'] ?? const <AdItem>[]).isEmpty)
+          const SizedBox(height: 24),
 
         // Reviste Section
         _animatedSection(
@@ -229,7 +330,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
 
-        const SizedBox(height: 24),
+        _buildAdSlot('home_after_publications'),
+
+        if ((_adsByPlacement['home_after_publications'] ?? const <AdItem>[])
+            .isEmpty)
+          const SizedBox(height: 24),
 
         // Evenimente Section
         _animatedSection(
@@ -246,7 +351,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
 
-        const SizedBox(height: 24),
+        _buildAdSlot('home_after_events'),
+
+        if ((_adsByPlacement['home_after_events'] ?? const <AdItem>[]).isEmpty)
+          const SizedBox(height: 24),
 
         // Cursuri Section
         _animatedSection(
@@ -262,6 +370,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 .toList(),
           ),
         ),
+
+        _buildAdSlot('home_after_courses'),
 
         const SizedBox(height: 100),
       ],

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../models/ad_item.dart';
 import '../models/content_item.dart';
 
 class ApiService {
@@ -91,5 +92,36 @@ class ApiService {
 
   Future<List<ContentItem>> getFeaturedContent({int limit = 3}) async {
     return _getContentList('featured-content', limit: limit);
+  }
+
+  Future<List<AdItem>> fetchAds({String? placement, int limit = 3}) async {
+    try {
+      final queryParameters = <String, String>{'limit': limit.toString()};
+      if (placement != null && placement.isNotEmpty) {
+        queryParameters['placement'] = placement;
+      }
+
+      final uri = Uri.parse(
+        '$_baseUrl/ads',
+      ).replace(queryParameters: queryParameters);
+      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load ads: ${response.statusCode}');
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Unexpected ads response format');
+      }
+
+      return decoded
+          .whereType<Map<String, dynamic>>()
+          .map((json) => AdItem.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching ads: $e');
+      rethrow;
+    }
   }
 }

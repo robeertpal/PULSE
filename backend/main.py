@@ -5,6 +5,7 @@ import logging
 import os
 import re
 from pathlib import Path
+from typing import Optional
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -183,6 +184,10 @@ def serialize_content_card(item):
         )
 
     return data
+
+
+def serialize_mapping(row):
+    return {key: serialize_value(value) for key, value in dict(row).items()}
 
 
 @app.get("/")
@@ -372,6 +377,59 @@ def get_publications(
         return [serialize_content_card(item) for item in items]
     except Exception as e:
         return {"error": str(e)}
+
+
+@app.get("/ads")
+def get_public_ads(
+    placement: Optional[str] = None,
+    limit: int = Query(default=3, ge=1, le=10),
+    db: Session = Depends(get_db),
+):
+    try:
+        query = text(
+            """
+            SELECT
+                id,
+                title,
+                description,
+                ad_type::text AS ad_type,
+                placement::text AS placement,
+                related_content_item_id,
+                related_content_type::text AS related_content_type,
+                related_content_slug,
+                related_content_title,
+                image_url,
+                mobile_image_url,
+                background_image_url,
+                sponsor_name,
+                sponsor_logo_url,
+                cta_label,
+                cta_url,
+                priority,
+                starts_at,
+                ends_at,
+                ad_design_template_id,
+                template_code,
+                template_name,
+                template_layout,
+                template_variant,
+                template_default_config,
+                design_config,
+                created_at,
+                updated_at
+            FROM active_ads_public
+            WHERE (:placement IS NULL OR placement::text = :placement)
+            ORDER BY priority DESC, created_at DESC
+            LIMIT :limit
+            """
+        )
+        rows = db.execute(query, {"placement": placement, "limit": limit}).mappings().all()
+        return [serialize_mapping(row) for row in rows]
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Nu s-au putut încărca reclamele publice din active_ads_public: {e}",
+        ) from e
 
 
 # -------------------------
