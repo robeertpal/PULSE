@@ -33,6 +33,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     bindFormEvents();
     populateDesignUIFromConfig({});
     await loadAdTemplates();
+    syncDesignJsonFromUI();
+    updateAdPreview();
 
     const urlParams = new URLSearchParams(window.location.search);
     const id = urlParams.get('id');
@@ -121,9 +123,15 @@ function handleDesignUIChange() {
 }
 
 async function loadAdTemplates() {
-    adTemplates = await API.get('/admin/ad-design-templates');
     const select = document.getElementById('ad_design_template_id');
     select.innerHTML = '<option value="">Fără template</option>';
+    try {
+        adTemplates = await API.get('/admin/ad-design-templates');
+    } catch (err) {
+        adTemplates = [];
+        console.warn('Nu s-au putut încărca template-urile de reclamă pentru preview:', err);
+        return;
+    }
     adTemplates.forEach(template => {
         const option = document.createElement('option');
         option.value = template.id;
@@ -503,10 +511,12 @@ async function uploadImageFromInput(fileInputId, targetInputId) {
 
 function updateAdPreview() {
     const title = valueOrNull('title') || 'Titlu reclamă';
-    const description = valueOrNull('description') || 'Descrierea reclamei apare aici.';
-    const imageUrl = valueOrNull('image_url');
+    const description = valueOrNull('description');
+    const imageUrl = getPreferredAdImageUrl();
     const logoUrl = valueOrNull('sponsor_logo_url');
-    const ctaLabel = valueOrNull('cta_label') || 'Află mai mult';
+    const sponsorName = valueOrNull('sponsor_name') || 'Promovat';
+    const ctaLabel = valueOrNull('cta_label');
+    const selectedTemplate = getSelectedAdTemplate();
     let designConfig = {};
     try {
         designConfig = buildDesignConfigFromUI();
@@ -521,41 +531,212 @@ function updateAdPreview() {
             show_sponsor_logo: document.getElementById('show_sponsor_logo').checked,
         };
     }
-    const selectedTemplate = adTemplates.find(template => String(template.id) === document.getElementById('ad_design_template_id').value);
-    const previewCard = document.querySelector('.ad-preview-card');
-    const previewBody = document.querySelector('.ad-preview-body');
+    const mergedConfig = {
+        ...asPlainObject(selectedTemplate?.default_config || selectedTemplate?.template_default_config),
+        ...asPlainObject(designConfig),
+    };
+    const templateInfo = normalizeTemplateInfo(selectedTemplate);
+    const templateKind = getPreviewTemplateKind(templateInfo);
+    const accentColor = sanitizeHexColor(mergedConfig.accent_color, '#2563EB');
+    const hasImage = Boolean(imageUrl);
+    const onDark = templateKind === 'gradient' || (templateKind === 'hero' && hasImage);
+    const previewRoot = document.getElementById('ad-preview-root');
 
-    const previewImage = document.getElementById('preview-image');
-    previewImage.innerHTML = imageUrl ? `<img src="${escapeAttr(imageUrl)}" alt="Imagine reclamă">` : 'Fără imagine';
-    previewImage.classList.toggle('dark_gradient', designConfig.image_overlay === 'dark_gradient');
-    previewImage.classList.toggle('none', designConfig.image_overlay === 'none');
+    previewRoot.innerHTML = buildAdPreviewHtml({
+        title,
+        description,
+        imageUrl,
+        logoUrl,
+        sponsorName,
+        ctaLabel,
+        config: mergedConfig,
+        templateKind,
+        accentColor,
+        onDark,
+    });
 
-    const previewLogo = document.getElementById('preview-logo');
-    if (logoUrl && designConfig.show_sponsor_logo) {
-        previewLogo.src = logoUrl;
-        previewLogo.style.display = 'block';
-    } else {
-        previewLogo.removeAttribute('src');
-        previewLogo.style.display = 'none';
+    const card = previewRoot.querySelector('.flutter-ad-preview');
+    if (card) {
+        card.style.setProperty('--ad-accent', accentColor);
+        card.style.setProperty('--ad-accent-soft', hexToRgba(accentColor, 0.14));
+        card.style.setProperty('--ad-accent-line', hexToRgba(accentColor, 0.18));
+        card.style.setProperty('--ad-accent-dark', darkenHexColor(accentColor, 0.28));
+        card.style.setProperty('--ad-card-radius', `${getCornerRadius(mergedConfig)}px`);
     }
 
-    previewCard.classList.toggle('fade_in', designConfig.animation === 'fade_in');
-    previewCard.classList.toggle('soft_pulse', designConfig.animation === 'soft_pulse');
-    previewCard.style.setProperty('--ad-accent', designConfig.accent_color || '#2563EB');
-    previewBody.classList.toggle('center', designConfig.text_position === 'center');
-    previewBody.classList.toggle('top_left', designConfig.text_position === 'top_left');
-    previewBody.classList.toggle('bottom_left', designConfig.text_position === 'bottom_left');
-
-    const previewBadge = document.getElementById('preview-badge');
-    previewBadge.textContent = designConfig.badge_text || 'Nou';
-    previewBadge.style.display = designConfig.show_badge ? 'inline-flex' : 'none';
-
     document.getElementById('preview-template').textContent = selectedTemplate
-        ? `${selectedTemplate.name} (${selectedTemplate.code})`
-        : 'Fără template';
-    document.getElementById('preview-title').textContent = title;
-    document.getElementById('preview-description').textContent = description;
-    document.getElementById('preview-cta').textContent = ctaLabel;
+        ? `${selectedTemplate.name} (${templateInfo.code || 'template'})`
+        : 'Fără template - fallback compact';
+}
+
+function getSelectedAdTemplate() {
+    const selectedId = document.getElementById('ad_design_template_id').value;
+    return adTemplates.find(template => String(template.id) === selectedId) || null;
+}
+
+function getPreferredAdImageUrl() {
+    return valueOrNull('mobile_image_url') || valueOrNull('image_url') || valueOrNull('background_image_url');
+}
+
+function asPlainObject(value) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    return {};
+}
+
+function normalizeTemplateInfo(template) {
+    return {
+        code: String(template?.code || template?.template_code || '').trim(),
+        layout: String(template?.layout || template?.template_layout || '').trim(),
+        variant: String(template?.variant || template?.template_variant || '').trim(),
+    };
+}
+
+function getPreviewTemplateKind(templateInfo) {
+    const code = templateInfo.code;
+    const layout = templateInfo.layout;
+    const variant = templateInfo.variant;
+
+    if (code === 'gradient_card' || variant === 'gradient' || layout === 'gradient') return 'gradient';
+    if (
+        code === 'hero_banner'
+        || code === 'event_promo'
+        || variant === 'hero'
+        || variant === 'event_promo'
+        || layout === 'hero'
+    ) {
+        return 'hero';
+    }
+    if (code === 'sponsor_banner' || layout === 'sponsor' || variant === 'sponsor') return 'sponsor';
+    return 'compact';
+}
+
+function buildAdPreviewHtml(state) {
+    const animationClass = ['fade_in', 'soft_pulse'].includes(state.config.animation) ? state.config.animation : '';
+    const positionClass = getTextPositionClass(state.config.text_position);
+    const darkClass = state.onDark ? 'on-dark' : '';
+    const mediaHtml = state.templateKind === 'gradient' ? '' : buildMediaHtml(state.imageUrl);
+    const overlayHtml = state.templateKind === 'hero' && state.imageUrl && state.config.image_overlay !== 'none'
+        ? '<div class="flutter-ad-overlay"></div>'
+        : '';
+    const contentHtml = buildTextBlockHtml(state);
+
+    if (state.templateKind === 'sponsor') {
+        return `
+            <div class="flutter-ad-preview sponsor ${animationClass} ${positionClass} ${darkClass}">
+                <div class="flutter-ad-content">${contentHtml}</div>
+                ${mediaHtml}
+            </div>
+        `;
+    }
+
+    if (state.templateKind === 'hero') {
+        return `
+            <div class="flutter-ad-preview hero ${animationClass} ${positionClass} ${darkClass}">
+                ${mediaHtml}
+                ${overlayHtml}
+                <div class="flutter-ad-content">${contentHtml}</div>
+            </div>
+        `;
+    }
+
+    if (state.templateKind === 'gradient') {
+        return `
+            <div class="flutter-ad-preview gradient ${animationClass} ${positionClass} on-dark">
+                <div class="flutter-ad-content">${contentHtml}</div>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="flutter-ad-preview compact ${animationClass} ${positionClass} ${darkClass}">
+            ${mediaHtml}
+            <div class="flutter-ad-content">${contentHtml}</div>
+        </div>
+    `;
+}
+
+function buildMediaHtml(imageUrl) {
+    const imageHtml = imageUrl
+        ? `<img src="${escapeAttr(imageUrl)}" alt="Imagine reclamă" onerror="this.parentElement.classList.add('missing');this.remove();">`
+        : '';
+    return `<div class="flutter-ad-media ${imageUrl ? '' : 'missing'}">${imageHtml}</div>`;
+}
+
+function buildTextBlockHtml({ title, description, logoUrl, sponsorName, ctaLabel, config, templateKind }) {
+    const showBadge = config.show_badge !== false;
+    const showSponsorLogo = config.show_sponsor_logo !== false && Boolean(logoUrl);
+    const badgeText = config.badge_text || getDefaultBadgeText(templateKind);
+    const sponsorLogoHtml = showSponsorLogo
+        ? `
+            <span class="flutter-ad-logo">
+                <img src="${escapeAttr(logoUrl)}" alt="Logo sponsor" onerror="this.closest('.flutter-ad-logo').remove();">
+            </span>
+        `
+        : '';
+    const badgeHtml = showBadge ? `<span class="flutter-ad-badge">${escapeHtml(badgeText)}</span>` : '';
+    const descriptionHtml = description
+        ? `<div class="flutter-ad-description">${escapeHtml(description)}</div>`
+        : '';
+    const ctaHtml = ctaLabel
+        ? `<div class="flutter-ad-actions"><span class="flutter-ad-cta">${escapeHtml(ctaLabel)}</span></div>`
+        : '';
+
+    return `
+        <div class="flutter-ad-meta">
+            ${badgeHtml}
+            <span class="flutter-ad-sponsor-name">${escapeHtml(sponsorName)}</span>
+            ${sponsorLogoHtml}
+        </div>
+        <div class="flutter-ad-title">${escapeHtml(title)}</div>
+        ${descriptionHtml}
+        ${ctaHtml}
+    `;
+}
+
+function getDefaultBadgeText(templateKind) {
+    const templateInfo = normalizeTemplateInfo(getSelectedAdTemplate());
+    if (templateInfo.code === 'event_promo') return 'Eveniment';
+    if (templateInfo.code === 'course_promo') return 'Curs EMC';
+    if (templateInfo.code === 'publication_promo') return 'Revistă';
+    if (templateInfo.code === 'sponsor_banner' || templateKind === 'sponsor') return 'Sponsor';
+    return 'Promovat';
+}
+
+function getTextPositionClass(position) {
+    if (position === 'center') return 'text-center';
+    if (position === 'top_left') return 'text-top-left';
+    return 'text-bottom-left';
+}
+
+function getCornerRadius(config) {
+    const radius = Number.parseFloat(config.corner_radius);
+    if (Number.isFinite(radius)) return Math.max(16, Math.min(28, radius));
+    return 22;
+}
+
+function sanitizeHexColor(value, fallback) {
+    const color = String(value || '').trim();
+    return /^#[0-9A-Fa-f]{6}$/.test(color) ? color.toUpperCase() : fallback;
+}
+
+function hexToRgba(hex, alpha) {
+    const color = sanitizeHexColor(hex, '#2563EB').slice(1);
+    const red = Number.parseInt(color.slice(0, 2), 16);
+    const green = Number.parseInt(color.slice(2, 4), 16);
+    const blue = Number.parseInt(color.slice(4, 6), 16);
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function darkenHexColor(hex, amount) {
+    const color = sanitizeHexColor(hex, '#2563EB').slice(1);
+    const red = Math.round(Number.parseInt(color.slice(0, 2), 16) * (1 - amount));
+    const green = Math.round(Number.parseInt(color.slice(2, 4), 16) * (1 - amount));
+    const blue = Math.round(Number.parseInt(color.slice(4, 6), 16) * (1 - amount));
+    return `#${toHexByte(red)}${toHexByte(green)}${toHexByte(blue)}`;
+}
+
+function toHexByte(value) {
+    return Math.max(0, Math.min(255, value)).toString(16).padStart(2, '0').toUpperCase();
 }
 
 function showAlert(msg, type) {
@@ -572,4 +753,13 @@ function escapeAttr(value) {
         .replace(/"/g, '&quot;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }

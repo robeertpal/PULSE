@@ -1459,13 +1459,11 @@ def admin_delete_ad(id: int, db: Session = Depends(get_db)):
             f"/admin/ads/{id}",
             id,
             payload=None,
-            update_data={"deleted_at": "CURRENT_TIMESTAMP", "is_active": False, "status": "archived"},
+            update_data={"delete": "hard_delete_ads_only"},
         )
-        db_ad.deleted_at = func.now()
-        db_ad.is_active = False
-        db_ad.status = models.AdStatus.archived
+        db.delete(db_ad)
         db.commit()
-        return {"success": True}
+        return {"success": True, "message": "Ad deleted permanently"}
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):

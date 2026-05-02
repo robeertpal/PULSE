@@ -422,109 +422,291 @@ td {
     font-size: 16px;
 }
 
-.ad-preview-card {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-    background: #FFFFFF;
+.flutter-ad-preview-shell {
+    padding: 8px 0;
 }
 
-.ad-preview-card.fade_in {
+.preview-template-name {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 12px;
+}
+
+.flutter-ad-preview {
+    --ad-accent: #2563EB;
+    --ad-accent-soft: rgba(37, 99, 235, 0.14);
+    --ad-accent-line: rgba(37, 99, 235, 0.18);
+    --ad-accent-dark: #1B459F;
+    --ad-card-radius: 22px;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--ad-card-radius);
+    background: #FFFFFF;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+    color: #0F172A;
+    font-family: var(--font-family);
+    overflow: hidden;
+}
+
+.flutter-ad-preview.fade_in {
     animation: adFadeIn 0.6s ease-out;
 }
 
-.ad-preview-card.soft_pulse {
+.flutter-ad-preview.soft_pulse {
     animation: adSoftPulse 1.8s ease-in-out infinite;
 }
 
-.ad-preview-image {
-    min-height: 150px;
-    background: var(--background);
+.flutter-ad-preview.hero {
+    height: 210px;
+    position: relative;
+}
+
+.flutter-ad-preview.compact,
+.flutter-ad-preview.sponsor {
     display: flex;
     align-items: center;
-    justify-content: center;
-    color: var(--text-secondary);
-    font-size: 14px;
-    position: relative;
-    overflow: hidden;
+    gap: 14px;
+    padding: 12px;
 }
 
-.ad-preview-image img {
-    width: 100%;
-    height: 190px;
-    object-fit: cover;
-    display: block;
-}
-
-.ad-preview-image.dark_gradient::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0.58));
-    pointer-events: none;
-}
-
-.ad-preview-body {
+.flutter-ad-preview.sponsor {
     padding: 16px;
 }
 
-.ad-preview-body.center {
+.flutter-ad-preview.gradient {
+    padding: 20px;
+    background: linear-gradient(135deg, var(--ad-accent), var(--ad-accent-dark));
+    border-color: transparent;
+    box-shadow: 0 12px 28px var(--ad-accent-soft);
+}
+
+.flutter-ad-media {
+    background: linear-gradient(135deg, var(--ad-accent-soft), #FFFFFF);
+    overflow: hidden;
+    position: relative;
+}
+
+.flutter-ad-media img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+}
+
+.flutter-ad-media.missing {
+    align-items: center;
+    color: var(--ad-accent);
+    display: flex;
+    justify-content: center;
+}
+
+.flutter-ad-media.missing::before {
+    content: "AD";
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.flutter-ad-preview.hero .flutter-ad-media {
+    inset: 0;
+    position: absolute;
+}
+
+.flutter-ad-preview.hero .flutter-ad-media.missing::before {
+    font-size: 22px;
+}
+
+.flutter-ad-preview.compact .flutter-ad-media,
+.flutter-ad-preview.sponsor .flutter-ad-media {
+    border-radius: 18px;
+    flex: 0 0 108px;
+    height: 108px;
+    width: 108px;
+}
+
+.flutter-ad-preview.sponsor .flutter-ad-media {
+    border-radius: 20px;
+    flex-basis: 96px;
+    height: 96px;
+    width: 96px;
+}
+
+.flutter-ad-overlay {
+    background: linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0.05),
+        rgba(0, 0, 0, 0.34),
+        rgba(0, 0, 0, 0.78)
+    );
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+}
+
+.flutter-ad-content {
+    min-width: 0;
+    position: relative;
+    z-index: 1;
+}
+
+.flutter-ad-preview.compact .flutter-ad-content,
+.flutter-ad-preview.sponsor .flutter-ad-content {
+    flex: 1 1 auto;
+}
+
+.flutter-ad-preview.hero .flutter-ad-content {
+    bottom: 18px;
+    left: 20px;
+    position: absolute;
+    right: 20px;
+}
+
+.flutter-ad-preview.hero.text-top-left .flutter-ad-content {
+    bottom: auto;
+    top: 18px;
+}
+
+.flutter-ad-preview.hero.text-center .flutter-ad-content {
+    bottom: 50%;
+    left: 20px;
+    right: 20px;
+    text-align: center;
+    transform: translateY(50%);
+}
+
+.flutter-ad-preview.compact.text-center .flutter-ad-content,
+.flutter-ad-preview.sponsor.text-center .flutter-ad-content,
+.flutter-ad-preview.gradient.text-center .flutter-ad-content {
     text-align: center;
 }
 
-.ad-preview-body.top_left {
-    border-top: 4px solid var(--ad-accent, var(--primary));
+.flutter-ad-preview.compact.text-top-left .flutter-ad-content,
+.flutter-ad-preview.sponsor.text-top-left .flutter-ad-content {
+    align-self: flex-start;
+    padding-top: 2px;
 }
 
-.ad-preview-badge {
-    display: inline-flex;
-    background: var(--ad-accent, var(--primary));
-    color: white;
+.flutter-ad-meta {
+    align-items: center;
+    color: #64748B;
+    display: flex;
+    font-size: 12px;
+    font-weight: 700;
+    gap: 8px;
+    min-width: 0;
+}
+
+.flutter-ad-preview.on-dark .flutter-ad-meta {
+    color: rgba(255, 255, 255, 0.84);
+}
+
+.flutter-ad-preview.text-center .flutter-ad-meta,
+.flutter-ad-preview.text-center .flutter-ad-actions {
+    justify-content: center;
+}
+
+.flutter-ad-badge {
+    align-items: center;
+    background: var(--ad-accent-soft);
+    border: 1px solid var(--ad-accent-line);
     border-radius: 999px;
-    padding: 4px 8px;
+    color: var(--ad-accent);
+    display: inline-flex;
+    flex: 0 0 auto;
     font-size: 11px;
     font-weight: 800;
-    margin-bottom: 10px;
+    padding: 5px 9px;
 }
 
-.ad-preview-meta {
-    display: flex;
+.flutter-ad-sponsor-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.flutter-ad-logo {
     align-items: center;
-    gap: 8px;
-    color: var(--text-secondary);
-    font-size: 12px;
-    margin-bottom: 10px;
-}
-
-.ad-preview-logo {
-    width: 28px;
-    height: 28px;
+    background: #FFFFFF;
+    border: 1px solid rgba(226, 232, 240, 0.5);
     border-radius: 6px;
-    object-fit: cover;
-    border: 1px solid var(--border);
-}
-
-.ad-preview-title {
-    font-size: 18px;
-    font-weight: 800;
-    margin-bottom: 8px;
-}
-
-.ad-preview-description {
-    color: var(--text-secondary);
-    font-size: 14px;
-    line-height: 1.45;
-    margin-bottom: 14px;
-}
-
-.ad-preview-cta {
     display: inline-flex;
-    background: var(--ad-accent, var(--primary));
-    color: white;
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 13px;
-    font-weight: 700;
+    flex: 0 1 140px;
+    height: 36px;
+    justify-content: center;
+    max-width: 140px;
+    padding: 4px 6px;
+}
+
+.flutter-ad-logo img {
+    border-radius: 4px;
+    display: block;
+    height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+    width: 100%;
+}
+
+.flutter-ad-title {
+    color: #0F172A;
+    display: -webkit-box;
+    font-size: 17px;
+    font-weight: 800;
+    line-height: 1.12;
+    margin-top: 10px;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.flutter-ad-preview.hero .flutter-ad-title,
+.flutter-ad-preview.gradient .flutter-ad-title {
+    font-size: 22px;
+}
+
+.flutter-ad-preview.on-dark .flutter-ad-title {
+    color: #FFFFFF;
+}
+
+.flutter-ad-description {
+    color: #64748B;
+    display: -webkit-box;
+    font-size: 13.5px;
+    line-height: 1.35;
+    margin-top: 7px;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+}
+
+.flutter-ad-preview.hero .flutter-ad-description {
+    -webkit-line-clamp: 2;
+}
+
+.flutter-ad-preview.on-dark .flutter-ad-description {
+    color: rgba(255, 255, 255, 0.84);
+}
+
+.flutter-ad-actions {
+    display: flex;
+    margin-top: 12px;
+}
+
+.flutter-ad-cta {
+    background: var(--ad-accent);
+    border: 1px solid var(--ad-accent);
+    border-radius: 14px;
+    color: #FFFFFF;
+    display: inline-flex;
+    font-size: 12.5px;
+    font-weight: 800;
+    line-height: 1;
+    padding: 7px 12px;
+}
+
+.flutter-ad-preview.on-dark .flutter-ad-cta {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.22);
 }
 
 .design-settings-panel {
@@ -584,8 +766,8 @@ td {
 }
 
 @keyframes adSoftPulse {
-    0%, 100% { box-shadow: 0 0 0 rgba(37, 99, 235, 0); }
-    50% { box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12); }
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.012); }
 }
 
 @media (max-width: 1100px) {

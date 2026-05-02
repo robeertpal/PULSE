@@ -132,7 +132,7 @@ async function archiveAd(id) {
 }
 
 async function deleteAd(id) {
-    if (!confirm('Sigur doriți să ștergeți această reclamă? Va fi făcut soft delete.')) return;
+    if (!confirm('Sigur doriți să ștergeți definitiv această reclamă? Această acțiune nu poate fi anulată.')) return;
     try {
         await API.delete(`/admin/ads/${id}`);
         await loadAds();
