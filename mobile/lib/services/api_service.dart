@@ -14,6 +14,20 @@ class ApiService {
     defaultValue: 'https://pulse-backend-5f9b.onrender.com',
   );
 
+  String _buildRepeatedQueryString(Map<String, List<String>> queryParams) {
+    final parts = <String>[];
+
+    queryParams.forEach((key, values) {
+      for (final value in values) {
+        parts.add(
+          '${Uri.encodeQueryComponent(key)}=${Uri.encodeQueryComponent(value)}',
+        );
+      }
+    });
+
+    return parts.join('&');
+  }
+
   Future<List<ContentItem>> _getContentList(
     String path, {
     int limit = 10,
@@ -37,7 +51,7 @@ class ApiService {
 
       final uri = Uri.parse(
         '$_baseUrl/$path',
-      ).replace(queryParameters: queryParams);
+      ).replace(query: _buildRepeatedQueryString(queryParams));
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
@@ -180,6 +194,83 @@ class ApiService {
       categoryIds: categoryIds,
       specializationIds: specializationIds,
     );
+  }
+
+  Future<Set<int>> getSavedContentIds() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/saved-content/ids'))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load saved content ids: ${response.statusCode}');
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Unexpected saved ids response format');
+      }
+
+      return decoded.map((id) => int.parse(id.toString())).toSet();
+    } catch (e) {
+      debugPrint('Error fetching saved content ids: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> saveContent(int contentItemId) async {
+    try {
+      final response = await http
+          .post(Uri.parse('$_baseUrl/saved-content/$contentItemId'))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to save content: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error saving content: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> unsaveContent(int contentItemId) async {
+    try {
+      final response = await http
+          .delete(Uri.parse('$_baseUrl/saved-content/$contentItemId'))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to remove saved content: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error removing saved content: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<ContentItem>> getSavedContent() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/saved-content'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load saved content: ${response.statusCode}');
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Unexpected saved content response format');
+      }
+
+      return decoded
+          .whereType<Map<String, dynamic>>()
+          .map((json) => ContentItem.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching saved content: $e');
+      rethrow;
+    }
   }
 
   Future<List<AdItem>> fetchAds({String? placement, int limit = 3}) async {

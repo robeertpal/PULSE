@@ -119,6 +119,22 @@ def apply_content_filters(query, category_ids: Optional[List[int]] = None, speci
     return query
 
 
+def get_current_demo_user_id() -> int:
+    # TODO: Replace demo user id with authenticated user once login is implemented.
+    return 1
+
+
+def get_public_content_item_or_404(db: Session, content_item_id: int):
+    item = (
+        visible_content_card_query(db)
+        .filter(models.ContentItem.id == content_item_id)
+        .first()
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Content item not found")
+    return item
+
+
 def public_content_ordering():
     return (
         models.ContentItem.is_featured.desc(),
@@ -417,6 +433,121 @@ def get_publications(
         return [serialize_content_card(item) for item in items]
     except Exception as e:
         return {"error": str(e)}
+
+
+@app.get("/saved-content/ids")
+def get_saved_content_ids(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_demo_user_id),
+):
+    rows = (
+        db.query(models.SavedContent.content_item_id)
+        .join(
+            models.ContentItem,
+            models.ContentItem.id == models.SavedContent.content_item_id,
+        )
+        .filter(models.SavedContent.user_id == user_id)
+        .filter(models.ContentItem.is_active == True)
+        .filter(models.ContentItem.deleted_at.is_(None))
+        .filter(models.ContentItem.status == models.ContentStatus.published)
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
+@app.get("/saved-content")
+def get_saved_content(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_demo_user_id),
+):
+    saved_rows = (
+        db.query(models.SavedContent)
+        .join(
+            models.ContentItem,
+            models.ContentItem.id == models.SavedContent.content_item_id,
+        )
+        .filter(models.SavedContent.user_id == user_id)
+        .filter(models.ContentItem.is_active == True)
+        .filter(models.ContentItem.deleted_at.is_(None))
+        .filter(models.ContentItem.status == models.ContentStatus.published)
+        .order_by(models.SavedContent.saved_at.desc().nullslast())
+        .all()
+    )
+    content_item_ids = [saved.content_item_id for saved in saved_rows]
+    if not content_item_ids:
+        return []
+
+    content_items = (
+        visible_content_card_query(db)
+        .filter(models.ContentItem.id.in_(content_item_ids))
+        .all()
+    )
+    content_by_id = {item.id: item for item in content_items}
+
+    items = []
+    for saved in saved_rows:
+        item = content_by_id.get(saved.content_item_id)
+        if item is None:
+            continue
+        data = serialize_content_card(item)
+        data["is_saved"] = True
+        data["saved_at"] = serialize_value(saved.saved_at)
+        items.append(data)
+    return items
+
+
+@app.post("/saved-content/{content_item_id}")
+def save_content(
+    content_item_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_demo_user_id),
+):
+    get_public_content_item_or_404(db, content_item_id)
+
+    existing = (
+        db.query(models.SavedContent)
+        .filter(models.SavedContent.user_id == user_id)
+        .filter(models.SavedContent.content_item_id == content_item_id)
+        .first()
+    )
+    if existing is None:
+        db.add(
+            models.SavedContent(
+                user_id=user_id,
+                content_item_id=content_item_id,
+                saved_at=datetime.utcnow(),
+            )
+        )
+        db.commit()
+
+    return {
+        "content_item_id": content_item_id,
+        "is_saved": True,
+        "message": "Content saved",
+    }
+
+
+@app.delete("/saved-content/{content_item_id}")
+def remove_saved_content(
+    content_item_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_demo_user_id),
+):
+    existing = (
+        db.query(models.SavedContent)
+        .filter(models.SavedContent.user_id == user_id)
+        .filter(models.SavedContent.content_item_id == content_item_id)
+        .first()
+    )
+    if existing is not None:
+        db.delete(existing)
+        db.commit()
+
+    return {
+        "content_item_id": content_item_id,
+        "is_saved": False,
+        "message": "Content removed from saved",
+    }
 
 
 @app.get("/ads")
@@ -727,14 +858,6 @@ def get_publication_issues(db: Session = Depends(get_db)):
 # -------------------------
 # USER ACTIVITY
 # -------------------------
-
-@app.get("/saved-content")
-def get_saved_content(db: Session = Depends(get_db)):
-    try:
-        return [serialize_model(item) for item in db.query(models.SavedContent).all()]
-    except Exception as e:
-        return {"error": str(e)}
-
 
 @app.get("/user-courses")
 def get_user_courses(db: Session = Depends(get_db)):

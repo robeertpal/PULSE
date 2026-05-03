@@ -8,6 +8,7 @@ class HomeHeader extends StatefulWidget {
   final String doctorName;
   final String avatarUrl;
   final int emcPoints;
+  final VoidCallback? onSavedTap;
 
   final bool compactMode;
 
@@ -16,6 +17,7 @@ class HomeHeader extends StatefulWidget {
     required this.doctorName,
     this.avatarUrl = '',
     this.emcPoints = 142,
+    this.onSavedTap,
     this.compactMode = false,
   });
 
@@ -283,7 +285,12 @@ class _HomeHeaderState extends State<HomeHeader> {
                             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
                             child: Divider(height: 1, color: Colors.black.withValues(alpha: 0.06)),
                           ),
-                          _buildDropdownItem(context, 'Favorite', 'assets/icons/heart.svg'),
+                          _buildDropdownItem(
+                            context,
+                            'Favorite',
+                            'assets/icons/heart.svg',
+                            onTap: widget.onSavedTap,
+                          ),
                         ],
                       ),
                     ),
@@ -307,10 +314,19 @@ class _HomeHeaderState extends State<HomeHeader> {
     );
   }
 
-  Widget _buildDropdownItem(BuildContext context, String title, String iconPath) {
+  Widget _buildDropdownItem(
+    BuildContext context,
+    String title,
+    String iconPath, {
+    VoidCallback? onTap,
+  }) {
     return InkWell(
       onTap: () {
         Navigator.of(context).pop();
+        if (onTap != null) {
+          Future.delayed(const Duration(milliseconds: 200), onTap);
+          return;
+        }
         Future.delayed(const Duration(milliseconds: 200), () {
           if (!mounted) return;
           Navigator.of(this.context).push(

@@ -18,6 +18,10 @@ class ContentCard extends StatefulWidget {
   final String? locationLabel;
   final String? providerLabel;
   final int? id; // For debug logging
+  final bool isSaved;
+  final ValueChanged<int>? onSaveToggle;
+  final double? cardWidth;
+  final EdgeInsetsGeometry margin;
 
   const ContentCard({
     super.key,
@@ -33,12 +37,23 @@ class ContentCard extends StatefulWidget {
     this.dateLabel,
     this.locationLabel,
     this.providerLabel,
+    this.isSaved = false,
+    this.onSaveToggle,
+    this.cardWidth = 240,
+    this.margin = const EdgeInsets.only(right: 16),
     this.onTap,
   });
 
   final VoidCallback? onTap;
 
-  factory ContentCard.fromModel(ContentItem model, {double? progress}) {
+  factory ContentCard.fromModel(
+    ContentItem model, {
+    double? progress,
+    bool isSaved = false,
+    ValueChanged<int>? onSaveToggle,
+    double? cardWidth = 240,
+    EdgeInsetsGeometry margin = const EdgeInsets.only(right: 16),
+  }) {
     Color categoryColor = PulseTheme.primary;
     String iconAsset = 'assets/icons/newspaper.svg';
 
@@ -123,6 +138,10 @@ class ContentCard extends StatefulWidget {
       dateLabel: formatDate(model.startDate ?? model.publishedAt),
       locationLabel: eventLocation,
       providerLabel: model.provider,
+      isSaved: isSaved,
+      onSaveToggle: onSaveToggle,
+      cardWidth: cardWidth,
+      margin: margin,
       onTap: isRemote(model.contentUrl) ? () async {
         final Uri url = Uri.parse(model.contentUrl!);
         if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
@@ -233,6 +252,50 @@ class _ContentCardState extends State<ContentCard>
     );
   }
 
+  Widget _buildSaveButton() {
+    if (widget.id == null || widget.onSaveToggle == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => widget.onSaveToggle!(widget.id!),
+        borderRadius: BorderRadius.circular(18),
+        child: AnimatedContainer(
+          duration: PulseTheme.animFast,
+          curve: PulseTheme.animCurve,
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: widget.isSaved
+                ? widget.categoryColor.withValues(alpha: 0.95)
+                : Colors.white.withValues(alpha: 0.92),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: widget.isSaved
+                  ? widget.categoryColor.withValues(alpha: 0.35)
+                  : Colors.white.withValues(alpha: 0.7),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 5),
+                spreadRadius: -3,
+              ),
+            ],
+          ),
+          child: Icon(
+            widget.isSaved ? Icons.bookmark : Icons.bookmark_border,
+            size: 20,
+            color: widget.isSaved ? Colors.white : PulseTheme.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -243,8 +306,8 @@ class _ContentCardState extends State<ContentCard>
       child: ScaleTransition(
         scale: _scaleAnimation,
         child: Container(
-          width: 240,
-          margin: const EdgeInsets.only(right: 16),
+          width: widget.cardWidth,
+          margin: widget.margin,
           decoration: BoxDecoration(
             color: PulseTheme.surface,
             borderRadius: BorderRadius.circular(24),
@@ -308,6 +371,11 @@ class _ContentCardState extends State<ContentCard>
                           top: 10,
                           child: EmcBadge(points: widget.emcPoints!),
                         ),
+                      Positioned(
+                        left: 10,
+                        top: 10,
+                        child: _buildSaveButton(),
+                      ),
                     ],
                   ),
                 ),

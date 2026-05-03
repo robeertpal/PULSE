@@ -7,6 +7,7 @@ import '../models/ad_item.dart';
 import '../models/content_item.dart';
 import '../models/filter_option.dart';
 import '../services/api_service.dart';
+import 'saved_content_screen.dart';
 import '../widgets/home_header.dart';
 import '../widgets/featured_card.dart';
 import '../widgets/content_section.dart';
@@ -38,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Map<String, List<AdItem>> _adsByPlacement = {};
   final Set<int> _selectedCategoryIds = {};
   final Set<int> _selectedSpecializationIds = {};
+  Set<int> _savedContentIds = {};
   bool _isLoading = true;
   bool _isFeaturedLoading = true;
   int _contentRequestId = 0;
@@ -90,6 +92,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     _loadData();
     _loadFilterOptions();
+    _loadSavedContentIds();
   }
 
   List<int> get _categoryFilterIds => _selectedCategoryIds.toList()..sort();
@@ -110,6 +113,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     _loadFeaturedContent(requestId);
     _loadAds();
+    _loadSavedContentIds();
 
     try {
       final categoryIds = _categoryFilterIds;
@@ -172,6 +176,78 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     } catch (e) {
       debugPrint('Error loading content filters: $e');
     }
+  }
+
+  Future<void> _loadSavedContentIds() async {
+    try {
+      final ids = await _apiService.getSavedContentIds();
+      if (mounted) {
+        setState(() {
+          _savedContentIds = ids;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading saved content ids: $e');
+    }
+  }
+
+  void _showSavedFeedback(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _toggleSavedContent(int contentItemId) async {
+    final wasSaved = _savedContentIds.contains(contentItemId);
+
+    setState(() {
+      if (wasSaved) {
+        _savedContentIds.remove(contentItemId);
+      } else {
+        _savedContentIds.add(contentItemId);
+      }
+    });
+
+    try {
+      if (wasSaved) {
+        await _apiService.unsaveContent(contentItemId);
+        _showSavedFeedback('Eliminat din salvate');
+      } else {
+        await _apiService.saveContent(contentItemId);
+        _showSavedFeedback('Salvat');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        if (wasSaved) {
+          _savedContentIds.add(contentItemId);
+        } else {
+          _savedContentIds.remove(contentItemId);
+        }
+      });
+      _showSavedFeedback('Nu am putut actualiza salvarea');
+    }
+  }
+
+  Future<void> _openSavedContent() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SavedContentScreen()),
+    );
+    _loadSavedContentIds();
+  }
+
+  Widget _savedContentCard(ContentItem item) {
+    return ContentCard.fromModel(
+      item,
+      isSaved: _savedContentIds.contains(item.id),
+      onSaveToggle: _toggleSavedContent,
+    );
   }
 
   void _toggleCategory(int id) {
@@ -580,7 +656,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             emptyIconAsset: 'assets/icons/newspaper.svg',
             categoryColor: PulseTheme.newsContent,
             onActionTap: () => _navigateToTab(4),
-            children: _news.map((item) => ContentCard.fromModel(item)).toList(),
+            children: _news.map(_savedContentCard).toList(),
           ),
         ),
 
@@ -598,9 +674,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             emptyIconAsset: 'assets/icons/books.svg',
             categoryColor: PulseTheme.magazineContent,
             onActionTap: () => _navigateToTab(2),
-            children: _publications
-                .map((item) => ContentCard.fromModel(item))
-                .toList(),
+            children: _publications.map(_savedContentCard).toList(),
           ),
         ),
 
@@ -618,9 +692,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             emptyIconAsset: 'assets/icons/events.svg',
             categoryColor: PulseTheme.eventContent,
             onActionTap: () => _navigateToTab(3),
-            children: _events
-                .map((item) => ContentCard.fromModel(item))
-                .toList(),
+            children: _events.map(_savedContentCard).toList(),
           ),
         ),
 
@@ -638,9 +710,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             emptyIconAsset: 'assets/icons/graduation.svg',
             categoryColor: PulseTheme.courseContent,
             onActionTap: () => _navigateToTab(1),
-            children: _courses
-                .map((item) => ContentCard.fromModel(item))
-                .toList(),
+            children: _courses.map(_savedContentCard).toList(),
           ),
         ),
 
@@ -724,9 +794,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 emptyIconAsset: emptyIconAsset,
                 categoryColor: categoryColor,
                 onActionTap: () {},
-                children: items
-                    .map((item) => ContentCard.fromModel(item))
-                    .toList(),
+                children: items.map(_savedContentCard).toList(),
               ),
             ],
           ),
@@ -748,7 +816,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             // Partea de acces de sus (Template global)
             _animatedSection(
               0,
-              const HomeHeader(doctorName: 'Andrei', avatarUrl: ''),
+              HomeHeader(
+                doctorName: 'Andrei',
+                avatarUrl: '',
+                onSavedTap: _openSavedContent,
+              ),
             ),
             // Conținutul paginii cu tranziții
             Expanded(
