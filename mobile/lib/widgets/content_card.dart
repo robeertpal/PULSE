@@ -257,228 +257,228 @@ class _ContentCardState extends State<ContentCard>
       return const SizedBox.shrink();
     }
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => widget.onSaveToggle!(widget.id!),
-        borderRadius: BorderRadius.circular(18),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => widget.onSaveToggle!(widget.id!),
+      child: Semantics(
+        button: true,
+        label: widget.isSaved ? 'Elimina din salvate' : 'Salveaza',
         child: AnimatedContainer(
           duration: PulseTheme.animFast,
           curve: PulseTheme.animCurve,
-          width: 36,
-          height: 36,
+          width: 38,
+          height: 38,
           decoration: BoxDecoration(
-            color: widget.isSaved
-                ? widget.categoryColor.withValues(alpha: 0.95)
-                : Colors.white.withValues(alpha: 0.92),
+            color: Colors.white.withValues(alpha: widget.isSaved ? 0.96 : 0.9),
             shape: BoxShape.circle,
             border: Border.all(
               color: widget.isSaved
-                  ? widget.categoryColor.withValues(alpha: 0.35)
-                  : Colors.white.withValues(alpha: 0.7),
+                  ? widget.categoryColor.withValues(alpha: 0.34)
+                  : Colors.white.withValues(alpha: 0.72),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 12,
-                offset: const Offset(0, 5),
-                spreadRadius: -3,
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+                spreadRadius: -4,
               ),
             ],
           ),
           child: Icon(
-            widget.isSaved ? Icons.bookmark : Icons.bookmark_border,
-            size: 20,
-            color: widget.isSaved ? Colors.white : PulseTheme.textSecondary,
+            widget.isSaved
+                ? Icons.favorite
+                : Icons.favorite_border,
+            size: 21,
+            color: widget.isSaved ? widget.categoryColor : PulseTheme.textPrimary,
           ),
         ),
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildCardBody() {
+    return ScaleTransition(
+      scale: _scaleAnimation,
+      child: Container(
+        width: widget.cardWidth,
+        margin: widget.margin,
+        decoration: BoxDecoration(
+          color: PulseTheme.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: PulseTheme.border.withValues(alpha: 0.6)),
+          boxShadow: [
+            BoxShadow(
+              color: widget.categoryColor.withValues(alpha: 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+              spreadRadius: -2,
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // â”€â”€ Image Area with Gradient â”€â”€
+              Container(
+                height: 120,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      widget.categoryColor.withValues(alpha: 0.12),
+                      widget.categoryColor.withValues(alpha: 0.04),
+                    ],
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    // â”€â”€ Image or Placeholder Icon â”€â”€
+                    Positioned.fill(
+                      child: _buildImageContent(),
+                    ),
+                    // EMC Points badge (consistent with featured cards)
+                    if (widget.emcPoints != null)
+                      Positioned(
+                        right: 10,
+                        top: 10,
+                        child: EmcBadge(points: widget.emcPoints!),
+                      ),
+                    Positioned(
+                      left: 10,
+                      top: 10,
+                      child: _buildSaveButton(),
+                    ),
+                  ],
+                ),
+              ),
+              // â”€â”€ Text Content â”€â”€
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Tag pill
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: widget.categoryColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          widget.tag.toUpperCase(),
+                          style: TextStyle(
+                            color: widget.categoryColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        widget.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: PulseTheme.textPrimary,
+                          height: 1.3,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: PulseTheme.textSecondary,
+                          fontWeight: FontWeight.w500,
+                          height: 1.25,
+                        ),
+                      ),
+                      const Spacer(),
+                      Row(
+                        children: [
+                          if (widget.dateLabel != null) ...[
+                            _MetaPill(
+                              label: widget.dateLabel!,
+                              color: widget.categoryColor,
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          if (widget.locationLabel != null)
+                            Flexible(
+                              fit: FlexFit.loose,
+                              child: _MetaPill(
+                                label: widget.locationLabel!,
+                                color: widget.categoryColor,
+                              ),
+                            )
+                          else if (widget.providerLabel != null)
+                            Flexible(
+                              fit: FlexFit.loose,
+                              child: _MetaPill(
+                                label: widget.providerLabel!,
+                                color: widget.categoryColor,
+                              ),
+                            ),
+                        ],
+                      ),
+                      // Optional progress bar
+                      if (widget.progress != null) ...[
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: widget.progress!,
+                            minHeight: 4,
+                            backgroundColor: widget.categoryColor.withValues(alpha: 0.1),
+                            valueColor: AlwaysStoppedAnimation<Color>(widget.categoryColor),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTappableCard() {
+    if (widget.onTap == null) {
+      return _buildCardBody();
+    }
+
     return GestureDetector(
       onTapDown: (_) => _tapController.forward(),
       onTapUp: (_) => _tapController.reverse(),
       onTapCancel: () => _tapController.reverse(),
       onTap: widget.onTap,
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: Container(
-          width: widget.cardWidth,
-          margin: widget.margin,
-          decoration: BoxDecoration(
-            color: PulseTheme.surface,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: PulseTheme.border.withValues(alpha: 0.6)),
-            boxShadow: [
-              BoxShadow(
-                color: widget.categoryColor.withValues(alpha: 0.08),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-                spreadRadius: -2,
-              ),
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // â”€â”€ Image Area with Gradient â”€â”€
-                Container(
-                  height: 120,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        widget.categoryColor.withValues(alpha: 0.12),
-                        widget.categoryColor.withValues(alpha: 0.04),
-                      ],
-                    ),
-                  ),
-                  child: Stack(
-                    children: [
-                      // Decorative circle
-                      Positioned(
-                        right: -20,
-                        top: -20,
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: widget.categoryColor.withValues(alpha: 0.08),
-                          ),
-                        ),
-                      ),
-                      // â”€â”€ Image or Placeholder Icon â”€â”€
-                      Positioned.fill(
-                        child: _buildImageContent(),
-                      ),
-                      // EMC Points badge (consistent with featured cards)
-                      if (widget.emcPoints != null)
-                        Positioned(
-                          right: 10,
-                          top: 10,
-                          child: EmcBadge(points: widget.emcPoints!),
-                        ),
-                      Positioned(
-                        left: 10,
-                        top: 10,
-                        child: _buildSaveButton(),
-                      ),
-                    ],
-                  ),
-                ),
-                // â”€â”€ Text Content â”€â”€
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Tag pill
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: widget.categoryColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            widget.tag.toUpperCase(),
-                            style: TextStyle(
-                              color: widget.categoryColor,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          widget.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: PulseTheme.textPrimary,
-                            height: 1.3,
-                            letterSpacing: -0.2,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          widget.subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: PulseTheme.textSecondary,
-                            fontWeight: FontWeight.w500,
-                            height: 1.25,
-                          ),
-                        ),
-                        const Spacer(),
-                        Row(
-                          children: [
-                            if (widget.dateLabel != null) ...[
-                              _MetaPill(
-                                label: widget.dateLabel!,
-                                color: widget.categoryColor,
-                              ),
-                              const SizedBox(width: 6),
-                            ],
-                            if (widget.locationLabel != null)
-                              Flexible(
-                                fit: FlexFit.loose,
-                                child: _MetaPill(
-                                  label: widget.locationLabel!,
-                                  color: widget.categoryColor,
-                                ),
-                              )
-                            else if (widget.providerLabel != null)
-                              Flexible(
-                                fit: FlexFit.loose,
-                                child: _MetaPill(
-                                  label: widget.providerLabel!,
-                                  color: widget.categoryColor,
-                                ),
-                              ),
-                          ],
-                        ),
-                        // Optional progress bar
-                        if (widget.progress != null) ...[
-                          const SizedBox(height: 10),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: widget.progress!,
-                              minHeight: 4,
-                              backgroundColor: widget.categoryColor.withValues(alpha: 0.1),
-                              valueColor: AlwaysStoppedAnimation<Color>(widget.categoryColor),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      child: _buildCardBody(),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _buildTappableCard();
   }
 }
 

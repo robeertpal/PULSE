@@ -124,6 +124,25 @@ def get_current_demo_user_id() -> int:
     return 1
 
 
+def ensure_demo_user_exists(db: Session, user_id: int):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is not None:
+        return
+
+    now = datetime.utcnow()
+    db.add(
+        models.User(
+            id=user_id,
+            email=f"demo-doctor-{user_id}@pulse.local",
+            password_hash="demo-auth-placeholder",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db.commit()
+
+
 def get_public_content_item_or_404(db: Session, content_item_id: int):
     item = (
         visible_content_card_query(db)
@@ -503,6 +522,7 @@ def save_content(
     user_id: int = Depends(get_current_demo_user_id),
 ):
     get_public_content_item_or_404(db, content_item_id)
+    ensure_demo_user_exists(db, user_id)
 
     existing = (
         db.query(models.SavedContent)
