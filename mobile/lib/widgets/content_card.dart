@@ -257,6 +257,14 @@ class _ContentCardState extends State<ContentCard>
       return const SizedBox.shrink();
     }
 
+    const favoriteColor = Color(0xFFFF4B4B);
+    final backgroundColor = widget.isSaved
+        ? Colors.white.withValues(alpha: 0.95)
+        : Colors.black.withValues(alpha: 0.28);
+    final borderColor = widget.isSaved
+        ? Colors.white.withValues(alpha: 0.78)
+        : Colors.white.withValues(alpha: 0.2);
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => widget.onSaveToggle!(widget.id!),
@@ -268,14 +276,11 @@ class _ContentCardState extends State<ContentCard>
           curve: PulseTheme.animCurve,
           width: 38,
           height: 38,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: widget.isSaved ? 0.96 : 0.9),
+            color: backgroundColor,
             shape: BoxShape.circle,
-            border: Border.all(
-              color: widget.isSaved
-                  ? widget.categoryColor.withValues(alpha: 0.34)
-                  : Colors.white.withValues(alpha: 0.72),
-            ),
+            border: Border.all(color: borderColor),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.12),
@@ -285,12 +290,12 @@ class _ContentCardState extends State<ContentCard>
               ),
             ],
           ),
-          child: Icon(
-            widget.isSaved
-                ? Icons.favorite
-                : Icons.favorite_border,
-            size: 21,
-            color: widget.isSaved ? widget.categoryColor : PulseTheme.textPrimary,
+          child: Center(
+            child: Icon(
+              widget.isSaved ? Icons.favorite : Icons.favorite_border,
+              size: 22,
+              color: widget.isSaved ? favoriteColor : Colors.white,
+            ),
           ),
         ),
       ),
