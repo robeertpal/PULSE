@@ -153,6 +153,34 @@ class ApiService {
     );
   }
 
+  Future<Map<String, dynamic>> getContentItemDetail(int contentItemId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/content-items/$contentItemId'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 404) {
+        throw Exception('Content item not found');
+      }
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load content item: ${response.statusCode}');
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is Map<String, dynamic> && decoded['error'] != null) {
+        throw Exception(decoded['error']);
+      }
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Unexpected content item response format');
+      }
+
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching content item detail: $e');
+      rethrow;
+    }
+  }
+
   Future<List<FilterOption>> getCategories() async {
     try {
       final response = await http.get(Uri.parse('$_baseUrl/content-categories'));

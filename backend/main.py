@@ -285,6 +285,20 @@ def get_content_items(
         return {"error": str(e)}
 
 
+@app.get("/content-items/{content_item_id}")
+def get_content_item_detail(
+    content_item_id: int,
+    db: Session = Depends(get_db),
+):
+    item = get_public_content_item_or_404(db, content_item_id)
+    data = serialize_model(item, include_relationships=True)
+    card_data = serialize_content_card(item)
+    for key, value in card_data.items():
+        if data.get(key) is None:
+            data[key] = value
+    return data
+
+
 @app.get("/featured-content")
 def get_featured_content(
     limit: int = Query(default=10, le=50),

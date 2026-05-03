@@ -137,6 +137,7 @@ class _SavedContentScreenState extends State<SavedContentScreen> {
                 item,
                 isSaved: true,
                 onSaveToggle: _removeSaved,
+                onDetailClosed: _loadSavedContent,
                 cardWidth: double.infinity,
                 margin: EdgeInsets.zero,
               ),

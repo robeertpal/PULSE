@@ -247,6 +247,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       item,
       isSaved: _savedContentIds.contains(item.id),
       onSaveToggle: _toggleSavedContent,
+      onDetailClosed: _loadSavedContentIds,
     );
   }
 

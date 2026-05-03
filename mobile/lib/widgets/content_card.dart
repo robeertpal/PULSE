@@ -2,8 +2,8 @@
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 import '../models/content_item.dart';
+import '../screens/content_detail_screen.dart';
 import 'emc_badge.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class ContentCard extends StatefulWidget {
   final String title;
@@ -20,6 +20,7 @@ class ContentCard extends StatefulWidget {
   final int? id; // For debug logging
   final bool isSaved;
   final ValueChanged<int>? onSaveToggle;
+  final VoidCallback? onDetailClosed;
   final double? cardWidth;
   final EdgeInsetsGeometry margin;
 
@@ -39,6 +40,7 @@ class ContentCard extends StatefulWidget {
     this.providerLabel,
     this.isSaved = false,
     this.onSaveToggle,
+    this.onDetailClosed,
     this.cardWidth = 240,
     this.margin = const EdgeInsets.only(right: 16),
     this.onTap,
@@ -51,6 +53,7 @@ class ContentCard extends StatefulWidget {
     double? progress,
     bool isSaved = false,
     ValueChanged<int>? onSaveToggle,
+    VoidCallback? onDetailClosed,
     double? cardWidth = 240,
     EdgeInsetsGeometry margin = const EdgeInsets.only(right: 16),
   }) {
@@ -140,14 +143,9 @@ class ContentCard extends StatefulWidget {
       providerLabel: model.provider,
       isSaved: isSaved,
       onSaveToggle: onSaveToggle,
+      onDetailClosed: onDetailClosed,
       cardWidth: cardWidth,
       margin: margin,
-      onTap: isRemote(model.contentUrl) ? () async {
-        final Uri url = Uri.parse(model.contentUrl!);
-        if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-          debugPrint('Could not launch ${model.contentUrl}');
-        }
-      } : null,
     );
   }
 
@@ -467,16 +465,30 @@ class _ContentCardState extends State<ContentCard>
     );
   }
 
-  Widget _buildTappableCard() {
-    if (widget.onTap == null) {
-      return _buildCardBody();
+  Future<void> _openDetailScreen() async {
+    if (widget.onTap != null) {
+      widget.onTap!();
+      return;
     }
+    if (widget.id == null) return;
 
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ContentDetailScreen(
+          contentItemId: widget.id!,
+          initiallySaved: widget.isSaved,
+        ),
+      ),
+    );
+    widget.onDetailClosed?.call();
+  }
+
+  Widget _buildTappableCard() {
     return GestureDetector(
       onTapDown: (_) => _tapController.forward(),
       onTapUp: (_) => _tapController.reverse(),
       onTapCancel: () => _tapController.reverse(),
-      onTap: widget.onTap,
+      onTap: _openDetailScreen,
       child: _buildCardBody(),
     );
   }
