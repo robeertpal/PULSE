@@ -5,7 +5,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -25,9 +25,11 @@ logger = logging.getLogger("pulse.admin")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5500",
-        "http://127.0.0.1:5500",
-        "https://pulse-medichub.web.app",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    "https://pulse-medichub.web.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -109,6 +111,14 @@ def visible_content_card_query(db: Session):
     )
 
 
+def apply_content_filters(query, category_ids: Optional[List[int]] = None, specialization_ids: Optional[List[int]] = None):
+    if category_ids:
+        query = query.filter(models.ContentItem.category_id.in_(category_ids))
+    if specialization_ids:
+        query = query.filter(models.ContentItem.specialization_id.in_(specialization_ids))
+    return query
+
+
 def public_content_ordering():
     return (
         models.ContentItem.is_featured.desc(),
@@ -126,7 +136,9 @@ def serialize_content_card(item):
         "short_description": item.short_description,
         "thumbnail_url": item.thumbnail_url,
         "hero_image_url": item.hero_image_url,
+        "category_id": item.category_id,
         "category_name": item.category.name if item.category else None,
+        "specialization_id": item.specialization_id,
         "specialization_name": item.specialization.name if item.specialization else None,
         "published_at": serialize_value(item.published_at),
         "created_at": serialize_value(item.created_at),
@@ -225,11 +237,15 @@ def health(db: Session = Depends(get_db)):
 def get_content_items(
     skip: int = 0,
     limit: int = Query(default=50, le=200),
+    category_ids: Optional[List[int]] = Query(default=None),
+    specialization_ids: Optional[List[int]] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     try:
-        items = visible_content_query(db).offset(skip).limit(limit).all()
-        return [serialize_model(item) for item in items]
+        query = visible_content_card_query(db)
+        query = apply_content_filters(query, category_ids, specialization_ids)
+        items = query.offset(skip).limit(limit).all()
+        return [serialize_model(item, include_relationships=True) for item in items]
     except Exception as e:
         return {"error": str(e)}
 
@@ -237,12 +253,18 @@ def get_content_items(
 @app.get("/featured-content")
 def get_featured_content(
     limit: int = Query(default=10, le=50),
+    category_ids: Optional[List[int]] = Query(default=None),
+    specialization_ids: Optional[List[int]] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     try:
-        items = (
+        query = (
             visible_content_card_query(db)
             .filter(models.ContentItem.is_featured == True)
+        )
+        query = apply_content_filters(query, category_ids, specialization_ids)
+        items = (
+            query
             .order_by(
                 models.ContentItem.published_at.desc().nullslast(),
                 models.ContentItem.created_at.desc().nullslast(),
@@ -259,18 +281,21 @@ def get_featured_content(
 def get_articles(
     skip: int = 0,
     limit: int = Query(default=50, le=200),
+    category_ids: Optional[List[int]] = Query(default=None),
+    specialization_ids: Optional[List[int]] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     try:
+        query = visible_content_card_query(db).filter(models.ContentItem.content_type == models.ContentItemType.article)
+        query = apply_content_filters(query, category_ids, specialization_ids)
         items = (
-            visible_content_query(db)
-            .filter(models.ContentItem.content_type == models.ContentItemType.article)
+            query
             .order_by(models.ContentItem.published_at.desc())
             .offset(skip)
             .limit(limit)
             .all()
         )
-        return [serialize_model(item) for item in items]
+        return [serialize_model(item, include_relationships=True) for item in items]
     except Exception as e:
         return {"error": str(e)}
 
@@ -279,12 +304,15 @@ def get_articles(
 def get_news(
     skip: int = 0,
     limit: int = Query(default=50, le=200),
+    category_ids: Optional[List[int]] = Query(default=None),
+    specialization_ids: Optional[List[int]] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     try:
+        query = visible_content_card_query(db).filter(models.ContentItem.content_type == models.ContentItemType.news)
+        query = apply_content_filters(query, category_ids, specialization_ids)
         items = (
-            visible_content_card_query(db)
-            .filter(models.ContentItem.content_type == models.ContentItemType.news)
+            query
             .order_by(*public_content_ordering())
             .offset(skip)
             .limit(limit)
@@ -299,12 +327,15 @@ def get_news(
 def get_courses(
     skip: int = 0,
     limit: int = Query(default=50, le=200),
+    category_ids: Optional[List[int]] = Query(default=None),
+    specialization_ids: Optional[List[int]] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     try:
+        query = visible_content_card_query(db).filter(models.ContentItem.content_type == models.ContentItemType.course)
+        query = apply_content_filters(query, category_ids, specialization_ids)
         items = (
-            visible_content_card_query(db)
-            .filter(models.ContentItem.content_type == models.ContentItemType.course)
+            query
             .order_by(*public_content_ordering())
             .offset(skip)
             .limit(limit)
@@ -319,12 +350,15 @@ def get_courses(
 def get_events(
     skip: int = 0,
     limit: int = Query(default=50, le=200),
+    category_ids: Optional[List[int]] = Query(default=None),
+    specialization_ids: Optional[List[int]] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     try:
+        query = visible_content_card_query(db).filter(models.ContentItem.content_type == models.ContentItemType.event)
+        query = apply_content_filters(query, category_ids, specialization_ids)
         items = (
-            visible_content_card_query(db)
-            .filter(models.ContentItem.content_type == models.ContentItemType.event)
+            query
             .order_by(*public_content_ordering())
             .offset(skip)
             .limit(limit)
@@ -339,16 +373,19 @@ def get_events(
 def get_courses_events(
     skip: int = 0,
     limit: int = Query(default=50, le=200),
+    category_ids: Optional[List[int]] = Query(default=None),
+    specialization_ids: Optional[List[int]] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     try:
-        items = (
-            visible_content_card_query(db)
-            .filter(
-                models.ContentItem.content_type.in_(
-                    [models.ContentItemType.course, models.ContentItemType.event]
-                )
+        query = visible_content_card_query(db).filter(
+            models.ContentItem.content_type.in_(
+                [models.ContentItemType.course, models.ContentItemType.event]
             )
+        )
+        query = apply_content_filters(query, category_ids, specialization_ids)
+        items = (
+            query
             .order_by(*public_content_ordering())
             .offset(skip)
             .limit(limit)
@@ -363,12 +400,15 @@ def get_courses_events(
 def get_publications(
     skip: int = 0,
     limit: int = Query(default=50, le=200),
+    category_ids: Optional[List[int]] = Query(default=None),
+    specialization_ids: Optional[List[int]] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     try:
+        query = visible_content_card_query(db).filter(models.ContentItem.content_type == models.ContentItemType.publication)
+        query = apply_content_filters(query, category_ids, specialization_ids)
         items = (
-            visible_content_card_query(db)
-            .filter(models.ContentItem.content_type == models.ContentItemType.publication)
+            query
             .order_by(*public_content_ordering())
             .offset(skip)
             .limit(limit)

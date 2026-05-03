@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../theme/pulse_theme.dart';
 import '../models/ad_item.dart';
 import '../models/content_item.dart';
+import '../models/filter_option.dart';
 import '../services/api_service.dart';
 import '../widgets/home_header.dart';
 import '../widgets/featured_card.dart';
@@ -32,9 +33,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<ContentItem> _publications = [];
   List<ContentItem> _news = [];
   List<ContentItem> _featuredItems = [];
+  List<FilterOption> _categories = [];
+  List<FilterOption> _specializations = [];
   Map<String, List<AdItem>> _adsByPlacement = {};
+  final Set<int> _selectedCategoryIds = {};
+  final Set<int> _selectedSpecializationIds = {};
   bool _isLoading = true;
   bool _isFeaturedLoading = true;
+  int _contentRequestId = 0;
   String? _errorMessage;
 
   static const int _sectionCount = 10;
@@ -83,27 +89,55 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
 
     _loadData();
+    _loadFilterOptions();
   }
+
+  List<int> get _categoryFilterIds => _selectedCategoryIds.toList()..sort();
+
+  List<int> get _specializationFilterIds =>
+      _selectedSpecializationIds.toList()..sort();
+
+  bool get _hasActiveFilters =>
+      _selectedCategoryIds.isNotEmpty || _selectedSpecializationIds.isNotEmpty;
 
   Future<void> _loadData() async {
     if (!mounted) return;
+    final requestId = ++_contentRequestId;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    _loadFeaturedContent();
+    _loadFeaturedContent(requestId);
     _loadAds();
 
     try {
+      final categoryIds = _categoryFilterIds;
+      final specializationIds = _specializationFilterIds;
       final results = await Future.wait([
-        _apiService.getNews(limit: 10),
-        _apiService.getPublications(limit: 10),
-        _apiService.getEvents(limit: 10),
-        _apiService.getCourses(limit: 10),
+        _apiService.getNews(
+          limit: 10,
+          categoryIds: categoryIds,
+          specializationIds: specializationIds,
+        ),
+        _apiService.getPublications(
+          limit: 10,
+          categoryIds: categoryIds,
+          specializationIds: specializationIds,
+        ),
+        _apiService.getEvents(
+          limit: 10,
+          categoryIds: categoryIds,
+          specializationIds: specializationIds,
+        ),
+        _apiService.getCourses(
+          limit: 10,
+          categoryIds: categoryIds,
+          specializationIds: specializationIds,
+        ),
       ]);
 
-      if (mounted) {
+      if (mounted && requestId == _contentRequestId) {
         setState(() {
           _news = results[0];
           _publications = results[1];
@@ -113,13 +147,58 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && requestId == _contentRequestId) {
         setState(() {
           _isLoading = false;
           _errorMessage = "A apărut o eroare la încărcarea datelor";
         });
       }
     }
+  }
+
+  Future<void> _loadFilterOptions() async {
+    try {
+      final results = await Future.wait([
+        _apiService.getCategories(),
+        _apiService.getSpecializations(),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _categories = results[0];
+          _specializations = results[1];
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading content filters: $e');
+    }
+  }
+
+  void _toggleCategory(int id) {
+    setState(() {
+      if (!_selectedCategoryIds.add(id)) {
+        _selectedCategoryIds.remove(id);
+      }
+    });
+    _loadData();
+  }
+
+  void _toggleSpecialization(int id) {
+    setState(() {
+      if (!_selectedSpecializationIds.add(id)) {
+        _selectedSpecializationIds.remove(id);
+      }
+    });
+    _loadData();
+  }
+
+  void _resetFilters() {
+    if (!_hasActiveFilters) return;
+    setState(() {
+      _selectedCategoryIds.clear();
+      _selectedSpecializationIds.clear();
+    });
+    _loadData();
   }
 
   Future<void> _loadAds() async {
@@ -149,15 +228,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
 
-  Future<void> _loadFeaturedContent() async {
+  Future<void> _loadFeaturedContent(int requestId) async {
     if (!mounted) return;
     setState(() {
       _isFeaturedLoading = true;
     });
 
     try {
-      final items = await _apiService.getFeaturedContent(limit: 3);
-      if (mounted) {
+      final items = await _apiService.getFeaturedContent(
+        limit: 3,
+        categoryIds: _categoryFilterIds,
+        specializationIds: _specializationFilterIds,
+      );
+      if (mounted && requestId == _contentRequestId) {
         setState(() {
           _featuredItems = items.take(3).toList();
           _isFeaturedLoading = false;
@@ -165,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     } catch (e) {
       debugPrint('Error loading featured carousel: $e');
-      if (mounted) {
+      if (mounted && requestId == _contentRequestId) {
         setState(() {
           _featuredItems = [];
           _isFeaturedLoading = false;
@@ -184,6 +267,209 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return FadeTransition(
       opacity: _fadeAnimations[index],
       child: SlideTransition(position: _slideAnimations[index], child: child),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required FilterOption option,
+    required bool selected,
+    required ValueChanged<int> onSelected,
+  }) {
+    return AnimatedContainer(
+      duration: PulseTheme.animFast,
+      curve: PulseTheme.animCurve,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  color: PulseTheme.primary.withValues(alpha: 0.16),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                  spreadRadius: -6,
+                ),
+              ]
+            : const [],
+      ),
+      child: FilterChip(
+        label: Text(
+          option.name,
+          overflow: TextOverflow.ellipsis,
+        ),
+        selected: selected,
+        onSelected: (_) => onSelected(option.id),
+        showCheckmark: false,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: const VisualDensity(horizontal: 0, vertical: -1),
+        backgroundColor: const Color(0xFFF8FAFC),
+        selectedColor: PulseTheme.primary.withValues(alpha: 0.1),
+        side: BorderSide(
+          color: selected
+              ? PulseTheme.primary.withValues(alpha: 0.72)
+              : PulseTheme.border.withValues(alpha: 0.78),
+          width: selected ? 1.3 : 1,
+        ),
+        labelPadding: const EdgeInsets.symmetric(horizontal: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        labelStyle: TextStyle(
+          color: selected ? PulseTheme.primaryDark : PulseTheme.textSecondary,
+          fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+          fontSize: 13,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      ),
+    );
+  }
+
+  Widget _buildFilterRow({
+    required String label,
+    required List<FilterOption> options,
+    required Set<int> selectedIds,
+    required ValueChanged<int> onSelected,
+  }) {
+    if (options.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: PulseTheme.primary.withValues(alpha: 0.42),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: PulseTheme.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 48,
+          child: ListView.separated(
+            padding: EdgeInsets.zero,
+            scrollDirection: Axis.horizontal,
+            itemBuilder: (context, index) {
+              final option = options[index];
+              return ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 180),
+                child: _buildFilterChip(
+                  option: option,
+                  selected: selectedIds.contains(option.id),
+                  onSelected: onSelected,
+                ),
+              );
+            },
+            separatorBuilder: (context, index) => const SizedBox(width: 10),
+            itemCount: options.length,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContentFilters() {
+    if (_categories.isEmpty && _specializations.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 6, 20, 22),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+        decoration: BoxDecoration(
+          color: PulseTheme.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: PulseTheme.borderLight),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.035),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
+              spreadRadius: -8,
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Filtre',
+                    style: TextStyle(
+                      color: PulseTheme.textPrimary,
+                      fontSize: 19,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _hasActiveFilters ? _resetFilters : null,
+                  style: TextButton.styleFrom(
+                    foregroundColor: PulseTheme.primary,
+                    disabledForegroundColor: PulseTheme.textTertiary,
+                    minimumSize: const Size(0, 34),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  child: const Text('Sterge filtre'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Restrange continutul dupa interesul tau clinic.',
+              style: TextStyle(
+                color: PulseTheme.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1.3,
+              ),
+            ),
+            const SizedBox(height: 18),
+            _buildFilterRow(
+              label: 'Categorii',
+              options: _categories,
+              selectedIds: _selectedCategoryIds,
+              onSelected: _toggleCategory,
+            ),
+            if (_categories.isNotEmpty && _specializations.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Divider(
+                  height: 1,
+                  color: PulseTheme.borderLight.withValues(alpha: 0.92),
+                ),
+              ),
+            _buildFilterRow(
+              label: 'Specializari',
+              options: _specializations,
+              selectedIds: _selectedSpecializationIds,
+              onSelected: _toggleSpecialization,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -275,6 +561,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 8),
+        _buildContentFilters(),
 
         _animatedSection(
           1,
@@ -426,14 +713,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
         child: Padding(
           padding: const EdgeInsets.only(top: 8.0, bottom: 100.0),
-          child: ContentSection(
-            title: title,
-            actionText: '',
-            emptyMessage: emptyMessage,
-            emptyIconAsset: emptyIconAsset,
-            categoryColor: categoryColor,
-            onActionTap: () {},
-            children: items.map((item) => ContentCard.fromModel(item)).toList(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildContentFilters(),
+              ContentSection(
+                title: title,
+                actionText: '',
+                emptyMessage: emptyMessage,
+                emptyIconAsset: emptyIconAsset,
+                categoryColor: categoryColor,
+                onActionTap: () {},
+                children: items
+                    .map((item) => ContentCard.fromModel(item))
+                    .toList(),
+              ),
+            ],
           ),
         ),
       ),

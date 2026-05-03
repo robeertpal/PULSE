@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/ad_item.dart';
 import '../models/content_item.dart';
+import '../models/filter_option.dart';
 
 class ApiService {
   // Pentru local development:
@@ -16,11 +17,27 @@ class ApiService {
   Future<List<ContentItem>> _getContentList(
     String path, {
     int limit = 10,
+    List<int>? categoryIds,
+    List<int>? specializationIds,
   }) async {
     try {
+      final queryParams = <String, List<String>>{
+        'limit': [limit.toString()],
+      };
+      if (categoryIds != null && categoryIds.isNotEmpty) {
+        queryParams['category_ids'] = categoryIds
+            .map((id) => id.toString())
+            .toList();
+      }
+      if (specializationIds != null && specializationIds.isNotEmpty) {
+        queryParams['specialization_ids'] = specializationIds
+            .map((id) => id.toString())
+            .toList();
+      }
+
       final uri = Uri.parse(
         '$_baseUrl/$path',
-      ).replace(queryParameters: {'limit': limit.toString()});
+      ).replace(queryParameters: queryParams);
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
@@ -57,41 +74,112 @@ class ApiService {
     }
   }
 
-  Future<List<ContentItem>> getArticles({int limit = 10}) async {
+  Future<List<ContentItem>> getArticles({
+    int limit = 10,
+    List<int>? categoryIds,
+    List<int>? specializationIds,
+  }) async {
+    return _getContentList(
+      'articles',
+      limit: limit,
+      categoryIds: categoryIds,
+      specializationIds: specializationIds,
+    );
+  }
+
+  Future<List<ContentItem>> getCourses({
+    int limit = 10,
+    List<int>? categoryIds,
+    List<int>? specializationIds,
+  }) async {
+    return _getContentList(
+      'courses',
+      limit: limit,
+      categoryIds: categoryIds,
+      specializationIds: specializationIds,
+    );
+  }
+
+  Future<List<ContentItem>> getEvents({
+    int limit = 10,
+    List<int>? categoryIds,
+    List<int>? specializationIds,
+  }) async {
+    return _getContentList(
+      'events',
+      limit: limit,
+      categoryIds: categoryIds,
+      specializationIds: specializationIds,
+    );
+  }
+
+  Future<List<ContentItem>> getPublications({
+    int limit = 10,
+    List<int>? categoryIds,
+    List<int>? specializationIds,
+  }) async {
+    return _getContentList(
+      'publications',
+      limit: limit,
+      categoryIds: categoryIds,
+      specializationIds: specializationIds,
+    );
+  }
+
+  Future<List<ContentItem>> getNews({
+    int limit = 10,
+    List<int>? categoryIds,
+    List<int>? specializationIds,
+  }) async {
+    return _getContentList(
+      'news',
+      limit: limit,
+      categoryIds: categoryIds,
+      specializationIds: specializationIds,
+    );
+  }
+
+  Future<List<FilterOption>> getCategories() async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/articles?limit=$limit'),
-      );
+      final response = await http.get(Uri.parse('$_baseUrl/content-categories'));
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => ContentItem.fromJson(json)).toList();
+        return data.map((json) => FilterOption.fromJson(json)).toList();
       } else {
-        throw Exception('Failed to load articles: ${response.statusCode}');
+        throw Exception('Failed to load categories');
       }
     } catch (e) {
-      debugPrint('Error fetching articles: $e');
+      debugPrint('Error fetching categories: $e');
       rethrow;
     }
   }
 
-  Future<List<ContentItem>> getCourses({int limit = 10}) async {
-    return _getContentList('courses', limit: limit);
+  Future<List<FilterOption>> getSpecializations() async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/specializations'));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.map((json) => FilterOption.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to load specializations');
+      }
+    } catch (e) {
+      debugPrint('Error fetching specializations: $e');
+      rethrow;
+    }
   }
 
-  Future<List<ContentItem>> getEvents({int limit = 10}) async {
-    return _getContentList('events', limit: limit);
-  }
-
-  Future<List<ContentItem>> getPublications({int limit = 10}) async {
-    return _getContentList('publications', limit: limit);
-  }
-
-  Future<List<ContentItem>> getNews({int limit = 10}) async {
-    return _getContentList('news', limit: limit);
-  }
-
-  Future<List<ContentItem>> getFeaturedContent({int limit = 3}) async {
-    return _getContentList('featured-content', limit: limit);
+  Future<List<ContentItem>> getFeaturedContent({
+    int limit = 3,
+    List<int>? categoryIds,
+    List<int>? specializationIds,
+  }) async {
+    return _getContentList(
+      'featured-content',
+      limit: limit,
+      categoryIds: categoryIds,
+      specializationIds: specializationIds,
+    );
   }
 
   Future<List<AdItem>> fetchAds({String? placement, int limit = 3}) async {
