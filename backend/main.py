@@ -273,7 +273,7 @@ def get_cities(db: Session = Depends(get_db)):
 @app.get("/occupations")
 def get_occupations(db: Session = Depends(get_db)):
     try:
-        return [serialize_model(item) for item in db.query(models.Occupation).all()]
+        return [serialize_model(item) for item in db.query(models.Occupation).order_by(models.Occupation.id.asc()).all()]
     except Exception as e:
         return {"error": str(e)}
 
@@ -281,7 +281,7 @@ def get_occupations(db: Session = Depends(get_db)):
 @app.get("/specializations")
 def get_specializations(db: Session = Depends(get_db)):
     try:
-        return [serialize_model(item) for item in db.query(models.Specialization).all()]
+        return [serialize_model(item) for item in db.query(models.Specialization).order_by(models.Specialization.id.asc()).all()]
     except Exception as e:
         return {"error": str(e)}
 
@@ -362,6 +362,7 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
             city_id=payload.city_id,
             occupation_id=payload.occupation_id,
             specialization_id=payload.specialization_id,
+            sectia=payload.sectia,
             acord_email=payload.acord_email,
             acord_sms=payload.acord_sms,
         )

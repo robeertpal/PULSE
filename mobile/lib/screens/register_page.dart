@@ -5,6 +5,29 @@ import 'package:http/http.dart' as http;
 
 import '../theme/pulse_theme.dart';
 
+class _OccupationOption {
+  const _OccupationOption({required this.id, required this.name});
+
+  final int id;
+  final String name;
+}
+
+class _ProfessionalRule {
+  const _ProfessionalRule({
+    this.requiresCuim = false,
+    this.requiresCodParafa = false,
+    this.requiresSectie = false,
+    this.requiresRegistrationCode = false,
+    this.registrationCodeLabel = 'Cod înregistrare',
+  });
+
+  final bool requiresCuim;
+  final bool requiresCodParafa;
+  final bool requiresSectie;
+  final bool requiresRegistrationCode;
+  final String registrationCodeLabel;
+}
+
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
 
@@ -26,9 +49,15 @@ class _RegisterPageState extends State<RegisterPage> {
 
   final _cuimController = TextEditingController();
   final _codParafaController = TextEditingController();
+  final _registrationCodeController = TextEditingController();
+  final _sectiaController = TextEditingController();
   final _titluUniversitarController = TextEditingController();
   final _specializationIdController = TextEditingController();
-  final _occupationIdController = TextEditingController(text: '1');
+
+  List<_OccupationOption> _occupations = const [];
+  int? _selectedOccupationId;
+  bool _isLoadingOccupations = false;
+  String? _occupationSelectionError;
 
   bool _acordEmail = false;
   bool _acordSms = false;
@@ -36,6 +65,72 @@ class _RegisterPageState extends State<RegisterPage> {
   int _currentStep = 0;
 
   static const String _registerUrl = 'http://127.0.0.1:8000/api/register';
+  static const String _occupationsUrl = 'http://127.0.0.1:8000/occupations';
+
+  _OccupationOption? get _selectedOccupation {
+    if (_selectedOccupationId == null) return null;
+    for (final occupation in _occupations) {
+      if (occupation.id == _selectedOccupationId) return occupation;
+    }
+    return null;
+  }
+
+  _ProfessionalRule get _professionalRule {
+    final occupationName = (_selectedOccupation?.name ?? '').toLowerCase();
+
+    if (occupationName.contains('medic veterinar')) {
+      return const _ProfessionalRule(
+        requiresRegistrationCode: true,
+        registrationCodeLabel: 'Cod înregistrare CMV',
+        requiresCodParafa: true,
+      );
+    }
+    if (occupationName.contains('stomatolog')) {
+      return const _ProfessionalRule(
+        requiresCuim: true,
+        requiresCodParafa: true,
+      );
+    }
+    if (occupationName.contains('medic')) {
+      return const _ProfessionalRule(
+        requiresCuim: true,
+        requiresCodParafa: true,
+      );
+    }
+    if (occupationName.contains('asistent')) {
+      return const _ProfessionalRule(
+        requiresRegistrationCode: true,
+        registrationCodeLabel: 'Cod înregistrare asistent',
+        requiresSectie: true,
+      );
+    }
+    if (occupationName.contains('farmacist')) {
+      return const _ProfessionalRule(
+        requiresRegistrationCode: true,
+        registrationCodeLabel: 'Cod Colegiul Farmaciștilor',
+      );
+    }
+    if (occupationName.contains('psiholog')) {
+      return const _ProfessionalRule(
+        requiresRegistrationCode: true,
+        registrationCodeLabel: 'Cod Colegiul Psihologilor',
+      );
+    }
+    if (occupationName.contains('nutritionist')) {
+      return const _ProfessionalRule(
+        requiresRegistrationCode: true,
+        registrationCodeLabel: 'Cod înregistrare nutriționist',
+      );
+    }
+
+    return const _ProfessionalRule();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOccupations();
+  }
 
   @override
   void dispose() {
@@ -48,10 +143,65 @@ class _RegisterPageState extends State<RegisterPage> {
     _cityIdController.dispose();
     _cuimController.dispose();
     _codParafaController.dispose();
+    _registrationCodeController.dispose();
+    _sectiaController.dispose();
     _titluUniversitarController.dispose();
     _specializationIdController.dispose();
-    _occupationIdController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadOccupations() async {
+    setState(() {
+      _isLoadingOccupations = true;
+      _occupationSelectionError = null;
+    });
+
+    try {
+      final response = await http.get(Uri.parse(_occupationsUrl));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Nu am putut încărca ocupațiile: ${response.statusCode}');
+      }
+
+      final payload = jsonDecode(response.body);
+      if (payload is! List) {
+        throw Exception('Răspuns invalid pentru ocupații');
+      }
+
+      final parsed = <_OccupationOption>[];
+      for (final item in payload) {
+        if (item is! Map<String, dynamic>) continue;
+        final id = item['id'];
+        final name = item['name'];
+        if (id is int && name is String && name.trim().isNotEmpty) {
+          parsed.add(_OccupationOption(id: id, name: name.trim()));
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _occupations = parsed;
+        if (parsed.isNotEmpty) {
+          _selectedOccupationId ??= parsed.first.id;
+        } else {
+          _selectedOccupationId = null;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _occupations = const [];
+        _selectedOccupationId = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Eroare la încărcarea ocupațiilor: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingOccupations = false;
+        });
+      }
+    }
   }
 
   String? _requiredValidator(String? value, {String label = 'Câmp'}) {
@@ -103,11 +253,34 @@ class _RegisterPageState extends State<RegisterPage> {
             _requiredValidator(_phoneController.text, label: 'Telefon') == null &&
             _requiredValidator(_cityIdController.text, label: 'Oraș') == null;
       case 2:
-        return _requiredValidator(_cuimController.text, label: 'CUIM') == null &&
-            _requiredValidator(_codParafaController.text, label: 'Cod Parafă') == null &&
-            _requiredValidator(_titluUniversitarController.text, label: 'Titlu universitar') == null &&
-            _requiredValidator(_specializationIdController.text, label: 'Specializare') == null &&
-            _requiredValidator(_occupationIdController.text, label: 'Ocupație') == null;
+        final rule = _professionalRule;
+        final hasOccupation = _selectedOccupationId != null;
+        _occupationSelectionError = hasOccupation ? null : 'Ocupația este obligatorie';
+        final hasTitle =
+            _requiredValidator(_titluUniversitarController.text, label: 'Titlu universitar') == null;
+        final hasSpecialization =
+          _requiredValidator(_specializationIdController.text, label: 'Specializare') == null;
+
+        final hasCuim = !rule.requiresCuim ||
+          _requiredValidator(_cuimController.text, label: 'CUIM') == null;
+        final hasCodParafa = !rule.requiresCodParafa ||
+          _requiredValidator(_codParafaController.text, label: 'Cod Parafă') == null;
+        final hasRegistrationCode = !rule.requiresRegistrationCode ||
+          _requiredValidator(
+              _registrationCodeController.text,
+              label: rule.registrationCodeLabel,
+            ) ==
+            null;
+        final hasSectie =
+          !rule.requiresSectie || _requiredValidator(_sectiaController.text, label: 'Secție') == null;
+
+        return hasOccupation &&
+          hasTitle &&
+          hasSpecialization &&
+          hasCuim &&
+          hasCodParafa &&
+          hasRegistrationCode &&
+          hasSectie;
       default:
         return false;
     }
@@ -123,7 +296,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
     final cityId = int.tryParse(_cityIdController.text.trim());
     final specializationId = int.tryParse(_specializationIdController.text.trim());
-    final occupationId = int.tryParse(_occupationIdController.text.trim());
+    final occupationId = _selectedOccupationId;
 
     if (cityId == null || specializationId == null || occupationId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -137,6 +310,8 @@ class _RegisterPageState extends State<RegisterPage> {
     });
 
     final email = _emailController.text.trim();
+    final rule = _professionalRule;
+    final isMedicStyle = rule.requiresCuim;
 
     final payload = {
       'email': email,
@@ -145,9 +320,11 @@ class _RegisterPageState extends State<RegisterPage> {
       'last_name': _lastNameController.text.trim(),
       'cnp': _cnpController.text.trim(),
       'phone': _phoneController.text.trim(),
-      'cuim': _cuimController.text.trim(),
-      'cod_parafa': _codParafaController.text.trim(),
+      'cuim': isMedicStyle ? _cuimController.text.trim() : _registrationCodeController.text.trim(),
+      'cod_parafa': rule.requiresCodParafa ? _codParafaController.text.trim() : '',
       'titlu_universitar': _titluUniversitarController.text.trim(),
+      'sectia': rule.requiresSectie ? _sectiaController.text.trim() : '',
+      'occupation_name': _selectedOccupation?.name ?? '',
       'city_id': cityId,
       'occupation_id': occupationId,
       'specialization_id': specializationId,
@@ -231,6 +408,78 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
+  Widget _occupationDropdown() {
+    if (_isLoadingOccupations) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 12),
+        child: LinearProgressIndicator(minHeight: 2),
+      );
+    }
+
+    if (_occupations.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Nu există ocupații încărcate din backend.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red.shade700),
+            ),
+            TextButton(
+              onPressed: _loadOccupations,
+              child: const Text('Reîncarcă ocupațiile'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<String>(
+        value: _selectedOccupationId?.toString(),
+        decoration: _fieldDecoration('Ocupație'),
+        items: _occupations
+            .map((occupation) => DropdownMenuItem<String>(
+                  value: occupation.id.toString(),
+                  child: Text(occupation.name),
+                ))
+            .toList(),
+        onChanged: (value) {
+          final parsedId = int.tryParse(value ?? '');
+          if (parsedId == null) {
+            return;
+          }
+
+          final previousRule = _professionalRule;
+          setState(() {
+            _selectedOccupationId = parsedId;
+            _occupationSelectionError = null;
+            final nextRule = _professionalRule;
+
+            if (!nextRule.requiresCuim) {
+              _cuimController.clear();
+            }
+            if (!nextRule.requiresCodParafa) {
+              _codParafaController.clear();
+            }
+            if (!nextRule.requiresRegistrationCode) {
+              _registrationCodeController.clear();
+            }
+            if (!nextRule.requiresSectie) {
+              _sectiaController.clear();
+            }
+
+            if (previousRule.registrationCodeLabel != nextRule.registrationCodeLabel) {
+              _registrationCodeController.clear();
+            }
+          });
+        },
+      ),
+    );
+  }
+
   List<Step> _buildSteps() {
     return [
       Step(
@@ -296,16 +545,43 @@ class _RegisterPageState extends State<RegisterPage> {
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _textField(
-              controller: _cuimController,
-              label: 'CUIM',
-              validator: (value) => _requiredValidator(value, label: 'CUIM'),
-            ),
-            _textField(
-              controller: _codParafaController,
-              label: 'Cod Parafă',
-              validator: (value) => _requiredValidator(value, label: 'Cod Parafă'),
-            ),
+            _occupationDropdown(),
+            if (_occupationSelectionError != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  _occupationSelectionError!,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.red.shade700),
+                ),
+              ),
+            if (_professionalRule.requiresCuim)
+              _textField(
+                controller: _cuimController,
+                label: 'CUIM',
+                validator: (value) => _requiredValidator(value, label: 'CUIM'),
+              ),
+            if (_professionalRule.requiresRegistrationCode)
+              _textField(
+                controller: _registrationCodeController,
+                label: _professionalRule.registrationCodeLabel,
+                validator: (value) =>
+                    _requiredValidator(value, label: _professionalRule.registrationCodeLabel),
+              ),
+            if (_professionalRule.requiresCodParafa)
+              _textField(
+                controller: _codParafaController,
+                label: 'Cod Parafă',
+                validator: (value) => _requiredValidator(value, label: 'Cod Parafă'),
+              ),
+            if (_professionalRule.requiresSectie)
+              _textField(
+                controller: _sectiaController,
+                label: 'Secție',
+                validator: (value) => _requiredValidator(value, label: 'Secție'),
+              ),
             _textField(
               controller: _titluUniversitarController,
               label: 'Titlu universitar',
@@ -316,13 +592,6 @@ class _RegisterPageState extends State<RegisterPage> {
               label: 'Specializare',
               hintText: 'ID specializare (ex: 2)',
               validator: (value) => _requiredValidator(value, label: 'Specializare'),
-              keyboardType: TextInputType.number,
-            ),
-            _textField(
-              controller: _occupationIdController,
-              label: 'Ocupație',
-              hintText: 'ID ocupație (ex: 1)',
-              validator: (value) => _requiredValidator(value, label: 'Ocupație'),
               keyboardType: TextInputType.number,
             ),
             CheckboxListTile(

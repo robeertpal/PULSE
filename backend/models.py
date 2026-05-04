@@ -71,6 +71,13 @@ class Specialization(Base):
     name = Column(String(255), nullable=False, unique=True)
 
 
+class Occupation(Base):
+    __tablename__ = "occupations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False, unique=True)
+
+
 class User(Base):
     __tablename__ = "users"
 

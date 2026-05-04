@@ -16,6 +16,8 @@ class UserCreate(BaseModel):
     city_id: int
     occupation_id: int
     specialization_id: int
+    sectia: str = ""
+    occupation_name: str = ""
 
     acord_email: bool = False
     acord_sms: bool = False
