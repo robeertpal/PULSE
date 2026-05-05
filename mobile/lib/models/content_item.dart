@@ -20,6 +20,7 @@ class ContentItem {
   final String? venueName;
   final String? provider;
   final DateTime? validUntil;
+  final int? publicationId;
   final String? publicationName;
   final String? publicationLogoUrl;
   final String? publicationDescription;
@@ -46,6 +47,7 @@ class ContentItem {
     this.venueName,
     this.provider,
     this.validUntil,
+    this.publicationId,
     this.publicationName,
     this.publicationLogoUrl,
     this.publicationDescription,
@@ -104,6 +106,7 @@ class ContentItem {
       venueName: json['venue_name'] ?? json['event']?['venue_name'],
       provider: json['provider'] ?? json['course']?['provider'],
       validUntil: parseDate(json['valid_until'] ?? json['course']?['valid_until']),
+      publicationId: json['publication_id'] ?? json['publication']?['id'],
       publicationName: json['name'] ?? json['publication']?['name'],
       publicationLogoUrl: json['logo_url'] ?? json['publication']?['logo_url'],
       publicationDescription:

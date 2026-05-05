@@ -359,6 +359,8 @@ def serialize_content_card(item):
 
     if item.publication:
         data["publication"] = {
+            "id": item.publication.id,
+            "publication_id": item.publication.id,
             "name": item.publication.name,
             "logo_url": item.publication.logo_url,
             "description": item.publication.description,
@@ -366,6 +368,8 @@ def serialize_content_card(item):
         }
         data.update(
             {
+                "publication_id": item.publication.id,
+                "publication_name": item.publication.name,
                 "name": item.publication.name,
                 "logo_url": item.publication.logo_url,
                 "description": item.publication.description,
@@ -373,6 +377,70 @@ def serialize_content_card(item):
         )
 
     return data
+
+
+def serialize_publication_issue(issue: models.PublicationIssue, include_publication: bool = True):
+    publication = issue.publication if include_publication else None
+    return {
+        "id": issue.id,
+        "publication_id": issue.publication_id,
+        "publication_name": publication.name if publication else None,
+        "publication_logo_url": publication.logo_url if publication else None,
+        "publication_description": publication.description if publication else None,
+        "year": issue.year,
+        "issue_number": issue.issue_number,
+        "issue_label": issue.issue_label,
+        "cover_image_url": issue.cover_image_url,
+        "description": issue.description,
+        "published_at": serialize_value(issue.published_at),
+    }
+
+
+def public_publication_query(db: Session):
+    return (
+        db.query(models.Publication)
+        .join(models.ContentItem, models.ContentItem.id == models.Publication.content_item_id)
+        .options(joinedload(models.Publication.content_item))
+        .filter(models.ContentItem.is_active == True)
+        .filter(models.ContentItem.deleted_at.is_(None))
+        .filter(models.ContentItem.status == models.ContentStatus.published)
+        .filter(models.ContentItem.content_type == models.ContentItemType.publication)
+    )
+
+
+def get_public_publication_or_404(db: Session, publication_id: int):
+    publication = (
+        public_publication_query(db)
+        .filter(models.Publication.id == publication_id)
+        .first()
+    )
+    if publication is None:
+        raise HTTPException(status_code=404, detail="Publication not found")
+    return publication
+
+
+def public_publication_issue_query(db: Session):
+    return (
+        db.query(models.PublicationIssue)
+        .join(models.Publication, models.Publication.id == models.PublicationIssue.publication_id)
+        .join(models.ContentItem, models.ContentItem.id == models.Publication.content_item_id)
+        .options(joinedload(models.PublicationIssue.publication))
+        .filter(models.ContentItem.is_active == True)
+        .filter(models.ContentItem.deleted_at.is_(None))
+        .filter(models.ContentItem.status == models.ContentStatus.published)
+        .filter(models.ContentItem.content_type == models.ContentItemType.publication)
+    )
+
+
+def get_public_publication_issue_or_404(db: Session, issue_id: int):
+    issue = (
+        public_publication_issue_query(db)
+        .filter(models.PublicationIssue.id == issue_id)
+        .first()
+    )
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Publication issue not found")
+    return issue
 
 
 def serialize_mapping(row):
@@ -664,6 +732,34 @@ def get_publications(
         return [serialize_content_card(item) for item in items]
     except Exception as e:
         return {"error": str(e)}
+
+
+@app.get("/publications/{publication_id}/issues")
+def get_publication_issues_for_publication(
+    publication_id: int,
+    db: Session = Depends(get_db),
+):
+    get_public_publication_or_404(db, publication_id)
+    issues = (
+        db.query(models.PublicationIssue)
+        .options(joinedload(models.PublicationIssue.publication))
+        .filter(models.PublicationIssue.publication_id == publication_id)
+        .order_by(
+            models.PublicationIssue.year.desc(),
+            models.PublicationIssue.issue_number.desc(),
+        )
+        .all()
+    )
+    return [serialize_publication_issue(issue) for issue in issues]
+
+
+@app.get("/publication-issues/{issue_id}")
+def get_publication_issue_detail(
+    issue_id: int,
+    db: Session = Depends(get_db),
+):
+    issue = get_public_publication_issue_or_404(db, issue_id)
+    return serialize_publication_issue(issue)
 
 
 @app.get("/saved-content/ids")
@@ -1082,7 +1178,15 @@ def get_publication_details(db: Session = Depends(get_db)):
 @app.get("/publication-issues")
 def get_publication_issues(db: Session = Depends(get_db)):
     try:
-        return [serialize_model(item) for item in db.query(models.PublicationIssue).all()]
+        issues = (
+            public_publication_issue_query(db)
+            .order_by(
+                models.PublicationIssue.year.desc(),
+                models.PublicationIssue.issue_number.desc(),
+            )
+            .all()
+        )
+        return [serialize_publication_issue(issue) for issue in issues]
     except Exception as e:
         return {"error": str(e)}
 
@@ -1379,6 +1483,24 @@ class PublicationDetailsPayload(BaseModel):
     creditation_text: Optional[str] = None
     indexing_text: Optional[str] = None
     subscription_url: Optional[str] = None
+
+
+class PublicationIssueCreatePayload(BaseModel):
+    year: int
+    issue_number: int
+    issue_label: Optional[str] = None
+    cover_image_url: Optional[str] = None
+    description: Optional[str] = None
+    published_at: Optional[datetime] = None
+
+
+class PublicationIssueUpdatePayload(BaseModel):
+    year: Optional[int] = None
+    issue_number: Optional[int] = None
+    issue_label: Optional[str] = None
+    cover_image_url: Optional[str] = None
+    description: Optional[str] = None
+    published_at: Optional[datetime] = None
 
 
 class CourseAdminPayload(ContentItemBase):
@@ -2234,6 +2356,74 @@ def update_publication_details(db_publication: models.Publication, details: Publ
         setattr(db_publication, key, value)
 
 
+def get_admin_publication_or_404(db: Session, publication_id: int):
+    publication = (
+        db.query(models.Publication)
+        .options(joinedload(models.Publication.content_item))
+        .filter(models.Publication.id == publication_id)
+        .first()
+    )
+    if publication is None:
+        raise HTTPException(status_code=404, detail="Publicația nu a fost găsită")
+    return publication
+
+
+def get_admin_publication_issue_or_404(db: Session, issue_id: int):
+    issue = (
+        db.query(models.PublicationIssue)
+        .options(joinedload(models.PublicationIssue.publication))
+        .filter(models.PublicationIssue.id == issue_id)
+        .first()
+    )
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Ediția nu a fost găsită")
+    return issue
+
+
+def validate_publication_issue_values(year: Optional[int], issue_number: Optional[int]):
+    if year is None or issue_number is None:
+        raise HTTPException(status_code=400, detail="Anul și numărul ediției sunt obligatorii")
+    if year < 1900 or year > 2100:
+        raise HTTPException(status_code=400, detail="Anul ediției este invalid")
+    if issue_number < 1:
+        raise HTTPException(status_code=400, detail="Numărul ediției trebuie să fie pozitiv")
+
+
+def ensure_publication_issue_unique(
+    db: Session,
+    publication_id: int,
+    year: int,
+    issue_number: int,
+    exclude_issue_id: Optional[int] = None,
+):
+    query = (
+        db.query(models.PublicationIssue)
+        .filter(models.PublicationIssue.publication_id == publication_id)
+        .filter(models.PublicationIssue.year == year)
+        .filter(models.PublicationIssue.issue_number == issue_number)
+    )
+    if exclude_issue_id is not None:
+        query = query.filter(models.PublicationIssue.id != exclude_issue_id)
+    if query.first() is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Există deja o ediție pentru această publicație, an și număr",
+        )
+
+
+def publication_issue_data(payload: BaseModel, exclude_unset: bool = False):
+    data = pydantic_dump(payload, exclude_unset=exclude_unset)
+    allowed = {
+        "year",
+        "issue_number",
+        "issue_label",
+        "cover_image_url",
+        "description",
+        "published_at",
+    }
+    return {key: value for key, value in data.items() if key in allowed}
+
+
 @app.get("/admin/events")
 def admin_get_events(db: Session = Depends(get_db)):
     try:
@@ -2398,6 +2588,52 @@ def admin_get_publications(db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@app.get("/admin/publications/{publication_id}/issues")
+def admin_get_publication_issues(publication_id: int, db: Session = Depends(get_db)):
+    try:
+        get_admin_publication_or_404(db, publication_id)
+        issues = (
+            db.query(models.PublicationIssue)
+            .options(joinedload(models.PublicationIssue.publication))
+            .filter(models.PublicationIssue.publication_id == publication_id)
+            .order_by(
+                models.PublicationIssue.year.desc(),
+                models.PublicationIssue.issue_number.desc(),
+            )
+            .all()
+        )
+        return [serialize_publication_issue(issue) for issue in issues]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/admin/publications/{publication_id}/issues")
+def admin_create_publication_issue(
+    publication_id: int,
+    item: PublicationIssueCreatePayload,
+    db: Session = Depends(get_db),
+):
+    try:
+        get_admin_publication_or_404(db, publication_id)
+        validate_publication_issue_values(item.year, item.issue_number)
+        ensure_publication_issue_unique(db, publication_id, item.year, item.issue_number)
+        db_issue = models.PublicationIssue(
+            publication_id=publication_id,
+            **publication_issue_data(item),
+        )
+        db.add(db_issue)
+        db.commit()
+        db.refresh(db_issue)
+        return serialize_publication_issue(db_issue)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.post("/admin/publications")
 def admin_create_publication(item: PublicationAdminPayload, db: Session = Depends(get_db)):
     try:
@@ -2408,6 +2644,51 @@ def admin_create_publication(item: PublicationAdminPayload, db: Session = Depend
         db.commit()
         db.refresh(db_item)
         return serialize_content_item(db_item)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/admin/publication-issues/{issue_id}")
+def admin_update_publication_issue(
+    issue_id: int,
+    item: PublicationIssueUpdatePayload,
+    db: Session = Depends(get_db),
+):
+    try:
+        db_issue = get_admin_publication_issue_or_404(db, issue_id)
+        data = publication_issue_data(item, exclude_unset=True)
+        candidate_year = data.get("year", db_issue.year)
+        candidate_issue_number = data.get("issue_number", db_issue.issue_number)
+        validate_publication_issue_values(candidate_year, candidate_issue_number)
+        ensure_publication_issue_unique(
+            db,
+            db_issue.publication_id,
+            candidate_year,
+            candidate_issue_number,
+            exclude_issue_id=issue_id,
+        )
+        for key, value in data.items():
+            setattr(db_issue, key, value)
+        db.commit()
+        db.refresh(db_issue)
+        return serialize_publication_issue(db_issue)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.delete("/admin/publication-issues/{issue_id}")
+def admin_delete_publication_issue(issue_id: int, db: Session = Depends(get_db)):
+    try:
+        db_issue = get_admin_publication_issue_or_404(db, issue_id)
+        db.delete(db_issue)
+        db.commit()
+        return {"success": True, "message": "Ediția a fost ștearsă"}
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):

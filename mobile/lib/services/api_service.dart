@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../models/ad_item.dart';
 import '../models/content_item.dart';
 import '../models/filter_option.dart';
+import '../models/publication_issue.dart';
 
 class ApiService {
   // Pentru local development:
@@ -155,6 +156,62 @@ class ApiService {
       categoryIds: categoryIds,
       specializationIds: specializationIds,
     );
+  }
+
+  Future<List<PublicationIssue>> getPublicationIssues(
+    int publicationId,
+  ) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/publications/$publicationId/issues'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Failed to load publication issues: ${response.statusCode}',
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Unexpected publication issues response format');
+      }
+
+      return decoded
+          .whereType<Map<String, dynamic>>()
+          .map((json) => PublicationIssue.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching publication issues: $e');
+      rethrow;
+    }
+  }
+
+  Future<PublicationIssue> getPublicationIssueDetail(int issueId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/publication-issues/$issueId'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 404) {
+        throw Exception('Publication issue not found');
+      }
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Failed to load publication issue: ${response.statusCode}',
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Unexpected publication issue response format');
+      }
+
+      return PublicationIssue.fromJson(decoded);
+    } catch (e) {
+      debugPrint('Error fetching publication issue detail: $e');
+      rethrow;
+    }
   }
 
   Future<List<ContentItem>> getNews({
