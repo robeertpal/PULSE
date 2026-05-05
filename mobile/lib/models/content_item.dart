@@ -24,6 +24,10 @@ class ContentItem {
   final String? publicationName;
   final String? publicationLogoUrl;
   final String? publicationDescription;
+  final String? publicationEmcCreditsText;
+  final String? publicationCreditationText;
+  final String? publicationIndexingText;
+  final String? publicationSubscriptionUrl;
 
   ContentItem({
     required this.id,
@@ -51,6 +55,10 @@ class ContentItem {
     this.publicationName,
     this.publicationLogoUrl,
     this.publicationDescription,
+    this.publicationEmcCreditsText,
+    this.publicationCreditationText,
+    this.publicationIndexingText,
+    this.publicationSubscriptionUrl,
   });
 
   factory ContentItem.fromJson(Map<String, dynamic> json) {
@@ -64,13 +72,20 @@ class ContentItem {
 
     // Extract EMC credits if available (from nested event or course)
     int? credits = json['emc_credits'];
-    if (json['event'] != null) credits = json['event']['emc_credits'] ?? credits;
-    if (json['course'] != null) credits = json['course']['emc_credits'] ?? credits;
+    if (json['event'] != null) {
+      credits = json['event']['emc_credits'] ?? credits;
+    }
+    if (json['course'] != null) {
+      credits = json['course']['emc_credits'] ?? credits;
+    }
 
     // Extract preferred content URL
     String? url = json['source_url'];
     if (json['event'] != null) {
-      url = json['event']['registration_url'] ?? json['event']['event_page_url'] ?? url;
+      url =
+          json['event']['registration_url'] ??
+          json['event']['event_page_url'] ??
+          url;
     }
     if (json['course'] != null) {
       url = json['course']['enrollment_url'] ?? url;
@@ -105,12 +120,22 @@ class ContentItem {
       cityName: json['city_name'] ?? json['event']?['city_name'],
       venueName: json['venue_name'] ?? json['event']?['venue_name'],
       provider: json['provider'] ?? json['course']?['provider'],
-      validUntil: parseDate(json['valid_until'] ?? json['course']?['valid_until']),
+      validUntil: parseDate(
+        json['valid_until'] ?? json['course']?['valid_until'],
+      ),
       publicationId: json['publication_id'] ?? json['publication']?['id'],
       publicationName: json['name'] ?? json['publication']?['name'],
       publicationLogoUrl: json['logo_url'] ?? json['publication']?['logo_url'],
       publicationDescription:
           json['description'] ?? json['publication']?['description'],
+      publicationEmcCreditsText:
+          json['emc_credits_text'] ?? json['publication']?['emc_credits_text'],
+      publicationCreditationText:
+          json['creditation_text'] ?? json['publication']?['creditation_text'],
+      publicationIndexingText:
+          json['indexing_text'] ?? json['publication']?['indexing_text'],
+      publicationSubscriptionUrl:
+          json['subscription_url'] ?? json['publication']?['subscription_url'],
     );
   }
 }

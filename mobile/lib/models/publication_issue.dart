@@ -4,6 +4,10 @@ class PublicationIssue {
   final String? publicationName;
   final String? publicationLogoUrl;
   final String? publicationDescription;
+  final String? publicationEmcCreditsText;
+  final String? publicationCreditationText;
+  final String? publicationIndexingText;
+  final String? publicationSubscriptionUrl;
   final int year;
   final int issueNumber;
   final String? issueLabel;
@@ -18,6 +22,10 @@ class PublicationIssue {
     this.publicationName,
     this.publicationLogoUrl,
     this.publicationDescription,
+    this.publicationEmcCreditsText,
+    this.publicationCreditationText,
+    this.publicationIndexingText,
+    this.publicationSubscriptionUrl,
     required this.year,
     required this.issueNumber,
     this.issueLabel,
@@ -39,15 +47,21 @@ class PublicationIssue {
       publicationName: json['publication_name'],
       publicationLogoUrl: json['publication_logo_url'],
       publicationDescription: json['publication_description'],
+      publicationEmcCreditsText: json['publication_emc_credits_text'],
+      publicationCreditationText: json['publication_creditation_text'],
+      publicationIndexingText: json['publication_indexing_text'],
+      publicationSubscriptionUrl: json['publication_subscription_url'],
       year: json['year'],
       issueNumber: json['issue_number'],
       issueLabel: json['issue_label'],
       coverImageUrl: json['cover_image_url'],
       description: json['description'],
       publishedAt: parseDate(json['published_at']),
-      issueUrl: json['issue_url'],
+      issueUrl: json['pdf_url'] ?? json['document_url'] ?? json['issue_url'],
     );
   }
+
+  String? get pdfUrl => issueUrl;
 
   String get displayLabel => issueLabel?.trim().isNotEmpty == true
       ? issueLabel!
