@@ -117,7 +117,17 @@ def visible_content_card_query(db: Session):
     )
 
 
+def normalize_id_filter_values(values):
+    if values is None:
+        return []
+    if not isinstance(values, (list, tuple, set)):
+        return []
+    return [value for value in values if value is not None]
+
+
 def apply_content_filters(query, category_ids: Optional[List[int]] = None, specialization_ids: Optional[List[int]] = None):
+    category_ids = normalize_id_filter_values(category_ids)
+    specialization_ids = normalize_id_filter_values(specialization_ids)
     if category_ids:
         query = query.filter(models.ContentItem.category_id.in_(category_ids))
     if specialization_ids:
@@ -1516,6 +1526,23 @@ def serialize_content_item(item: models.ContentItem):
     return serialize_model(item, include_relationships=True)
 
 
+def serialize_admin_specialized_content_item(item: models.ContentItem, child_attr: Optional[str] = None):
+    data = serialize_model(item)
+    if item.category:
+        category_data = serialize_model(item.category)
+        data["category"] = category_data
+        data["category_name"] = category_data.get("name")
+    if item.specialization:
+        specialization_data = serialize_model(item.specialization)
+        data["specialization"] = specialization_data
+        data["specialization_name"] = specialization_data.get("name")
+
+    if child_attr:
+        child = getattr(item, child_attr, None)
+        data[child_attr] = serialize_model(child, include_relationships=True) if child else None
+    return data
+
+
 def create_content_item(db: Session, item: BaseModel, expected_type: str):
     data = content_item_data(item)
     data["content_type"] = expected_type
@@ -1974,6 +2001,57 @@ def admin_get_content_items(db: Session = Depends(get_db)):
     except Exception as e:
         return {"error": str(e)}
 
+
+@app.get("/admin/articles")
+def admin_get_articles(db: Session = Depends(get_db)):
+    try:
+        items = (
+            db.query(models.ContentItem)
+            .options(
+                joinedload(models.ContentItem.category),
+                joinedload(models.ContentItem.specialization),
+            )
+            .filter(models.ContentItem.content_type == models.ContentItemType.article)
+            .filter(models.ContentItem.deleted_at.is_(None))
+            .order_by(
+                models.ContentItem.published_at.desc().nullslast(),
+                models.ContentItem.created_at.desc().nullslast(),
+                models.ContentItem.title.asc(),
+            )
+            .all()
+        )
+        return [serialize_admin_specialized_content_item(item) for item in items]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/admin/news")
+def admin_get_news(db: Session = Depends(get_db)):
+    try:
+        items = (
+            db.query(models.ContentItem)
+            .options(
+                joinedload(models.ContentItem.category),
+                joinedload(models.ContentItem.specialization),
+            )
+            .filter(models.ContentItem.content_type == models.ContentItemType.news)
+            .filter(models.ContentItem.deleted_at.is_(None))
+            .order_by(
+                models.ContentItem.published_at.desc().nullslast(),
+                models.ContentItem.created_at.desc().nullslast(),
+                models.ContentItem.title.asc(),
+            )
+            .all()
+        )
+        return [serialize_admin_specialized_content_item(item) for item in items]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.post("/admin/content-items")
 def admin_create_content_item(item: ContentItemCreate, db: Session = Depends(get_db)):
     try:
@@ -2158,7 +2236,28 @@ def update_publication_details(db_publication: models.Publication, details: Publ
 
 @app.get("/admin/events")
 def admin_get_events(db: Session = Depends(get_db)):
-    return get_events(db=db, skip=0, limit=1000)
+    try:
+        items = (
+            db.query(models.ContentItem)
+            .options(
+                joinedload(models.ContentItem.category),
+                joinedload(models.ContentItem.specialization),
+                joinedload(models.ContentItem.event).joinedload(models.Event.city),
+            )
+            .filter(models.ContentItem.content_type == models.ContentItemType.event)
+            .filter(models.ContentItem.deleted_at.is_(None))
+            .order_by(
+                models.ContentItem.published_at.desc().nullslast(),
+                models.ContentItem.created_at.desc().nullslast(),
+                models.ContentItem.title.asc(),
+            )
+            .all()
+        )
+        return [serialize_admin_specialized_content_item(item, "event") for item in items]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.post("/admin/events")
@@ -2206,7 +2305,28 @@ def admin_update_event(content_item_id: int, item: EventAdminPayload, db: Sessio
 
 @app.get("/admin/courses")
 def admin_get_courses(db: Session = Depends(get_db)):
-    return get_courses(db=db, skip=0, limit=1000)
+    try:
+        items = (
+            db.query(models.ContentItem)
+            .options(
+                joinedload(models.ContentItem.category),
+                joinedload(models.ContentItem.specialization),
+                joinedload(models.ContentItem.course),
+            )
+            .filter(models.ContentItem.content_type == models.ContentItemType.course)
+            .filter(models.ContentItem.deleted_at.is_(None))
+            .order_by(
+                models.ContentItem.published_at.desc().nullslast(),
+                models.ContentItem.created_at.desc().nullslast(),
+                models.ContentItem.title.asc(),
+            )
+            .all()
+        )
+        return [serialize_admin_specialized_content_item(item, "course") for item in items]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.post("/admin/courses")
@@ -2254,7 +2374,28 @@ def admin_update_course(content_item_id: int, item: CourseAdminPayload, db: Sess
 
 @app.get("/admin/publications")
 def admin_get_publications(db: Session = Depends(get_db)):
-    return get_publications(db=db, skip=0, limit=1000)
+    try:
+        items = (
+            db.query(models.ContentItem)
+            .options(
+                joinedload(models.ContentItem.category),
+                joinedload(models.ContentItem.specialization),
+                joinedload(models.ContentItem.publication),
+            )
+            .filter(models.ContentItem.content_type == models.ContentItemType.publication)
+            .filter(models.ContentItem.deleted_at.is_(None))
+            .order_by(
+                models.ContentItem.published_at.desc().nullslast(),
+                models.ContentItem.created_at.desc().nullslast(),
+                models.ContentItem.title.asc(),
+            )
+            .all()
+        )
+        return [serialize_admin_specialized_content_item(item, "publication") for item in items]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.post("/admin/publications")

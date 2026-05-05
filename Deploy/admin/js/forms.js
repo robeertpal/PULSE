@@ -375,9 +375,5 @@ async function saveContent() {
 }
 
 function showAlert(msg, type) {
-    const alertBox = document.getElementById('alert-msg');
-    alertBox.textContent = msg;
-    alertBox.className = `alert ${type}`;
-    alertBox.style.display = 'block';
-    setTimeout(() => { alertBox.style.display = 'none'; }, 5000);
+    UI.showAlert('alert-msg', msg, type);
 }

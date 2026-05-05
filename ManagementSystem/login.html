@@ -29,12 +29,12 @@
     </div>
 
     <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
     <script>
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
-            const errorMsg = document.getElementById('error-msg');
             
             try {
                 const btn = e.target.querySelector('button');
@@ -44,8 +44,7 @@
                 await Auth.login(email, password);
                 window.location.href = 'dashboard.html';
             } catch (err) {
-                errorMsg.textContent = err.message;
-                errorMsg.style.display = 'block';
+                UI.showError('error-msg', err.message);
                 const btn = e.target.querySelector('button');
                 btn.textContent = 'Autentificare';
                 btn.disabled = false;

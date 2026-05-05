@@ -59,8 +59,7 @@
                     tbody.appendChild(tr);
                 });
             } catch (err) {
-                document.getElementById('error-msg').textContent = err.message;
-                document.getElementById('error-msg').style.display = 'block';
+                UI.showError('error-msg', err.message);
             }
         });
     </script>

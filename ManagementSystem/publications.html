@@ -40,7 +40,7 @@
                     `;
                     tbody.appendChild(tr);
                 });
-            } catch(e) { document.getElementById('error-msg').textContent = e.message; document.getElementById('error-msg').style.display='block'; }
+            } catch(e) { UI.showError('error-msg', e.message); }
         });
     </script>
 </body>
