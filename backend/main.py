@@ -1,21 +1,30 @@
 from datetime import datetime
+from datetime import timedelta
 from decimal import Decimal
 import enum
+import hashlib
 import logging
 import os
 import re
+import secrets
 from pathlib import Path
 from typing import List, Optional
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
-from database import get_db
+from database import SessionLocal, get_db
 import models
+from nomenclatures import (
+    allowed_specializations_for_occupation_name,
+    ensure_user_profile_columns,
+    seed_nomenclatures,
+)
+from schemas import UserCreate, UserLogin, UserLogout
 
 load_dotenv()
 
@@ -31,10 +40,21 @@ app.add_middleware(
     "http://127.0.0.1:8080",
     "https://pulse-medichub.web.app",
     ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def seed_reference_data() -> None:
+    db = SessionLocal()
+    try:
+        ensure_user_profile_columns(db)
+        seed_nomenclatures(db)
+    finally:
+        db.close()
 
 
 def serialize_value(value):
@@ -92,6 +112,53 @@ def count_model(db: Session, name: str) -> int:
     return db.query(model).count()
 
 
+def get_user_model():
+    user_model = model_class("User")
+    if user_model is None:
+        raise HTTPException(status_code=500, detail="User model is not available")
+    return user_model
+
+
+def get_user_session_model():
+    session_model = model_class("UserSession")
+    if session_model is None:
+        raise HTTPException(status_code=500, detail="UserSession model is not available")
+    return session_model
+
+
+def get_current_user_id(
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+) -> int:
+    if authorization is None:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+
+    parts = authorization.strip().split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
+        raise HTTPException(status_code=401, detail="Invalid Authorization header")
+
+    session_token = parts[1].strip()
+    session_hash = hashlib.sha256(session_token.encode("utf-8")).hexdigest()
+    session_model = get_user_session_model()
+    user_model = get_user_model()
+
+    session_record = (
+        db.query(session_model)
+        .filter(session_model.refresh_token_hash == session_hash)
+        .filter(session_model.revoked_at.is_(None))
+        .filter(session_model.expires_at > datetime.utcnow())
+        .first()
+    )
+    if session_record is None:
+        raise HTTPException(status_code=401, detail="Session is invalid or expired")
+
+    user = db.query(user_model).filter(user_model.id == session_record.user_id).first()
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=401, detail="User is inactive or missing")
+
+    return user.id
+
+
 def visible_content_query(db: Session):
     return (
         db.query(models.ContentItem)
@@ -124,6 +191,31 @@ def get_current_demo_user_id() -> int:
     return 1
 
 
+def hash_password(password: str, salt: bytes | None = None) -> str:
+    salt = salt or secrets.token_bytes(16)
+    iterations = 120_000
+    derived_key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    return f"pbkdf2_sha256${iterations}${salt.hex()}${derived_key.hex()}"
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        algorithm, iterations_str, salt_hex, derived_key_hex = password_hash.split("$")
+        if algorithm != "pbkdf2_sha256":
+            return False
+        iterations = int(iterations_str)
+        salt = bytes.fromhex(salt_hex)
+        expected_key = bytes.fromhex(derived_key_hex)
+        candidate_key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+        return secrets.compare_digest(candidate_key, expected_key)
+    except Exception:
+        return False
+
+
+def create_session_token() -> str:
+    return uuid4().hex
+
+
 def ensure_demo_user_exists(db: Session, user_id: int):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is not None:
@@ -141,6 +233,137 @@ def ensure_demo_user_exists(db: Session, user_id: int):
         )
     )
     db.commit()
+
+
+def _normalize_name(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _resolve_county_id(db: Session, payload: UserCreate) -> Optional[int]:
+    if payload.county_id is not None:
+        county = db.query(models.County).filter(models.County.id == payload.county_id).first()
+        if county is None:
+            raise HTTPException(status_code=422, detail="County id is invalid")
+        return county.id
+
+    county_name = _normalize_name(payload.county_name)
+    if county_name is None:
+        return None
+
+    county = db.query(models.County).filter(models.County.name.ilike(county_name)).first()
+    if county is not None:
+        return county.id
+
+    county = models.County(name=county_name)
+    db.add(county)
+    db.flush()
+    return county.id
+
+
+def _resolve_city_id(db: Session, payload: UserCreate, county_id: Optional[int]) -> int:
+    if payload.city_id is not None:
+        city = db.query(models.City).filter(models.City.id == payload.city_id).first()
+        if city is None:
+            raise HTTPException(status_code=422, detail="City id is invalid")
+        if county_id is not None and city.county_id != county_id:
+            raise HTTPException(status_code=422, detail="City does not belong to selected county")
+        return city.id
+
+    city_name = _normalize_name(payload.city_name)
+    if city_name is None:
+        raise HTTPException(status_code=422, detail="City is required")
+    if county_id is None:
+        raise HTTPException(status_code=422, detail="County is required when city is provided manually")
+
+    city = (
+        db.query(models.City)
+        .filter(models.City.county_id == county_id)
+        .filter(models.City.name.ilike(city_name))
+        .first()
+    )
+    if city is not None:
+        return city.id
+
+    city = models.City(name=city_name, county_id=county_id)
+    db.add(city)
+    db.flush()
+    return city.id
+
+
+def _resolve_occupation_id(db: Session, payload: UserCreate) -> int:
+    if payload.occupation_id is not None:
+        occupation = db.query(models.Occupation).filter(models.Occupation.id == payload.occupation_id).first()
+        if occupation is None:
+            raise HTTPException(status_code=422, detail="Occupation id is invalid")
+        return occupation.id
+
+    occupation_name = _normalize_name(payload.occupation_name)
+    if occupation_name is None:
+        raise HTTPException(status_code=422, detail="Occupation is required")
+
+    occupation = db.query(models.Occupation).filter(models.Occupation.name.ilike(occupation_name)).first()
+    if occupation is None:
+        raise HTTPException(status_code=422, detail="Occupation name is invalid")
+    return occupation.id
+
+
+def _resolve_specialization_id(db: Session, payload: UserCreate) -> Optional[int]:
+    if payload.specialization_id is not None:
+        specialization = (
+            db.query(models.Specialization)
+            .filter(models.Specialization.id == payload.specialization_id)
+            .first()
+        )
+        if specialization is None:
+            raise HTTPException(status_code=422, detail="Specialization id is invalid")
+        return specialization.id
+
+    specialization_name = _normalize_name(payload.specialization_name)
+    if specialization_name is None:
+        return None
+
+    specialization = (
+        db.query(models.Specialization)
+        .filter(models.Specialization.name.ilike(specialization_name))
+        .first()
+    )
+    if specialization is None:
+        raise HTTPException(status_code=422, detail="Specialization name is invalid")
+    allowed_names = allowed_specializations_for_occupation_name(payload.occupation_name)
+    if allowed_names and specialization.name not in allowed_names:
+        raise HTTPException(
+            status_code=422,
+            detail="Specialization does not match the selected occupation",
+        )
+    return specialization.id
+
+
+def _resolve_professional_grade_id(db: Session, payload: UserCreate) -> Optional[int]:
+    if payload.professional_grade_id is not None:
+        grade = (
+            db.query(models.ProfessionalGrade)
+            .filter(models.ProfessionalGrade.id == payload.professional_grade_id)
+            .first()
+        )
+        if grade is None:
+            raise HTTPException(status_code=422, detail="Professional grade id is invalid")
+        return grade.id
+
+    grade_name = _normalize_name(payload.professional_grade_name or payload.titlu_universitar)
+    if grade_name is None:
+        return None
+
+    grade = (
+        db.query(models.ProfessionalGrade)
+        .filter(models.ProfessionalGrade.name.ilike(grade_name))
+        .first()
+    )
+    if grade is None:
+        raise HTTPException(status_code=422, detail="Professional grade name is invalid")
+    return grade.id
 
 
 def get_public_content_item_or_404(db: Session, content_item_id: int):
@@ -471,7 +694,7 @@ def get_publications(
 @app.get("/saved-content/ids")
 def get_saved_content_ids(
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_demo_user_id),
+    user_id: int = Depends(get_current_user_id),
 ):
     rows = (
         db.query(models.SavedContent.content_item_id)
@@ -491,7 +714,7 @@ def get_saved_content_ids(
 @app.get("/saved-content")
 def get_saved_content(
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_demo_user_id),
+    user_id: int = Depends(get_current_user_id),
 ):
     saved_rows = (
         db.query(models.SavedContent)
@@ -533,10 +756,9 @@ def get_saved_content(
 def save_content(
     content_item_id: int,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_demo_user_id),
+    user_id: int = Depends(get_current_user_id),
 ):
     get_public_content_item_or_404(db, content_item_id)
-    ensure_demo_user_exists(db, user_id)
 
     existing = (
         db.query(models.SavedContent)
@@ -565,7 +787,7 @@ def save_content(
 def remove_saved_content(
     content_item_id: int,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_demo_user_id),
+    user_id: int = Depends(get_current_user_id),
 ):
     existing = (
         db.query(models.SavedContent)
@@ -667,15 +889,18 @@ def get_public_ads(
 @app.get("/counties")
 def get_counties(db: Session = Depends(get_db)):
     try:
-        return [serialize_model(item) for item in db.query(models.County).all()]
+        return [serialize_model(item) for item in db.query(models.County).order_by(models.County.name.asc()).all()]
     except Exception as e:
         return {"error": str(e)}
 
 
 @app.get("/cities")
-def get_cities(db: Session = Depends(get_db)):
+def get_cities(county_id: Optional[int] = None, db: Session = Depends(get_db)):
     try:
-        return [serialize_model(item) for item in db.query(models.City).all()]
+        query = db.query(models.City)
+        if county_id is not None:
+            query = query.filter(models.City.county_id == county_id)
+        return [serialize_model(item) for item in query.order_by(models.City.name.asc()).all()]
     except Exception as e:
         return {"error": str(e)}
 
@@ -683,15 +908,52 @@ def get_cities(db: Session = Depends(get_db)):
 @app.get("/occupations")
 def get_occupations(db: Session = Depends(get_db)):
     try:
-        return [serialize_model(item) for item in db.query(models.Occupation).all()]
+        items = db.query(models.Occupation).order_by(models.Occupation.name.asc()).all()
+        # Deduplicate by normalized lowercase name while preserving order
+        seen = {}
+        unique = []
+        for item in items:
+            name = (item.name or '').strip().lower()
+            if not name:
+                continue
+            if name in seen:
+                continue
+            seen[name] = True
+            unique.append(item)
+        return [serialize_model(item) for item in unique]
     except Exception as e:
         return {"error": str(e)}
 
 
 @app.get("/specializations")
-def get_specializations(db: Session = Depends(get_db)):
+def get_specializations(
+    occupation_id: Optional[int] = None,
+    occupation_name: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
     try:
-        return [serialize_model(item) for item in db.query(models.Specialization).all()]
+        allowed_names = allowed_specializations_for_occupation_name(occupation_name)
+        if occupation_id is not None:
+            occupation = db.query(models.Occupation).filter(models.Occupation.id == occupation_id).first()
+            if occupation is not None:
+                allowed_names = allowed_specializations_for_occupation_name(occupation.name)
+
+        query = db.query(models.Specialization)
+        if allowed_names:
+            query = query.filter(models.Specialization.name.in_(allowed_names))
+        items = query.order_by(models.Specialization.name.asc()).all()
+        # Deduplicate by normalized lowercase name while preserving order
+        seen = {}
+        unique = []
+        for item in items:
+            name = (item.name or '').strip().lower()
+            if not name:
+                continue
+            if name in seen:
+                continue
+            seen[name] = True
+            unique.append(item)
+        return [serialize_model(item) for item in unique]
     except Exception as e:
         return {"error": str(e)}
 
@@ -750,12 +1012,171 @@ def get_event_gallery(
 # USERS / AUTH
 # -------------------------
 
+
+@app.post("/api/register")
+def register_user(payload: UserCreate, db: Session = Depends(get_db)):
+    user_model = get_user_model()
+    existing_user = db.query(user_model).filter(user_model.email == payload.email).first()
+    if existing_user is not None:
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+
+    county_id = _resolve_county_id(db, payload)
+    city_id = _resolve_city_id(db, payload, county_id)
+    occupation_id = _resolve_occupation_id(db, payload)
+    specialization_id = _resolve_specialization_id(db, payload)
+    professional_grade_id = _resolve_professional_grade_id(db, payload)
+
+    # Server-side required fields validation
+    missing = []
+    if not payload.email:
+        missing.append('email')
+    if not payload.password or len(payload.password) < 8:
+        missing.append('password')
+    if not payload.first_name:
+        missing.append('first_name')
+    if not payload.last_name:
+        missing.append('last_name')
+    if not payload.cnp:
+        missing.append('cnp')
+    if not payload.phone:
+        missing.append('phone')
+    if county_id is None:
+        missing.append('county')
+    if city_id is None:
+        missing.append('city')
+    if occupation_id is None:
+        missing.append('occupation')
+    if specialization_id is None:
+        missing.append('specialization')
+    if missing:
+        raise HTTPException(status_code=422, detail=f'Missing or invalid required fields: {",".join(missing)}')
+
+    now = datetime.utcnow()
+    user = user_model(
+        email=payload.email,
+        password_hash=hash_password(payload.password),
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(user)
+    db.flush()
+
+    user_profile = models.UserProfile(
+        user_id=user.id,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        cnp=payload.cnp,
+        phone=payload.phone,
+        city_id=city_id,
+        occupation_id=occupation_id,
+        specialization_id=specialization_id,
+        professional_grade_id=professional_grade_id,
+        cod_parafa=payload.cod_parafa or payload.professional_registration_code,
+        cuim=payload.cuim,
+        titlu_universitar=payload.titlu_universitar or payload.professional_grade_name,
+        specialization_secondary_name=payload.specialization_secondary_name,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(user_profile)
+    db.commit()
+
+    return {
+        "message": "User registered successfully",
+        "user_id": user.id,
+    }
+
+
+@app.post("/api/login")
+def login_user(payload: UserLogin, db: Session = Depends(get_db)):
+    user_model = get_user_model()
+    session_model = get_user_session_model()
+
+    user = db.query(user_model).filter(user_model.email == payload.email).first()
+    if user is None or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    now = datetime.utcnow()
+    session_token = create_session_token()
+    db.add(
+        session_model(
+            user_id=user.id,
+            refresh_token_hash=hashlib.sha256(session_token.encode("utf-8")).hexdigest(),
+            created_at=now,
+            expires_at=now + timedelta(days=30),
+        )
+    )
+    user.last_login_at = now
+    user.updated_at = now
+    db.commit()
+
+    return {
+        "message": "Login successful",
+        "user_id": user.id,
+        "session_token": session_token,
+    }
+
+
+@app.post("/api/logout")
+def logout_user(payload: UserLogout, db: Session = Depends(get_db)):
+    session_model = get_user_session_model()
+    session_hash = hashlib.sha256(payload.session_token.encode("utf-8")).hexdigest()
+
+    session_record = (
+        db.query(session_model)
+        .filter(session_model.refresh_token_hash == session_hash)
+        .filter(session_model.revoked_at.is_(None))
+        .first()
+    )
+    if session_record is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session_record.revoked_at = datetime.utcnow()
+    db.commit()
+
+    return {"message": "Logout successful"}
+
+
+@app.get("/api/me/profile")
+def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user_model = get_user_model()
+    user = db.query(user_model).filter(user_model.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    profile = (
+        db.query(models.UserProfile)
+        .filter(models.UserProfile.user_id == user_id)
+        .options(
+            joinedload(models.UserProfile.city),
+            joinedload(models.UserProfile.occupation),
+            joinedload(models.UserProfile.specialization),
+            joinedload(models.UserProfile.professional_grade),
+        )
+        .first()
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    profile_data = serialize_model(profile, include_relationships=True)
+    return {
+        "user": serialize_model(user),
+        "profile": profile_data,
+        "display_name": f"{profile.first_name} {profile.last_name}".strip(),
+        "email": user.email,
+        "phone": profile.phone,
+        "county_name": profile.city.county.name if getattr(profile.city, "county", None) else None,
+        "city_name": profile_data.get("city_name"),
+        "occupation_name": profile_data.get("occupation_name"),
+        "specialization_name": profile_data.get("specialization_name"),
+        "professional_grade_name": profile_data.get("professional_grade_name"),
+    }
+
 @app.get("/users")
 def get_users(db: Session = Depends(get_db)):
     try:
-        user_model = model_class("User")
-        if user_model is None:
-            return []
+        user_model = get_user_model()
         return [serialize_model(item) for item in db.query(user_model).all()]
     except Exception as e:
         return {"error": str(e)}
