@@ -1,21 +1,24 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
 import '../models/ad_item.dart';
 import '../models/content_item.dart';
 import '../models/filter_option.dart';
 import 'auth_storage.dart';
 
 class ApiService {
-  // Pentru local development:
-  // - Web / iOS Simulator: http://127.0.0.1:8000
-  // - Android Emulator: http://10.0.2.2:8000
+  static const String _defaultBaseUrl =
+      'https://pulse-backend-5f9b.onrender.com';
+
+  // Use --dart-define=PULSE_API_BASE_URL=... for local development.
   static String get baseUrl {
     const envBaseUrl = String.fromEnvironment('PULSE_API_BASE_URL');
     if (envBaseUrl.isNotEmpty) {
       return envBaseUrl;
     }
-    return kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000';
+    return _defaultBaseUrl;
   }
 
   final AuthStorage _authStorage = AuthStorage();
