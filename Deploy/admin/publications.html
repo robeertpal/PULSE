@@ -196,6 +196,11 @@
                         <div class="form-group">
                             <label for="issue_url">URL ediție / PDF</label>
                             <input type="url" id="issue_url" placeholder="https://...">
+                            <div class="upload-row">
+                                <input type="file" id="issue_pdf_file" accept="application/pdf">
+                                <button type="button" class="btn" onclick="uploadIssuePdf()">Încarcă PDF</button>
+                            </div>
+                            <div id="issue_url_upload_status" class="upload-status"></div>
                         </div>
                         <div class="form-group">
                             <label for="issue_description">Descriere ediție</label>
@@ -270,6 +275,12 @@
             status.className = `upload-status ${type}`.trim();
         }
 
+        function setIssuePdfUploadStatus(message, type = '') {
+            const status = document.getElementById('issue_url_upload_status');
+            status.textContent = message;
+            status.className = `upload-status ${type}`.trim();
+        }
+
         async function uploadIssueCover() {
             const file = document.getElementById('issue_cover_file').files[0];
             if (!file) {
@@ -301,6 +312,39 @@
                 setIssueUploadStatus('Upload finalizat.', 'success');
             } catch (err) {
                 setIssueUploadStatus(err.message, 'error');
+            }
+        }
+
+        async function uploadIssuePdf() {
+            const file = document.getElementById('issue_pdf_file').files[0];
+            if (!file) {
+                setIssuePdfUploadStatus('Alegeți un fișier PDF înainte de upload.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            setIssuePdfUploadStatus('Se încarcă...');
+
+            try {
+                const headers = {};
+                const token = localStorage.getItem('pulse_admin_token');
+                if (token) headers.Authorization = `Bearer ${token}`;
+
+                const response = await fetch(`${CONFIG.API_BASE_URL}/admin/uploads/pdf`, {
+                    method: 'POST',
+                    headers,
+                    body: formData,
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.detail || data.error || data.message || `Upload eșuat: ${response.status}`);
+                }
+
+                document.getElementById('issue_url').value = data.url;
+                setIssuePdfUploadStatus('Upload finalizat.', 'success');
+            } catch (err) {
+                setIssuePdfUploadStatus(err.message, 'error');
             }
         }
 
@@ -406,10 +450,12 @@
             document.getElementById('issue_cover_image_url').value = '';
             document.getElementById('issue_url').value = '';
             document.getElementById('issue_cover_file').value = '';
+            document.getElementById('issue_pdf_file').value = '';
             document.getElementById('issue_description').value = '';
             document.getElementById('issue_published_at').value = '';
             document.getElementById('issue-form-title').textContent = 'Adaugă ediție';
             setIssueUploadStatus('');
+            setIssuePdfUploadStatus('');
             updateIssueCoverPreview();
         }
 
@@ -426,6 +472,7 @@
             document.getElementById('issue_published_at').value = toDateTimeLocal(issue.published_at);
             document.getElementById('issue-form-title').textContent = 'Editează ediție';
             setIssueUploadStatus('');
+            setIssuePdfUploadStatus('');
             updateIssueCoverPreview();
         }
 
