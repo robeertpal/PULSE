@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/publication_issue.dart';
 import '../services/api_service.dart';
 import '../theme/pulse_theme.dart';
@@ -696,6 +697,33 @@ class _PublicationIssueDetailScreenState
     );
   }
 
+  Future<void> _openIssueUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('URL ediție invalid.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final opened = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nu am putut deschide ediția.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
@@ -729,6 +757,7 @@ class _PublicationIssueDetailScreenState
     final issue = _issue!;
     final dateLabel = _formatDate(issue.publishedAt);
     final description = issue.description?.trim();
+    final issueUrl = issue.issueUrl?.trim();
 
     return ListView(
       physics: const BouncingScrollPhysics(),
@@ -767,6 +796,32 @@ class _PublicationIssueDetailScreenState
               _metaRow('An', issue.year.toString()),
               _metaRow('Ediția', issue.issueNumber.toString()),
               if (dateLabel != null) _metaRow('Publicat la', dateLabel),
+              if (issueUrl != null && issueUrl.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _openIssueUrl(issueUrl),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: PulseTheme.magazineContent,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text(
+                      'Deschide ediția',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ],
               if (description != null && description.isNotEmpty) ...[
                 const SizedBox(height: 18),
                 Text(

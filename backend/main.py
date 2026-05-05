@@ -393,6 +393,7 @@ def serialize_publication_issue(issue: models.PublicationIssue, include_publicat
         "cover_image_url": issue.cover_image_url,
         "description": issue.description,
         "published_at": serialize_value(issue.published_at),
+        "issue_url": issue.issue_url,
     }
 
 
@@ -1492,6 +1493,7 @@ class PublicationIssueCreatePayload(BaseModel):
     cover_image_url: Optional[str] = None
     description: Optional[str] = None
     published_at: Optional[datetime] = None
+    issue_url: Optional[str] = None
 
 
 class PublicationIssueUpdatePayload(BaseModel):
@@ -1501,6 +1503,7 @@ class PublicationIssueUpdatePayload(BaseModel):
     cover_image_url: Optional[str] = None
     description: Optional[str] = None
     published_at: Optional[datetime] = None
+    issue_url: Optional[str] = None
 
 
 class CourseAdminPayload(ContentItemBase):
@@ -2389,6 +2392,16 @@ def validate_publication_issue_values(year: Optional[int], issue_number: Optiona
         raise HTTPException(status_code=400, detail="Numărul ediției trebuie să fie pozitiv")
 
 
+def validate_publication_issue_url(issue_url: Optional[str]):
+    if issue_url in (None, ""):
+        return
+    if not (issue_url.startswith("http://") or issue_url.startswith("https://")):
+        raise HTTPException(
+            status_code=400,
+            detail="URL ediție / PDF trebuie să înceapă cu http:// sau https://",
+        )
+
+
 def ensure_publication_issue_unique(
     db: Session,
     publication_id: int,
@@ -2420,8 +2433,13 @@ def publication_issue_data(payload: BaseModel, exclude_unset: bool = False):
         "cover_image_url",
         "description",
         "published_at",
+        "issue_url",
     }
-    return {key: value for key, value in data.items() if key in allowed}
+    result = {key: value for key, value in data.items() if key in allowed}
+    if "issue_url" in result and isinstance(result["issue_url"], str):
+        result["issue_url"] = result["issue_url"].strip() or None
+    validate_publication_issue_url(result.get("issue_url"))
+    return result
 
 
 @app.get("/admin/events")

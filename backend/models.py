@@ -462,6 +462,7 @@ class PublicationIssue(Base):
     cover_image_url = Column(Text)
     description = Column(Text)
     published_at = Column(DateTime(timezone=True))
+    issue_url = Column(Text)
 
     publication = relationship("Publication", backref="issues")
 

@@ -194,6 +194,10 @@
                             <div id="issue_cover_image_url_preview" class="media-preview"></div>
                         </div>
                         <div class="form-group">
+                            <label for="issue_url">URL ediție / PDF</label>
+                            <input type="url" id="issue_url" placeholder="https://...">
+                        </div>
+                        <div class="form-group">
                             <label for="issue_description">Descriere ediție</label>
                             <textarea id="issue_description" rows="4"></textarea>
                         </div>
@@ -400,6 +404,7 @@
             document.getElementById('issue_number').value = '';
             document.getElementById('issue_label').value = '';
             document.getElementById('issue_cover_image_url').value = '';
+            document.getElementById('issue_url').value = '';
             document.getElementById('issue_cover_file').value = '';
             document.getElementById('issue_description').value = '';
             document.getElementById('issue_published_at').value = '';
@@ -416,6 +421,7 @@
             document.getElementById('issue_number').value = issue.issue_number;
             document.getElementById('issue_label').value = issue.issue_label || '';
             document.getElementById('issue_cover_image_url').value = issue.cover_image_url || '';
+            document.getElementById('issue_url').value = issue.issue_url || '';
             document.getElementById('issue_description').value = issue.description || '';
             document.getElementById('issue_published_at').value = toDateTimeLocal(issue.published_at);
             document.getElementById('issue-form-title').textContent = 'Editează ediție';
@@ -429,11 +435,15 @@
                 issue_number: intOrNull('issue_number'),
                 issue_label: valueOrNull('issue_label'),
                 cover_image_url: valueOrNull('issue_cover_image_url'),
+                issue_url: valueOrNull('issue_url'),
                 description: valueOrNull('issue_description'),
                 published_at: dateTimeOrNull('issue_published_at'),
             };
             if (!payload.year || !payload.issue_number) {
                 throw new Error('Completați anul și numărul ediției.');
+            }
+            if (payload.issue_url && !payload.issue_url.startsWith('http://') && !payload.issue_url.startsWith('https://')) {
+                throw new Error('URL ediție / PDF trebuie să înceapă cu http:// sau https://.');
             }
             return payload;
         }
