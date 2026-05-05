@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 import enum
+import json
 import logging
 import os
 import re
@@ -16,6 +17,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 import models
+
+try:
+    from google import genai
+except ImportError:
+    genai = None
 
 load_dotenv()
 
@@ -152,6 +158,132 @@ def get_public_content_item_or_404(db: Session, content_item_id: int):
     if item is None:
         raise HTTPException(status_code=404, detail="Content item not found")
     return item
+
+
+AI_SUMMARY_DISCLAIMER = "Rezumat generat automat. Verificați articolul original pentru decizii profesionale."
+
+
+def clean_ai_summary_text(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    return (
+        re.sub(r"<[^>]*>", " ", value)
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .strip()
+    )
+
+
+def build_ai_summary_input(item):
+    title = clean_ai_summary_text(item.title)
+    short_description = clean_ai_summary_text(item.short_description)
+    body = clean_ai_summary_text(item.body)
+    article_text = "\n\n".join(part for part in [short_description, body] if part)
+
+    if not article_text:
+        raise HTTPException(
+            status_code=400,
+            detail="Nu există suficient conținut pentru rezumat.",
+        )
+
+    return "\n\n".join(
+        part
+        for part in [
+            f"Titlu: {title}" if title else None,
+            f"Descriere: {short_description}" if short_description else None,
+            f"Conținut: {body}" if body else None,
+        ]
+        if part
+    )
+
+
+def parse_ai_summary_response(raw_text: str):
+    cleaned = raw_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?", "", cleaned, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"```$", "", cleaned).strip()
+
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return {"summary": cleaned, "key_points": []}
+
+    if not isinstance(data, dict):
+        return {"summary": cleaned, "key_points": []}
+
+    summary = str(data.get("summary") or "").strip()
+    raw_key_points = data.get("key_points") or []
+    key_points = []
+    if isinstance(raw_key_points, list):
+        key_points = [
+            str(point).strip()
+            for point in raw_key_points
+            if str(point).strip()
+        ]
+
+    return {"summary": summary, "key_points": key_points[:5]}
+
+
+def parse_plain_ai_summary_response(raw_text: str):
+    cleaned = raw_text.strip()
+    if not cleaned:
+        return {"summary": "", "key_points": []}
+
+    payload = parse_ai_summary_response(cleaned)
+    if payload["summary"] and payload["summary"] != cleaned:
+        return payload
+
+    key_points = []
+    summary_lines = []
+    in_key_points = False
+    for line in cleaned.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            if summary_lines and not in_key_points:
+                summary_lines.append("")
+            continue
+
+        normalized = stripped.lower().rstrip(":")
+        if normalized in {"idei cheie", "puncte cheie", "key points"}:
+            in_key_points = True
+            continue
+        if normalized in {"rezumat", "summary"}:
+            in_key_points = False
+            continue
+
+        bullet_match = re.match(r"^[-*•]\s*(.+)$", stripped)
+        if bullet_match:
+            point = bullet_match.group(1).strip()
+            if point:
+                key_points.append(point)
+            continue
+
+        if in_key_points:
+            key_points.append(stripped)
+        else:
+            summary_lines.append(stripped)
+
+    summary = "\n".join(summary_lines).strip() or cleaned
+    return {"summary": summary, "key_points": key_points[:5]}
+
+
+def build_gemini_summary_prompt(summary_input: str):
+    return (
+        "Ești un asistent medical editorial pentru medici.\n"
+        "Generează un rezumat scurt, clar și util în limba română, bazat "
+        "exclusiv pe articolul de mai jos.\n"
+        "Nu inventa fapte, nu completa informații lipsă și nu oferi diagnostic, "
+        "recomandări de tratament sau decizii clinice.\n"
+        "Rezumatul trebuie să fie mai scurt decât articolul și să evidențieze "
+        "ideile importante.\n"
+        "Răspunde simplu în acest format:\n"
+        "Rezumat: <un paragraf scurt>\n"
+        "Idei cheie:\n"
+        "- <idee importantă>\n"
+        "- <idee importantă>\n\n"
+        f"Disclaimer de afișat în aplicație: {AI_SUMMARY_DISCLAIMER}\n\n"
+        f"Articol:\n{summary_input}"
+    )
 
 
 def public_content_ordering():
@@ -297,6 +429,62 @@ def get_content_item_detail(
         if data.get(key) is None:
             data[key] = value
     return data
+
+
+@app.post("/content-items/{content_item_id}/ai-summary")
+def generate_content_ai_summary(
+    content_item_id: int,
+    db: Session = Depends(get_db),
+):
+    item = get_public_content_item_or_404(db, content_item_id)
+    if item.content_type not in {
+        models.ContentItemType.article,
+        models.ContentItemType.news,
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail="Rezumatul AI este disponibil momentan doar pentru articole și știri.",
+        )
+
+    summary_input = build_ai_summary_input(item)
+    provider = os.getenv("AI_PROVIDER", "gemini").strip().lower()
+    api_key = os.getenv("GEMINI_API_KEY")
+    if provider != "gemini" or not api_key or genai is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Serviciul AI nu este configurat momentan.",
+        )
+
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    prompt_text = build_gemini_summary_prompt(summary_input)
+
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt_text,
+        )
+        payload = parse_plain_ai_summary_response(response.text or "")
+    except Exception:
+        logger.exception("Gemini AI summary generation failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Serviciul AI nu este disponibil momentan. Încearcă din nou mai târziu.",
+        )
+
+    if not payload["summary"]:
+        raise HTTPException(
+            status_code=503,
+            detail="Serviciul AI nu este disponibil momentan. Încearcă din nou mai târziu.",
+        )
+
+    return {
+        "content_item_id": content_item_id,
+        "summary": payload["summary"],
+        "key_points": payload["key_points"],
+        "disclaimer": AI_SUMMARY_DISCLAIMER,
+        "model": model,
+    }
 
 
 @app.get("/featured-content")

@@ -28,6 +28,23 @@ class ApiService {
     return parts.join('&');
   }
 
+  String _responseErrorMessage(http.Response response, String fallback) {
+    try {
+      final decoded = json.decode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        final detail = decoded['detail'];
+        if (detail is String && detail.isNotEmpty) return detail;
+        final message = decoded['message'];
+        if (message is String && message.isNotEmpty) return message;
+        final error = decoded['error'];
+        if (error is String && error.isNotEmpty) return error;
+      }
+    } catch (_) {
+      // Keep the caller's friendly fallback when the backend body is not JSON.
+    }
+    return fallback;
+  }
+
   Future<List<ContentItem>> _getContentList(
     String path, {
     int limit = 10,
@@ -179,6 +196,43 @@ class ApiService {
       debugPrint('Error fetching content item detail: $e');
       rethrow;
     }
+  }
+
+  Future<Map<String, dynamic>> generateAiSummaryResult(int contentItemId) async {
+    try {
+      final response = await http
+          .post(Uri.parse('$_baseUrl/content-items/$contentItemId/ai-summary'))
+          .timeout(const Duration(seconds: 45));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Serviciul AI nu este disponibil momentan.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns AI neasteptat.');
+      }
+
+      final summary = decoded['summary'];
+      if (summary is! String || summary.trim().isEmpty) {
+        throw Exception('Serviciul AI nu este disponibil momentan.');
+      }
+
+      return decoded;
+    } catch (e) {
+      debugPrint('Error generating AI summary: $e');
+      rethrow;
+    }
+  }
+
+  Future<String> generateAiSummary(int contentItemId) async {
+    final result = await generateAiSummaryResult(contentItemId);
+    return result['summary'] as String;
   }
 
   Future<List<FilterOption>> getCategories() async {
