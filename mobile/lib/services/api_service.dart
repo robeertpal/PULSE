@@ -4,15 +4,53 @@ import 'package:http/http.dart' as http;
 import '../models/ad_item.dart';
 import '../models/content_item.dart';
 import '../models/filter_option.dart';
+import 'auth_storage.dart';
 
 class ApiService {
   // Pentru local development:
-  // - iOS Simulator / Web: http://127.0.0.1:8000
+  // - Web / iOS Simulator: http://127.0.0.1:8000
   // - Android Emulator: http://10.0.2.2:8000
-  static const String _baseUrl = String.fromEnvironment(
-    'PULSE_API_BASE_URL',
-    defaultValue: 'https://pulse-backend-5f9b.onrender.com',
-  );
+  static String get baseUrl {
+    const envBaseUrl = String.fromEnvironment('PULSE_API_BASE_URL');
+    if (envBaseUrl.isNotEmpty) {
+      return envBaseUrl;
+    }
+    return kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000';
+  }
+
+  final AuthStorage _authStorage = AuthStorage();
+
+  Future<Map<String, String>> _buildAuthHeaders() async {
+    final sessionToken = await _authStorage.getSessionToken();
+    if (sessionToken == null || sessionToken.isEmpty) {
+      throw Exception('No active session token');
+    }
+    return {
+      'Authorization': 'Bearer $sessionToken',
+    };
+  }
+
+  Future<Map<String, dynamic>> getMyProfile() async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/me/profile'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load profile: ${response.statusCode}');
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Unexpected profile response format');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching profile: $e');
+      rethrow;
+    }
+  }
 
   String _buildRepeatedQueryString(Map<String, List<String>> queryParams) {
     final parts = <String>[];
@@ -50,7 +88,7 @@ class ApiService {
       }
 
       final uri = Uri.parse(
-        '$_baseUrl/$path',
+        '$baseUrl/$path',
       ).replace(query: _buildRepeatedQueryString(queryParams));
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
 
@@ -79,7 +117,7 @@ class ApiService {
   Future<bool> checkHealth() async {
     try {
       final response = await http
-          .get(Uri.parse('$_baseUrl/health'))
+          .get(Uri.parse('$baseUrl/health'))
           .timeout(const Duration(seconds: 10));
       return response.statusCode == 200;
     } catch (e) {
@@ -156,7 +194,7 @@ class ApiService {
   Future<Map<String, dynamic>> getContentItemDetail(int contentItemId) async {
     try {
       final response = await http
-          .get(Uri.parse('$_baseUrl/content-items/$contentItemId'))
+          .get(Uri.parse('$baseUrl/content-items/$contentItemId'))
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 404) {
@@ -183,7 +221,7 @@ class ApiService {
 
   Future<List<FilterOption>> getCategories() async {
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/content-categories'));
+      final response = await http.get(Uri.parse('$baseUrl/content-categories'));
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         return data.map((json) => FilterOption.fromJson(json)).toList();
@@ -198,7 +236,7 @@ class ApiService {
 
   Future<List<FilterOption>> getSpecializations() async {
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/specializations'));
+      final response = await http.get(Uri.parse('$baseUrl/specializations'));
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         return data.map((json) => FilterOption.fromJson(json)).toList();
@@ -226,8 +264,9 @@ class ApiService {
 
   Future<Set<int>> getSavedContentIds() async {
     try {
+      final headers = await _buildAuthHeaders();
       final response = await http
-          .get(Uri.parse('$_baseUrl/saved-content/ids'))
+          .get(Uri.parse('$baseUrl/saved-content/ids'), headers: headers)
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
@@ -248,8 +287,9 @@ class ApiService {
 
   Future<void> saveContent(int contentItemId) async {
     try {
+      final headers = await _buildAuthHeaders();
       final response = await http
-          .post(Uri.parse('$_baseUrl/saved-content/$contentItemId'))
+          .post(Uri.parse('$baseUrl/saved-content/$contentItemId'), headers: headers)
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
@@ -263,8 +303,9 @@ class ApiService {
 
   Future<void> unsaveContent(int contentItemId) async {
     try {
+      final headers = await _buildAuthHeaders();
       final response = await http
-          .delete(Uri.parse('$_baseUrl/saved-content/$contentItemId'))
+          .delete(Uri.parse('$baseUrl/saved-content/$contentItemId'), headers: headers)
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
@@ -278,8 +319,9 @@ class ApiService {
 
   Future<List<ContentItem>> getSavedContent() async {
     try {
+      final headers = await _buildAuthHeaders();
       final response = await http
-          .get(Uri.parse('$_baseUrl/saved-content'))
+          .get(Uri.parse('$baseUrl/saved-content'), headers: headers)
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
@@ -309,7 +351,7 @@ class ApiService {
       }
 
       final uri = Uri.parse(
-        '$_baseUrl/ads',
+        '$baseUrl/ads',
       ).replace(queryParameters: queryParameters);
       final response = await http.get(uri).timeout(const Duration(seconds: 8));
 

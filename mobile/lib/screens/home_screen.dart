@@ -1,13 +1,18 @@
 import 'dart:ui';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/pulse_theme.dart';
 import '../models/ad_item.dart';
 import '../models/content_item.dart';
 import '../models/filter_option.dart';
+import '../services/auth_storage.dart';
 import '../services/api_service.dart';
+import 'login_screen.dart';
 import 'saved_content_screen.dart';
+import 'profile_screen.dart';
 import '../widgets/home_header.dart';
 import '../widgets/featured_card.dart';
 import '../widgets/content_section.dart';
@@ -29,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late List<Animation<Offset>> _slideAnimations;
 
   final ApiService _apiService = ApiService();
+  final AuthStorage _authStorage = AuthStorage();
   List<ContentItem> _courses = [];
   List<ContentItem> _events = [];
   List<ContentItem> _publications = [];
@@ -44,6 +50,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isFeaturedLoading = true;
   int _contentRequestId = 0;
   String? _errorMessage;
+  String? _userName;
 
   static const int _sectionCount = 10;
   static const List<String> _homeAdPlacements = [
@@ -93,6 +100,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _loadData();
     _loadFilterOptions();
     _loadSavedContentIds();
+    _loadProfileHeader();
+  }
+
+  Future<void> _loadProfileHeader() async {
+    try {
+      final profile = await _apiService.getMyProfile();
+      if (!mounted) return;
+      setState(() {
+        _userName = (profile['display_name'] as String?) ?? _userName;
+      });
+    } catch (_) {
+      final localName = await _authStorage.getUserName();
+      if (!mounted) return;
+      setState(() {
+        _userName ??= localName;
+      });
+    }
   }
 
   List<int> get _categoryFilterIds => _selectedCategoryIds.toList()..sort();
@@ -240,6 +264,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       MaterialPageRoute(builder: (context) => const SavedContentScreen()),
     );
     _loadSavedContentIds();
+  }
+
+  Future<void> _logout() async {
+    final sessionToken = await _authStorage.getSessionToken();
+    if (sessionToken != null && sessionToken.isNotEmpty) {
+      try {
+        await http.post(
+          Uri.parse('${ApiService.baseUrl}/api/logout'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'session_token': sessionToken}),
+        );
+      } catch (_) {
+        // Clear local state even if the backend revocation request fails.
+      }
+    }
+
+    await _authStorage.clearSession();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   Widget _savedContentCard(ContentItem item) {
@@ -818,9 +864,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             _animatedSection(
               0,
               HomeHeader(
-                doctorName: 'Andrei',
+                doctorName: _userName ?? 'Medic curent',
                 avatarUrl: '',
                 onSavedTap: _openSavedContent,
+                onLogoutTap: _logout,
+                onProfileTap: () async {
+                  // navigate to profile mock-up
+                  final route = MaterialPageRoute(builder: (_) => const ProfileScreen());
+                  await Navigator.of(context).push(route);
+                },
               ),
             ),
             // Conținutul paginii cu tranziții
