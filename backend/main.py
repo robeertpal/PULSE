@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 import enum
 import hashlib
+import json
 import logging
 import os
 import re
@@ -17,14 +18,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
-from database import SessionLocal, get_db
+from database import get_db
 import models
-from nomenclatures import (
-    allowed_specializations_for_occupation_name,
-    ensure_user_profile_columns,
-    seed_nomenclatures,
-)
 from schemas import UserCreate, UserLogin, UserLogout
+
+try:
+    from google import genai
+except ImportError:
+    genai = None
 
 load_dotenv()
 
@@ -40,21 +41,10 @@ app.add_middleware(
     "http://127.0.0.1:8080",
     "https://pulse-medichub.web.app",
     ],
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def seed_reference_data() -> None:
-    db = SessionLocal()
-    try:
-        ensure_user_profile_columns(db)
-        seed_nomenclatures(db)
-    finally:
-        db.close()
 
 
 def serialize_value(value):
@@ -178,7 +168,17 @@ def visible_content_card_query(db: Session):
     )
 
 
+def normalize_id_filter_values(values):
+    if values is None:
+        return []
+    if not isinstance(values, (list, tuple, set)):
+        return []
+    return [value for value in values if value is not None]
+
+
 def apply_content_filters(query, category_ids: Optional[List[int]] = None, specialization_ids: Optional[List[int]] = None):
+    category_ids = normalize_id_filter_values(category_ids)
+    specialization_ids = normalize_id_filter_values(specialization_ids)
     if category_ids:
         query = query.filter(models.ContentItem.category_id.in_(category_ids))
     if specialization_ids:
@@ -194,7 +194,12 @@ def get_current_demo_user_id() -> int:
 def hash_password(password: str, salt: bytes | None = None) -> str:
     salt = salt or secrets.token_bytes(16)
     iterations = 120_000
-    derived_key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    derived_key = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt,
+        iterations,
+    )
     return f"pbkdf2_sha256${iterations}${salt.hex()}${derived_key.hex()}"
 
 
@@ -206,7 +211,12 @@ def verify_password(password: str, password_hash: str) -> bool:
         iterations = int(iterations_str)
         salt = bytes.fromhex(salt_hex)
         expected_key = bytes.fromhex(derived_key_hex)
-        candidate_key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+        candidate_key = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt,
+            iterations,
+        )
         return secrets.compare_digest(candidate_key, expected_key)
     except Exception:
         return False
@@ -332,12 +342,6 @@ def _resolve_specialization_id(db: Session, payload: UserCreate) -> Optional[int
     )
     if specialization is None:
         raise HTTPException(status_code=422, detail="Specialization name is invalid")
-    allowed_names = allowed_specializations_for_occupation_name(payload.occupation_name)
-    if allowed_names and specialization.name not in allowed_names:
-        raise HTTPException(
-            status_code=422,
-            detail="Specialization does not match the selected occupation",
-        )
     return specialization.id
 
 
@@ -375,6 +379,132 @@ def get_public_content_item_or_404(db: Session, content_item_id: int):
     if item is None:
         raise HTTPException(status_code=404, detail="Content item not found")
     return item
+
+
+AI_SUMMARY_DISCLAIMER = "Rezumat generat automat. Verificați articolul original pentru decizii profesionale."
+
+
+def clean_ai_summary_text(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    return (
+        re.sub(r"<[^>]*>", " ", value)
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .strip()
+    )
+
+
+def build_ai_summary_input(item):
+    title = clean_ai_summary_text(item.title)
+    short_description = clean_ai_summary_text(item.short_description)
+    body = clean_ai_summary_text(item.body)
+    article_text = "\n\n".join(part for part in [short_description, body] if part)
+
+    if not article_text:
+        raise HTTPException(
+            status_code=400,
+            detail="Nu există suficient conținut pentru rezumat.",
+        )
+
+    return "\n\n".join(
+        part
+        for part in [
+            f"Titlu: {title}" if title else None,
+            f"Descriere: {short_description}" if short_description else None,
+            f"Conținut: {body}" if body else None,
+        ]
+        if part
+    )
+
+
+def parse_ai_summary_response(raw_text: str):
+    cleaned = raw_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?", "", cleaned, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"```$", "", cleaned).strip()
+
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return {"summary": cleaned, "key_points": []}
+
+    if not isinstance(data, dict):
+        return {"summary": cleaned, "key_points": []}
+
+    summary = str(data.get("summary") or "").strip()
+    raw_key_points = data.get("key_points") or []
+    key_points = []
+    if isinstance(raw_key_points, list):
+        key_points = [
+            str(point).strip()
+            for point in raw_key_points
+            if str(point).strip()
+        ]
+
+    return {"summary": summary, "key_points": key_points[:5]}
+
+
+def parse_plain_ai_summary_response(raw_text: str):
+    cleaned = raw_text.strip()
+    if not cleaned:
+        return {"summary": "", "key_points": []}
+
+    payload = parse_ai_summary_response(cleaned)
+    if payload["summary"] and payload["summary"] != cleaned:
+        return payload
+
+    key_points = []
+    summary_lines = []
+    in_key_points = False
+    for line in cleaned.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            if summary_lines and not in_key_points:
+                summary_lines.append("")
+            continue
+
+        normalized = stripped.lower().rstrip(":")
+        if normalized in {"idei cheie", "puncte cheie", "key points"}:
+            in_key_points = True
+            continue
+        if normalized in {"rezumat", "summary"}:
+            in_key_points = False
+            continue
+
+        bullet_match = re.match(r"^[-*•]\s*(.+)$", stripped)
+        if bullet_match:
+            point = bullet_match.group(1).strip()
+            if point:
+                key_points.append(point)
+            continue
+
+        if in_key_points:
+            key_points.append(stripped)
+        else:
+            summary_lines.append(stripped)
+
+    summary = "\n".join(summary_lines).strip() or cleaned
+    return {"summary": summary, "key_points": key_points[:5]}
+
+
+def build_gemini_summary_prompt(summary_input: str):
+    return (
+        "Ești un asistent medical editorial pentru medici.\n"
+        "Generează un rezumat scurt, clar și util în limba română, bazat "
+        "exclusiv pe articolul de mai jos.\n"
+        "Nu inventa fapte, nu completa informații lipsă și nu oferi diagnostic, "
+        "recomandări de tratament sau decizii clinice.\n"
+        "Rezumatul trebuie să fie mai scurt decât articolul și să evidențieze "
+        "ideile importante.\n"
+        "Răspunde simplu în acest format:\n"
+        "Rezumat: <un paragraf scurt>\n"
+        "Idei cheie:\n"
+        "- <idee importantă>\n"
+        "- <idee importantă>\n\n"
+        f"Disclaimer de afișat în aplicație: {AI_SUMMARY_DISCLAIMER}\n\n"
+        f"Articol:\n{summary_input}"
+    )
 
 
 def public_content_ordering():
@@ -440,6 +570,8 @@ def serialize_content_card(item):
 
     if item.publication:
         data["publication"] = {
+            "id": item.publication.id,
+            "publication_id": item.publication.id,
             "name": item.publication.name,
             "logo_url": item.publication.logo_url,
             "description": item.publication.description,
@@ -447,6 +579,8 @@ def serialize_content_card(item):
         }
         data.update(
             {
+                "publication_id": item.publication.id,
+                "publication_name": item.publication.name,
                 "name": item.publication.name,
                 "logo_url": item.publication.logo_url,
                 "description": item.publication.description,
@@ -454,6 +588,71 @@ def serialize_content_card(item):
         )
 
     return data
+
+
+def serialize_publication_issue(issue: models.PublicationIssue, include_publication: bool = True):
+    publication = issue.publication if include_publication else None
+    return {
+        "id": issue.id,
+        "publication_id": issue.publication_id,
+        "publication_name": publication.name if publication else None,
+        "publication_logo_url": publication.logo_url if publication else None,
+        "publication_description": publication.description if publication else None,
+        "year": issue.year,
+        "issue_number": issue.issue_number,
+        "issue_label": issue.issue_label,
+        "cover_image_url": issue.cover_image_url,
+        "description": issue.description,
+        "published_at": serialize_value(issue.published_at),
+        "issue_url": issue.issue_url,
+    }
+
+
+def public_publication_query(db: Session):
+    return (
+        db.query(models.Publication)
+        .join(models.ContentItem, models.ContentItem.id == models.Publication.content_item_id)
+        .options(joinedload(models.Publication.content_item))
+        .filter(models.ContentItem.is_active == True)
+        .filter(models.ContentItem.deleted_at.is_(None))
+        .filter(models.ContentItem.status == models.ContentStatus.published)
+        .filter(models.ContentItem.content_type == models.ContentItemType.publication)
+    )
+
+
+def get_public_publication_or_404(db: Session, publication_id: int):
+    publication = (
+        public_publication_query(db)
+        .filter(models.Publication.id == publication_id)
+        .first()
+    )
+    if publication is None:
+        raise HTTPException(status_code=404, detail="Publication not found")
+    return publication
+
+
+def public_publication_issue_query(db: Session):
+    return (
+        db.query(models.PublicationIssue)
+        .join(models.Publication, models.Publication.id == models.PublicationIssue.publication_id)
+        .join(models.ContentItem, models.ContentItem.id == models.Publication.content_item_id)
+        .options(joinedload(models.PublicationIssue.publication))
+        .filter(models.ContentItem.is_active == True)
+        .filter(models.ContentItem.deleted_at.is_(None))
+        .filter(models.ContentItem.status == models.ContentStatus.published)
+        .filter(models.ContentItem.content_type == models.ContentItemType.publication)
+    )
+
+
+def get_public_publication_issue_or_404(db: Session, issue_id: int):
+    issue = (
+        public_publication_issue_query(db)
+        .filter(models.PublicationIssue.id == issue_id)
+        .first()
+    )
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Publication issue not found")
+    return issue
 
 
 def serialize_mapping(row):
@@ -520,6 +719,62 @@ def get_content_item_detail(
         if data.get(key) is None:
             data[key] = value
     return data
+
+
+@app.post("/content-items/{content_item_id}/ai-summary")
+def generate_content_ai_summary(
+    content_item_id: int,
+    db: Session = Depends(get_db),
+):
+    item = get_public_content_item_or_404(db, content_item_id)
+    if item.content_type not in {
+        models.ContentItemType.article,
+        models.ContentItemType.news,
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail="Rezumatul AI este disponibil momentan doar pentru articole și știri.",
+        )
+
+    summary_input = build_ai_summary_input(item)
+    provider = os.getenv("AI_PROVIDER", "gemini").strip().lower()
+    api_key = os.getenv("GEMINI_API_KEY")
+    if provider != "gemini" or not api_key or genai is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Serviciul AI nu este configurat momentan.",
+        )
+
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    prompt_text = build_gemini_summary_prompt(summary_input)
+
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt_text,
+        )
+        payload = parse_plain_ai_summary_response(response.text or "")
+    except Exception:
+        logger.exception("Gemini AI summary generation failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Serviciul AI nu este disponibil momentan. Încearcă din nou mai târziu.",
+        )
+
+    if not payload["summary"]:
+        raise HTTPException(
+            status_code=503,
+            detail="Serviciul AI nu este disponibil momentan. Încearcă din nou mai târziu.",
+        )
+
+    return {
+        "content_item_id": content_item_id,
+        "summary": payload["summary"],
+        "key_points": payload["key_points"],
+        "disclaimer": AI_SUMMARY_DISCLAIMER,
+        "model": model,
+    }
 
 
 @app.get("/featured-content")
@@ -691,10 +946,38 @@ def get_publications(
         return {"error": str(e)}
 
 
+@app.get("/publications/{publication_id}/issues")
+def get_publication_issues_for_publication(
+    publication_id: int,
+    db: Session = Depends(get_db),
+):
+    get_public_publication_or_404(db, publication_id)
+    issues = (
+        db.query(models.PublicationIssue)
+        .options(joinedload(models.PublicationIssue.publication))
+        .filter(models.PublicationIssue.publication_id == publication_id)
+        .order_by(
+            models.PublicationIssue.year.desc(),
+            models.PublicationIssue.issue_number.desc(),
+        )
+        .all()
+    )
+    return [serialize_publication_issue(issue) for issue in issues]
+
+
+@app.get("/publication-issues/{issue_id}")
+def get_publication_issue_detail(
+    issue_id: int,
+    db: Session = Depends(get_db),
+):
+    issue = get_public_publication_issue_or_404(db, issue_id)
+    return serialize_publication_issue(issue)
+
+
 @app.get("/saved-content/ids")
 def get_saved_content_ids(
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
+    user_id: int = Depends(get_current_demo_user_id),
 ):
     rows = (
         db.query(models.SavedContent.content_item_id)
@@ -714,7 +997,7 @@ def get_saved_content_ids(
 @app.get("/saved-content")
 def get_saved_content(
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
+    user_id: int = Depends(get_current_demo_user_id),
 ):
     saved_rows = (
         db.query(models.SavedContent)
@@ -756,9 +1039,10 @@ def get_saved_content(
 def save_content(
     content_item_id: int,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
+    user_id: int = Depends(get_current_demo_user_id),
 ):
     get_public_content_item_or_404(db, content_item_id)
+    ensure_demo_user_exists(db, user_id)
 
     existing = (
         db.query(models.SavedContent)
@@ -787,7 +1071,7 @@ def save_content(
 def remove_saved_content(
     content_item_id: int,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
+    user_id: int = Depends(get_current_demo_user_id),
 ):
     existing = (
         db.query(models.SavedContent)
@@ -889,18 +1173,15 @@ def get_public_ads(
 @app.get("/counties")
 def get_counties(db: Session = Depends(get_db)):
     try:
-        return [serialize_model(item) for item in db.query(models.County).order_by(models.County.name.asc()).all()]
+        return [serialize_model(item) for item in db.query(models.County).all()]
     except Exception as e:
         return {"error": str(e)}
 
 
 @app.get("/cities")
-def get_cities(county_id: Optional[int] = None, db: Session = Depends(get_db)):
+def get_cities(db: Session = Depends(get_db)):
     try:
-        query = db.query(models.City)
-        if county_id is not None:
-            query = query.filter(models.City.county_id == county_id)
-        return [serialize_model(item) for item in query.order_by(models.City.name.asc()).all()]
+        return [serialize_model(item) for item in db.query(models.City).all()]
     except Exception as e:
         return {"error": str(e)}
 
@@ -908,52 +1189,15 @@ def get_cities(county_id: Optional[int] = None, db: Session = Depends(get_db)):
 @app.get("/occupations")
 def get_occupations(db: Session = Depends(get_db)):
     try:
-        items = db.query(models.Occupation).order_by(models.Occupation.name.asc()).all()
-        # Deduplicate by normalized lowercase name while preserving order
-        seen = {}
-        unique = []
-        for item in items:
-            name = (item.name or '').strip().lower()
-            if not name:
-                continue
-            if name in seen:
-                continue
-            seen[name] = True
-            unique.append(item)
-        return [serialize_model(item) for item in unique]
+        return [serialize_model(item) for item in db.query(models.Occupation).all()]
     except Exception as e:
         return {"error": str(e)}
 
 
 @app.get("/specializations")
-def get_specializations(
-    occupation_id: Optional[int] = None,
-    occupation_name: Optional[str] = None,
-    db: Session = Depends(get_db),
-):
+def get_specializations(db: Session = Depends(get_db)):
     try:
-        allowed_names = allowed_specializations_for_occupation_name(occupation_name)
-        if occupation_id is not None:
-            occupation = db.query(models.Occupation).filter(models.Occupation.id == occupation_id).first()
-            if occupation is not None:
-                allowed_names = allowed_specializations_for_occupation_name(occupation.name)
-
-        query = db.query(models.Specialization)
-        if allowed_names:
-            query = query.filter(models.Specialization.name.in_(allowed_names))
-        items = query.order_by(models.Specialization.name.asc()).all()
-        # Deduplicate by normalized lowercase name while preserving order
-        seen = {}
-        unique = []
-        for item in items:
-            name = (item.name or '').strip().lower()
-            if not name:
-                continue
-            if name in seen:
-                continue
-            seen[name] = True
-            unique.append(item)
-        return [serialize_model(item) for item in unique]
+        return [serialize_model(item) for item in db.query(models.Specialization).all()]
     except Exception as e:
         return {"error": str(e)}
 
@@ -1012,7 +1256,6 @@ def get_event_gallery(
 # USERS / AUTH
 # -------------------------
 
-
 @app.post("/api/register")
 def register_user(payload: UserCreate, db: Session = Depends(get_db)):
     user_model = get_user_model()
@@ -1020,36 +1263,33 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
     if existing_user is not None:
         raise HTTPException(status_code=409, detail="An account with this email already exists")
 
+    if not payload.password or len(payload.password) < 8:
+        raise HTTPException(status_code=422, detail="Password must have at least 8 characters")
+
     county_id = _resolve_county_id(db, payload)
     city_id = _resolve_city_id(db, payload, county_id)
     occupation_id = _resolve_occupation_id(db, payload)
     specialization_id = _resolve_specialization_id(db, payload)
     professional_grade_id = _resolve_professional_grade_id(db, payload)
 
-    # Server-side required fields validation
     missing = []
-    if not payload.email:
-        missing.append('email')
-    if not payload.password or len(payload.password) < 8:
-        missing.append('password')
     if not payload.first_name:
-        missing.append('first_name')
+        missing.append("first_name")
     if not payload.last_name:
-        missing.append('last_name')
+        missing.append("last_name")
     if not payload.cnp:
-        missing.append('cnp')
+        missing.append("cnp")
     if not payload.phone:
-        missing.append('phone')
-    if county_id is None:
-        missing.append('county')
+        missing.append("phone")
     if city_id is None:
-        missing.append('city')
+        missing.append("city")
     if occupation_id is None:
-        missing.append('occupation')
-    if specialization_id is None:
-        missing.append('specialization')
+        missing.append("occupation")
     if missing:
-        raise HTTPException(status_code=422, detail=f'Missing or invalid required fields: {",".join(missing)}')
+        raise HTTPException(
+            status_code=422,
+            detail=f"Missing or invalid required fields: {','.join(missing)}",
+        )
 
     now = datetime.utcnow()
     user = user_model(
@@ -1062,24 +1302,30 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
     db.add(user)
     db.flush()
 
-    user_profile = models.UserProfile(
-        user_id=user.id,
-        first_name=payload.first_name,
-        last_name=payload.last_name,
-        cnp=payload.cnp,
-        phone=payload.phone,
-        city_id=city_id,
-        occupation_id=occupation_id,
-        specialization_id=specialization_id,
-        professional_grade_id=professional_grade_id,
-        cod_parafa=payload.cod_parafa or payload.professional_registration_code,
-        cuim=payload.cuim,
-        titlu_universitar=payload.titlu_universitar or payload.professional_grade_name,
-        specialization_secondary_name=payload.specialization_secondary_name,
-        created_at=now,
-        updated_at=now,
-    )
-    db.add(user_profile)
+    profile_kwargs = {
+        "user_id": user.id,
+        "first_name": payload.first_name,
+        "last_name": payload.last_name,
+        "cnp": payload.cnp,
+        "phone": payload.phone,
+        "city_id": city_id,
+        "occupation_id": occupation_id,
+        "specialization_id": specialization_id,
+        "professional_grade_id": professional_grade_id,
+        "created_at": now,
+        "updated_at": now,
+    }
+    optional_profile_fields = {
+        "cod_parafa": payload.cod_parafa or payload.professional_registration_code,
+        "cuim": payload.cuim,
+        "titlu_universitar": payload.titlu_universitar or payload.professional_grade_name,
+        "specialization_secondary_name": payload.specialization_secondary_name,
+    }
+    for field_name, value in optional_profile_fields.items():
+        if hasattr(models.UserProfile, field_name):
+            profile_kwargs[field_name] = value
+
+    db.add(models.UserProfile(**profile_kwargs))
     db.commit()
 
     return {
@@ -1149,7 +1395,7 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
         db.query(models.UserProfile)
         .filter(models.UserProfile.user_id == user_id)
         .options(
-            joinedload(models.UserProfile.city),
+            joinedload(models.UserProfile.city).joinedload(models.City.county),
             joinedload(models.UserProfile.occupation),
             joinedload(models.UserProfile.specialization),
             joinedload(models.UserProfile.professional_grade),
@@ -1160,6 +1406,10 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
         raise HTTPException(status_code=404, detail="User profile not found")
 
     profile_data = serialize_model(profile, include_relationships=True)
+    secondary_specialization = getattr(profile, "specialization_secondary_name", None)
+    if secondary_specialization is not None:
+        profile_data["specialization_secondary_name"] = secondary_specialization
+
     return {
         "user": serialize_model(user),
         "profile": profile_data,
@@ -1167,16 +1417,19 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
         "email": user.email,
         "phone": profile.phone,
         "county_name": profile.city.county.name if getattr(profile.city, "county", None) else None,
-        "city_name": profile_data.get("city_name"),
-        "occupation_name": profile_data.get("occupation_name"),
-        "specialization_name": profile_data.get("specialization_name"),
-        "professional_grade_name": profile_data.get("professional_grade_name"),
+        "city_name": profile.city.name if profile.city else None,
+        "occupation_name": profile.occupation.name if profile.occupation else None,
+        "specialization_name": profile.specialization.name if profile.specialization else None,
+        "professional_grade_name": profile.professional_grade.name if profile.professional_grade else None,
     }
+
 
 @app.get("/users")
 def get_users(db: Session = Depends(get_db)):
     try:
-        user_model = get_user_model()
+        user_model = model_class("User")
+        if user_model is None:
+            return []
         return [serialize_model(item) for item in db.query(user_model).all()]
     except Exception as e:
         return {"error": str(e)}
@@ -1305,7 +1558,15 @@ def get_publication_details(db: Session = Depends(get_db)):
 @app.get("/publication-issues")
 def get_publication_issues(db: Session = Depends(get_db)):
     try:
-        return [serialize_model(item) for item in db.query(models.PublicationIssue).all()]
+        issues = (
+            public_publication_issue_query(db)
+            .order_by(
+                models.PublicationIssue.year.desc(),
+                models.PublicationIssue.issue_number.desc(),
+            )
+            .all()
+        )
+        return [serialize_publication_issue(issue) for issue in issues]
     except Exception as e:
         return {"error": str(e)}
 
@@ -1604,6 +1865,26 @@ class PublicationDetailsPayload(BaseModel):
     subscription_url: Optional[str] = None
 
 
+class PublicationIssueCreatePayload(BaseModel):
+    year: int
+    issue_number: int
+    issue_label: Optional[str] = None
+    cover_image_url: Optional[str] = None
+    description: Optional[str] = None
+    published_at: Optional[datetime] = None
+    issue_url: Optional[str] = None
+
+
+class PublicationIssueUpdatePayload(BaseModel):
+    year: Optional[int] = None
+    issue_number: Optional[int] = None
+    issue_label: Optional[str] = None
+    cover_image_url: Optional[str] = None
+    description: Optional[str] = None
+    published_at: Optional[datetime] = None
+    issue_url: Optional[str] = None
+
+
 class CourseAdminPayload(ContentItemBase):
     course: CourseDetailsPayload = Field(default_factory=CourseDetailsPayload)
 
@@ -1747,6 +2028,23 @@ def normalize_content_item_data(data: dict):
 
 def serialize_content_item(item: models.ContentItem):
     return serialize_model(item, include_relationships=True)
+
+
+def serialize_admin_specialized_content_item(item: models.ContentItem, child_attr: Optional[str] = None):
+    data = serialize_model(item)
+    if item.category:
+        category_data = serialize_model(item.category)
+        data["category"] = category_data
+        data["category_name"] = category_data.get("name")
+    if item.specialization:
+        specialization_data = serialize_model(item.specialization)
+        data["specialization"] = specialization_data
+        data["specialization_name"] = specialization_data.get("name")
+
+    if child_attr:
+        child = getattr(item, child_attr, None)
+        data[child_attr] = serialize_model(child, include_relationships=True) if child else None
+    return data
 
 
 def create_content_item(db: Session, item: BaseModel, expected_type: str):
@@ -2207,6 +2505,57 @@ def admin_get_content_items(db: Session = Depends(get_db)):
     except Exception as e:
         return {"error": str(e)}
 
+
+@app.get("/admin/articles")
+def admin_get_articles(db: Session = Depends(get_db)):
+    try:
+        items = (
+            db.query(models.ContentItem)
+            .options(
+                joinedload(models.ContentItem.category),
+                joinedload(models.ContentItem.specialization),
+            )
+            .filter(models.ContentItem.content_type == models.ContentItemType.article)
+            .filter(models.ContentItem.deleted_at.is_(None))
+            .order_by(
+                models.ContentItem.published_at.desc().nullslast(),
+                models.ContentItem.created_at.desc().nullslast(),
+                models.ContentItem.title.asc(),
+            )
+            .all()
+        )
+        return [serialize_admin_specialized_content_item(item) for item in items]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/admin/news")
+def admin_get_news(db: Session = Depends(get_db)):
+    try:
+        items = (
+            db.query(models.ContentItem)
+            .options(
+                joinedload(models.ContentItem.category),
+                joinedload(models.ContentItem.specialization),
+            )
+            .filter(models.ContentItem.content_type == models.ContentItemType.news)
+            .filter(models.ContentItem.deleted_at.is_(None))
+            .order_by(
+                models.ContentItem.published_at.desc().nullslast(),
+                models.ContentItem.created_at.desc().nullslast(),
+                models.ContentItem.title.asc(),
+            )
+            .all()
+        )
+        return [serialize_admin_specialized_content_item(item) for item in items]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.post("/admin/content-items")
 def admin_create_content_item(item: ContentItemCreate, db: Session = Depends(get_db)):
     try:
@@ -2389,9 +2738,113 @@ def update_publication_details(db_publication: models.Publication, details: Publ
         setattr(db_publication, key, value)
 
 
+def get_admin_publication_or_404(db: Session, publication_id: int):
+    publication = (
+        db.query(models.Publication)
+        .options(joinedload(models.Publication.content_item))
+        .filter(models.Publication.id == publication_id)
+        .first()
+    )
+    if publication is None:
+        raise HTTPException(status_code=404, detail="Publicația nu a fost găsită")
+    return publication
+
+
+def get_admin_publication_issue_or_404(db: Session, issue_id: int):
+    issue = (
+        db.query(models.PublicationIssue)
+        .options(joinedload(models.PublicationIssue.publication))
+        .filter(models.PublicationIssue.id == issue_id)
+        .first()
+    )
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Ediția nu a fost găsită")
+    return issue
+
+
+def validate_publication_issue_values(year: Optional[int], issue_number: Optional[int]):
+    if year is None or issue_number is None:
+        raise HTTPException(status_code=400, detail="Anul și numărul ediției sunt obligatorii")
+    if year < 1900 or year > 2100:
+        raise HTTPException(status_code=400, detail="Anul ediției este invalid")
+    if issue_number < 1:
+        raise HTTPException(status_code=400, detail="Numărul ediției trebuie să fie pozitiv")
+
+
+def validate_publication_issue_url(issue_url: Optional[str]):
+    if issue_url in (None, ""):
+        return
+    if not (issue_url.startswith("http://") or issue_url.startswith("https://")):
+        raise HTTPException(
+            status_code=400,
+            detail="URL ediție / PDF trebuie să înceapă cu http:// sau https://",
+        )
+
+
+def ensure_publication_issue_unique(
+    db: Session,
+    publication_id: int,
+    year: int,
+    issue_number: int,
+    exclude_issue_id: Optional[int] = None,
+):
+    query = (
+        db.query(models.PublicationIssue)
+        .filter(models.PublicationIssue.publication_id == publication_id)
+        .filter(models.PublicationIssue.year == year)
+        .filter(models.PublicationIssue.issue_number == issue_number)
+    )
+    if exclude_issue_id is not None:
+        query = query.filter(models.PublicationIssue.id != exclude_issue_id)
+    if query.first() is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Există deja o ediție pentru această publicație, an și număr",
+        )
+
+
+def publication_issue_data(payload: BaseModel, exclude_unset: bool = False):
+    data = pydantic_dump(payload, exclude_unset=exclude_unset)
+    allowed = {
+        "year",
+        "issue_number",
+        "issue_label",
+        "cover_image_url",
+        "description",
+        "published_at",
+        "issue_url",
+    }
+    result = {key: value for key, value in data.items() if key in allowed}
+    if "issue_url" in result and isinstance(result["issue_url"], str):
+        result["issue_url"] = result["issue_url"].strip() or None
+    validate_publication_issue_url(result.get("issue_url"))
+    return result
+
+
 @app.get("/admin/events")
 def admin_get_events(db: Session = Depends(get_db)):
-    return get_events(db=db, skip=0, limit=1000)
+    try:
+        items = (
+            db.query(models.ContentItem)
+            .options(
+                joinedload(models.ContentItem.category),
+                joinedload(models.ContentItem.specialization),
+                joinedload(models.ContentItem.event).joinedload(models.Event.city),
+            )
+            .filter(models.ContentItem.content_type == models.ContentItemType.event)
+            .filter(models.ContentItem.deleted_at.is_(None))
+            .order_by(
+                models.ContentItem.published_at.desc().nullslast(),
+                models.ContentItem.created_at.desc().nullslast(),
+                models.ContentItem.title.asc(),
+            )
+            .all()
+        )
+        return [serialize_admin_specialized_content_item(item, "event") for item in items]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.post("/admin/events")
@@ -2439,7 +2892,28 @@ def admin_update_event(content_item_id: int, item: EventAdminPayload, db: Sessio
 
 @app.get("/admin/courses")
 def admin_get_courses(db: Session = Depends(get_db)):
-    return get_courses(db=db, skip=0, limit=1000)
+    try:
+        items = (
+            db.query(models.ContentItem)
+            .options(
+                joinedload(models.ContentItem.category),
+                joinedload(models.ContentItem.specialization),
+                joinedload(models.ContentItem.course),
+            )
+            .filter(models.ContentItem.content_type == models.ContentItemType.course)
+            .filter(models.ContentItem.deleted_at.is_(None))
+            .order_by(
+                models.ContentItem.published_at.desc().nullslast(),
+                models.ContentItem.created_at.desc().nullslast(),
+                models.ContentItem.title.asc(),
+            )
+            .all()
+        )
+        return [serialize_admin_specialized_content_item(item, "course") for item in items]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.post("/admin/courses")
@@ -2487,7 +2961,74 @@ def admin_update_course(content_item_id: int, item: CourseAdminPayload, db: Sess
 
 @app.get("/admin/publications")
 def admin_get_publications(db: Session = Depends(get_db)):
-    return get_publications(db=db, skip=0, limit=1000)
+    try:
+        items = (
+            db.query(models.ContentItem)
+            .options(
+                joinedload(models.ContentItem.category),
+                joinedload(models.ContentItem.specialization),
+                joinedload(models.ContentItem.publication),
+            )
+            .filter(models.ContentItem.content_type == models.ContentItemType.publication)
+            .filter(models.ContentItem.deleted_at.is_(None))
+            .order_by(
+                models.ContentItem.published_at.desc().nullslast(),
+                models.ContentItem.created_at.desc().nullslast(),
+                models.ContentItem.title.asc(),
+            )
+            .all()
+        )
+        return [serialize_admin_specialized_content_item(item, "publication") for item in items]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/admin/publications/{publication_id}/issues")
+def admin_get_publication_issues(publication_id: int, db: Session = Depends(get_db)):
+    try:
+        get_admin_publication_or_404(db, publication_id)
+        issues = (
+            db.query(models.PublicationIssue)
+            .options(joinedload(models.PublicationIssue.publication))
+            .filter(models.PublicationIssue.publication_id == publication_id)
+            .order_by(
+                models.PublicationIssue.year.desc(),
+                models.PublicationIssue.issue_number.desc(),
+            )
+            .all()
+        )
+        return [serialize_publication_issue(issue) for issue in issues]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/admin/publications/{publication_id}/issues")
+def admin_create_publication_issue(
+    publication_id: int,
+    item: PublicationIssueCreatePayload,
+    db: Session = Depends(get_db),
+):
+    try:
+        get_admin_publication_or_404(db, publication_id)
+        validate_publication_issue_values(item.year, item.issue_number)
+        ensure_publication_issue_unique(db, publication_id, item.year, item.issue_number)
+        db_issue = models.PublicationIssue(
+            publication_id=publication_id,
+            **publication_issue_data(item),
+        )
+        db.add(db_issue)
+        db.commit()
+        db.refresh(db_issue)
+        return serialize_publication_issue(db_issue)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.post("/admin/publications")
@@ -2500,6 +3041,51 @@ def admin_create_publication(item: PublicationAdminPayload, db: Session = Depend
         db.commit()
         db.refresh(db_item)
         return serialize_content_item(db_item)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/admin/publication-issues/{issue_id}")
+def admin_update_publication_issue(
+    issue_id: int,
+    item: PublicationIssueUpdatePayload,
+    db: Session = Depends(get_db),
+):
+    try:
+        db_issue = get_admin_publication_issue_or_404(db, issue_id)
+        data = publication_issue_data(item, exclude_unset=True)
+        candidate_year = data.get("year", db_issue.year)
+        candidate_issue_number = data.get("issue_number", db_issue.issue_number)
+        validate_publication_issue_values(candidate_year, candidate_issue_number)
+        ensure_publication_issue_unique(
+            db,
+            db_issue.publication_id,
+            candidate_year,
+            candidate_issue_number,
+            exclude_issue_id=issue_id,
+        )
+        for key, value in data.items():
+            setattr(db_issue, key, value)
+        db.commit()
+        db.refresh(db_issue)
+        return serialize_publication_issue(db_issue)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.delete("/admin/publication-issues/{issue_id}")
+def admin_delete_publication_issue(issue_id: int, db: Session = Depends(get_db)):
+    try:
+        db_issue = get_admin_publication_issue_or_404(db, issue_id)
+        db.delete(db_issue)
+        db.commit()
+        return {"success": True, "message": "Ediția a fost ștearsă"}
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):

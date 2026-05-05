@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 import '../models/content_item.dart';
 import '../screens/content_detail_screen.dart';
+import '../screens/publication_issues_screen.dart';
 import 'emc_badge.dart';
 
 class ContentCard extends StatefulWidget {
@@ -17,6 +18,10 @@ class ContentCard extends StatefulWidget {
   final String? dateLabel;
   final String? locationLabel;
   final String? providerLabel;
+  final String? contentType;
+  final int? publicationId;
+  final String? publicationDescription;
+  final String? publicationLogoUrl;
   final int? id; // For debug logging
   final bool isSaved;
   final ValueChanged<int>? onSaveToggle;
@@ -38,6 +43,10 @@ class ContentCard extends StatefulWidget {
     this.dateLabel,
     this.locationLabel,
     this.providerLabel,
+    this.contentType,
+    this.publicationId,
+    this.publicationDescription,
+    this.publicationLogoUrl,
     this.isSaved = false,
     this.onSaveToggle,
     this.onDetailClosed,
@@ -141,6 +150,10 @@ class ContentCard extends StatefulWidget {
       dateLabel: formatDate(model.startDate ?? model.publishedAt),
       locationLabel: eventLocation,
       providerLabel: model.provider,
+      contentType: model.contentType,
+      publicationId: model.publicationId,
+      publicationDescription: model.publicationDescription,
+      publicationLogoUrl: model.publicationLogoUrl,
       isSaved: isSaved,
       onSaveToggle: onSaveToggle,
       onDetailClosed: onDetailClosed,
@@ -471,6 +484,21 @@ class _ContentCardState extends State<ContentCard>
       return;
     }
     if (widget.id == null) return;
+
+    if (widget.contentType == 'publication' && widget.publicationId != null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => PublicationIssuesScreen(
+            publicationId: widget.publicationId!,
+            publicationName: widget.title,
+            publicationDescription: widget.publicationDescription,
+            publicationLogoUrl: widget.publicationLogoUrl ?? widget.imageUrl,
+          ),
+        ),
+      );
+      widget.onDetailClosed?.call();
+      return;
+    }
 
     await Navigator.of(context).push(
       MaterialPageRoute(

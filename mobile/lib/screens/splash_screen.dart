@@ -49,12 +49,11 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (mounted) {
       final isAuthenticated = await _authStorage.isAuthenticated();
-      if (mounted) {
-        if (isAuthenticated) {
-          _navigateToHome();
-        } else {
-          _navigateToLogin();
-        }
+      if (!mounted) return;
+      if (isAuthenticated) {
+        _navigateToHome();
+      } else {
+        _navigateToLogin();
       }
     }
   }

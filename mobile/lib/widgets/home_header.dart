@@ -51,9 +51,7 @@ class _HomeHeaderState extends State<HomeHeader> {
             children: [
               // Avatar with premium gradient ring
               GestureDetector(
-                onTap: () {
-                  if (widget.onProfileTap != null) widget.onProfileTap!();
-                },
+                onTap: widget.onProfileTap,
                 child: _buildAvatar(),
               ),
               const SizedBox(width: 14),
@@ -405,11 +403,11 @@ class _HomeHeaderState extends State<HomeHeader> {
       },
       splashColor: Colors.red.withValues(alpha: 0.1),
       highlightColor: Colors.red.withValues(alpha: 0.05),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         child: Row(
           children: [
-            const SizedBox(
+            SizedBox(
               width: 26,
               child: Center(
                 child: Icon(
@@ -419,8 +417,8 @@ class _HomeHeaderState extends State<HomeHeader> {
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            const Expanded(
+            SizedBox(width: 12),
+            Expanded(
               child: Text(
                 'Ieșire',
                 style: TextStyle(

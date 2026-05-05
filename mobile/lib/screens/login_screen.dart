@@ -1,10 +1,7 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
-import '../services/auth_storage.dart';
 import '../services/api_service.dart';
+import '../services/auth_storage.dart';
 import '../theme/pulse_theme.dart';
 import 'home_screen.dart';
 import 'register_page.dart';
@@ -17,11 +14,10 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  static String get _loginUrl => '${ApiService.baseUrl}/api/login';
-
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _apiService = ApiService();
   final _authStorage = AuthStorage();
 
   bool _isSubmitting = false;
@@ -72,57 +68,26 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = _passwordController.text.trim();
 
     try {
-      final response = await http.post(
-        Uri.parse(_loginUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': email,
-          'password': password,
-        }),
+      final data = await _apiService.login(email: email, password: password);
+      if (!mounted) return;
+
+      final userId = data['user_id'];
+      final sessionToken = data['session_token'] as String? ?? '';
+      await _authStorage.saveSession(
+        userId: userId is int ? userId : int.parse(userId.toString()),
+        sessionToken: sessionToken,
+        email: email,
       );
 
       if (!mounted) return;
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final userId = data['user_id'];
-        final sessionToken = data['session_token'] as String? ?? '';
-        await _authStorage.saveSession(
-          userId: userId is int ? userId : int.parse(userId.toString()),
-          sessionToken: sessionToken,
-          email: email,
-        );
-
-        if (!mounted) return;
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-          (route) => false,
-        );
-      } else {
-        String message = 'Autentificare eșuată';
-        try {
-          final decoded = jsonDecode(response.body);
-          if (decoded is Map<String, dynamic> && decoded['detail'] != null) {
-            message = decoded['detail'].toString();
-          } else if (decoded is Map<String, dynamic> && decoded['error'] != null) {
-            message = decoded['error'].toString();
-          } else if (response.body.isNotEmpty) {
-            message = response.body;
-          }
-        } catch (_) {
-          if (response.body.isNotEmpty) {
-            message = response.body;
-          }
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
-      }
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Eroare de conexiune: $e')),
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     } finally {
       if (mounted) {
@@ -160,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: PulseTheme.background,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(24),
           child: Form(
             key: _formKey,
             child: Column(
@@ -225,7 +190,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Text(
                           'Autentificare',
@@ -238,11 +206,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const RegisterPage()),
-                    );
-                  },
+                  onPressed: _isSubmitting
+                      ? null
+                      : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const RegisterPage(),
+                            ),
+                          );
+                        },
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: PulseTheme.primary),
                     padding: const EdgeInsets.symmetric(vertical: 16),

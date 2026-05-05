@@ -39,17 +39,15 @@ function fillPlacementFilter() {
 }
 
 async function loadAds() {
-    const errorMsg = document.getElementById('error-msg');
     const tbody = document.getElementById('ads-table-body');
 
     try {
-        errorMsg.style.display = 'none';
         tbody.innerHTML = '<tr><td colspan="11">Se încarcă...</td></tr>';
         allAds = await API.get('/admin/ads');
+        UI.hideAlert('error-msg');
         renderAds();
     } catch (err) {
-        errorMsg.textContent = 'Eroare la încărcarea reclamelor: ' + err.message;
-        errorMsg.style.display = 'block';
+        UI.showError('error-msg', 'Eroare la încărcarea reclamelor: ' + err.message);
         tbody.innerHTML = '<tr><td colspan="11">Nu s-au putut încărca reclamele.</td></tr>';
     }
 }

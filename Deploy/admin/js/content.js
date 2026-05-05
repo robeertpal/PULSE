@@ -1,25 +1,60 @@
 document.addEventListener('DOMContentLoaded', () => {
-    UI.init('content', 'Toate Articolele & Conținutul');
+    const pageConfig = getContentPageConfig();
+
+    UI.init(pageConfig.activePage, pageConfig.title);
     loadContent();
 
     document.getElementById('search-input').addEventListener('input', debounce(loadContent, 500));
-    document.getElementById('type-filter').addEventListener('change', loadContent);
+    document.getElementById('type-filter')?.addEventListener('change', loadContent);
     document.getElementById('status-filter').addEventListener('change', loadContent);
 });
 
 let allContent = [];
 
+function getContentPageConfig() {
+    const pageName = window.location.pathname.split('/').pop();
+    const configs = {
+        'articles.html': {
+            activePage: 'articles',
+            title: 'Articole',
+            endpoint: '/admin/articles',
+            emptyMessage: 'Nu există articole.',
+            showTypeColumn: false,
+            colspan: 5,
+        },
+        'news.html': {
+            activePage: 'news',
+            title: 'Știri',
+            endpoint: '/admin/news',
+            emptyMessage: 'Nu există știri.',
+            showTypeColumn: false,
+            colspan: 5,
+        },
+    };
+
+    return configs[pageName] || {
+        activePage: 'content',
+        title: 'Tot Conținutul',
+        endpoint: '/admin/content-items',
+        emptyMessage: 'Nu s-au găsit rezultate.',
+        showTypeColumn: true,
+        colspan: 6,
+    };
+}
+
 async function loadContent() {
-    const errorMsg = document.getElementById('error-msg');
     const tbody = document.getElementById('content-table-body');
+    const pageConfig = getContentPageConfig();
     
     try {
         if (allContent.length === 0) {
-            allContent = await API.get('/admin/content-items');
+            allContent = await API.get(pageConfig.endpoint);
         }
 
+        UI.hideAlert('error-msg');
+
         const searchTerm = document.getElementById('search-input').value.toLowerCase();
-        const typeFilter = document.getElementById('type-filter').value;
+        const typeFilter = document.getElementById('type-filter')?.value || '';
         const statusFilter = document.getElementById('status-filter').value;
 
         let filtered = allContent.filter(item => {
@@ -32,7 +67,7 @@ async function loadContent() {
         tbody.innerHTML = '';
 
         if (filtered.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6">Nu s-au găsit rezultate.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="${pageConfig.colspan}">${pageConfig.emptyMessage}</td></tr>`;
             return;
         }
 
@@ -42,7 +77,7 @@ async function loadContent() {
             
             tr.innerHTML = `
                 <td><strong>${item.title}</strong></td>
-                <td><span class="badge" style="background:#E2E8F0; color:#475569;">${item.content_type}</span></td>
+                ${pageConfig.showTypeColumn ? `<td><span class="badge" style="background:#E2E8F0; color:#475569;">${item.content_type}</span></td>` : ''}
                 <td>${item.category_name || item.category?.name || '-'}</td>
                 <td><span class="badge ${item.status}">${item.status}</span></td>
                 <td>${dateStr}</td>
@@ -56,8 +91,7 @@ async function loadContent() {
         });
 
     } catch (err) {
-        errorMsg.textContent = 'Eroare la încărcarea datelor: ' + err.message;
-        errorMsg.style.display = 'block';
+        UI.showError('error-msg', 'Eroare la încărcarea datelor: ' + err.message);
     }
 }
 

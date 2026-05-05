@@ -1,8 +1,6 @@
 document.addEventListener('DOMContentLoaded', async () => {
     UI.init('dashboard', 'Dashboard');
 
-    const errorMsg = document.getElementById('error-msg');
-    
     try {
         const data = await API.get('/admin/dashboard/stats');
         
@@ -35,7 +33,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
     } catch (err) {
-        errorMsg.textContent = 'Eroare la încărcarea datelor: ' + err.message;
-        errorMsg.style.display = 'block';
+        UI.showError('error-msg', 'Eroare la încărcarea datelor: ' + err.message);
     }
 });

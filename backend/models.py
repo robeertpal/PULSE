@@ -333,9 +333,9 @@ class ContentItem(Base):
     created_by_user_id = Column(Integer)
     updated_by_user_id = Column(Integer)
     published_by_user_id = Column(Integer)
-    created_at = Column(DateTime(timezone=True))
-    updated_at = Column(DateTime(timezone=True))
-    deleted_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     category = relationship("ContentCategory", backref="content_items")
     specialization = relationship("Specialization", backref="content_items")
@@ -466,6 +466,7 @@ class PublicationIssue(Base):
     cover_image_url = Column(Text)
     description = Column(Text)
     published_at = Column(DateTime(timezone=True))
+    issue_url = Column(Text)
 
     publication = relationship("Publication", backref="issues")
 

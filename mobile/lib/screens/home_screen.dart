@@ -1,18 +1,16 @@
 import 'dart:ui';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/pulse_theme.dart';
 import '../models/ad_item.dart';
 import '../models/content_item.dart';
 import '../models/filter_option.dart';
-import '../services/auth_storage.dart';
 import '../services/api_service.dart';
+import '../services/auth_storage.dart';
 import 'login_screen.dart';
-import 'saved_content_screen.dart';
 import 'profile_screen.dart';
+import 'saved_content_screen.dart';
 import '../widgets/home_header.dart';
 import '../widgets/featured_card.dart';
 import '../widgets/content_section.dart';
@@ -48,9 +46,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Set<int> _savedContentIds = {};
   bool _isLoading = true;
   bool _isFeaturedLoading = true;
+  bool _filtersExpanded = false;
   int _contentRequestId = 0;
   String? _errorMessage;
-  String? _userName;
 
   static const int _sectionCount = 10;
   static const List<String> _homeAdPlacements = [
@@ -100,23 +98,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _loadData();
     _loadFilterOptions();
     _loadSavedContentIds();
-    _loadProfileHeader();
-  }
-
-  Future<void> _loadProfileHeader() async {
-    try {
-      final profile = await _apiService.getMyProfile();
-      if (!mounted) return;
-      setState(() {
-        _userName = (profile['display_name'] as String?) ?? _userName;
-      });
-    } catch (_) {
-      final localName = await _authStorage.getUserName();
-      if (!mounted) return;
-      setState(() {
-        _userName ??= localName;
-      });
-    }
   }
 
   List<int> get _categoryFilterIds => _selectedCategoryIds.toList()..sort();
@@ -126,6 +107,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   bool get _hasActiveFilters =>
       _selectedCategoryIds.isNotEmpty || _selectedSpecializationIds.isNotEmpty;
+
+  int get _activeFilterCount =>
+      _selectedCategoryIds.length + _selectedSpecializationIds.length;
+
+  bool get _hasAnyHomeContent =>
+      _featuredItems.isNotEmpty ||
+      _news.isNotEmpty ||
+      _publications.isNotEmpty ||
+      _events.isNotEmpty ||
+      _courses.isNotEmpty;
 
   Future<void> _loadData() async {
     if (!mounted) return;
@@ -266,18 +257,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _loadSavedContentIds();
   }
 
+  Future<void> _openProfile() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ProfileScreen()),
+    );
+  }
+
   Future<void> _logout() async {
-    final sessionToken = await _authStorage.getSessionToken();
-    if (sessionToken != null && sessionToken.isNotEmpty) {
-      try {
-        await http.post(
-          Uri.parse('${ApiService.baseUrl}/api/logout'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'session_token': sessionToken}),
-        );
-      } catch (_) {
-        // Clear local state even if the backend revocation request fails.
-      }
+    try {
+      await _apiService.logout();
+    } catch (e) {
+      debugPrint('Logout request failed: $e');
     }
 
     await _authStorage.clearSession();
@@ -302,6 +293,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (!_selectedCategoryIds.add(id)) {
         _selectedCategoryIds.remove(id);
       }
+      _filtersExpanded = false;
     });
     _loadData();
   }
@@ -311,6 +303,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (!_selectedSpecializationIds.add(id)) {
         _selectedSpecializationIds.remove(id);
       }
+      _filtersExpanded = false;
     });
     _loadData();
   }
@@ -320,6 +313,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     setState(() {
       _selectedCategoryIds.clear();
       _selectedSpecializationIds.clear();
+      _filtersExpanded = false;
     });
     _loadData();
   }
@@ -503,6 +497,51 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  String _filterNameForId(List<FilterOption> options, int id, String fallback) {
+    for (final option in options) {
+      if (option.id == id) return option.name;
+    }
+    return fallback;
+  }
+
+  String _activeFilterSummary() {
+    final labels = <String>[
+      ..._categoryFilterIds.map(
+        (id) => _filterNameForId(_categories, id, 'Categorie $id'),
+      ),
+      ..._specializationFilterIds.map(
+        (id) => _filterNameForId(_specializations, id, 'Specializare $id'),
+      ),
+    ];
+
+    if (labels.isEmpty) return 'Niciun filtru activ';
+    if (labels.length <= 2) return labels.join(' • ');
+    return '${labels.take(2).join(' • ')} +${labels.length - 2}';
+  }
+
+  Widget _buildActiveFilterBadge() {
+    if (!_hasActiveFilters) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: PulseTheme.primary.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: PulseTheme.primary.withValues(alpha: 0.14)),
+      ),
+      child: Text(
+        _activeFilterCount == 1
+            ? '1 filtru activ'
+            : '$_activeFilterCount filtre active',
+        style: const TextStyle(
+          color: PulseTheme.primary,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
   Widget _buildContentFilters() {
     if (_categories.isEmpty && _specializations.isEmpty) {
       return const SizedBox.shrink();
@@ -511,7 +550,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 6, 20, 22),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
         decoration: BoxDecoration(
           color: PulseTheme.surface,
           borderRadius: BorderRadius.circular(22),
@@ -528,68 +567,219 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Filtre',
-                    style: TextStyle(
-                      color: PulseTheme.textPrimary,
-                      fontSize: 19,
-                      fontWeight: FontWeight.w800,
-                    ),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: () {
+                  setState(() {
+                    _filtersExpanded = !_filtersExpanded;
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: PulseTheme.primary.withValues(alpha: 0.08),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.tune,
+                          color: PulseTheme.primary,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Filtre',
+                          style: TextStyle(
+                            color: PulseTheme.textPrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      _buildActiveFilterBadge(),
+                      const SizedBox(width: 8),
+                      AnimatedRotation(
+                        turns: _filtersExpanded ? 0.5 : 0,
+                        duration: PulseTheme.animFast,
+                        curve: PulseTheme.animCurve,
+                        child: const Icon(
+                          Icons.keyboard_arrow_down,
+                          color: PulseTheme.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                TextButton(
-                  onPressed: _hasActiveFilters ? _resetFilters : null,
-                  style: TextButton.styleFrom(
-                    foregroundColor: PulseTheme.primary,
-                    disabledForegroundColor: PulseTheme.textTertiary,
-                    minimumSize: const Size(0, 34),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  child: const Text('Sterge filtre'),
-                ),
-              ],
+              ),
             ),
-            const SizedBox(height: 4),
-            const Text(
-              'Restrange continutul dupa interesul tau clinic.',
-              style: TextStyle(
-                color: PulseTheme.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+            AnimatedSize(
+              duration: PulseTheme.animMedium,
+              curve: PulseTheme.animCurve,
+              alignment: Alignment.topCenter,
+              child: _filtersExpanded
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 12),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(
+                            'Restrânge conținutul după interesul tău clinic.',
+                            style: TextStyle(
+                              color: PulseTheme.textSecondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        _buildFilterRow(
+                          label: 'Categorii',
+                          options: _categories,
+                          selectedIds: _selectedCategoryIds,
+                          onSelected: _toggleCategory,
+                        ),
+                        if (_categories.isNotEmpty &&
+                            _specializations.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            child: Divider(
+                              height: 1,
+                              color: PulseTheme.borderLight.withValues(
+                                alpha: 0.92,
+                              ),
+                            ),
+                          ),
+                        _buildFilterRow(
+                          label: 'Specializări',
+                          options: _specializations,
+                          selectedIds: _selectedSpecializationIds,
+                          onSelected: _toggleSpecialization,
+                        ),
+                        if (_hasActiveFilters) ...[
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: _resetFilters,
+                              style: TextButton.styleFrom(
+                                foregroundColor: PulseTheme.primary,
+                                minimumSize: const Size(0, 36),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                                textStyle: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              icon: const Icon(Icons.close, size: 16),
+                              label: const Text('Șterge filtre'),
+                            ),
+                          ),
+                        ],
+                      ],
+                    )
+                  : _hasActiveFilters
+                      ? Padding(
+                          padding: const EdgeInsets.fromLTRB(52, 6, 12, 2),
+                          child: Text(
+                            _activeFilterSummary(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: PulseTheme.textSecondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeEmptyState() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+        decoration: BoxDecoration(
+          color: PulseTheme.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: PulseTheme.borderLight),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.035),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
+              spreadRadius: -8,
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: PulseTheme.primary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.search_off_rounded,
+                color: PulseTheme.primary,
+                size: 26,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              _hasActiveFilters
+                  ? 'Nu există conținut pentru filtrele selectate.'
+                  : 'Nu există conținut publicat momentan.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: PulseTheme.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
                 height: 1.3,
               ),
             ),
-            const SizedBox(height: 18),
-            _buildFilterRow(
-              label: 'Categorii',
-              options: _categories,
-              selectedIds: _selectedCategoryIds,
-              onSelected: _toggleCategory,
-            ),
-            if (_categories.isNotEmpty && _specializations.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Divider(
-                  height: 1,
-                  color: PulseTheme.borderLight.withValues(alpha: 0.92),
+            if (_hasActiveFilters) ...[
+              const SizedBox(height: 14),
+              TextButton.icon(
+                onPressed: _resetFilters,
+                style: TextButton.styleFrom(
+                  foregroundColor: PulseTheme.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
                 ),
+                icon: const Icon(Icons.close, size: 16),
+                label: const Text('Șterge filtre'),
               ),
-            _buildFilterRow(
-              label: 'Specializari',
-              options: _specializations,
-              selectedIds: _selectedSpecializationIds,
-              onSelected: _toggleSpecialization,
-            ),
+            ],
           ],
         ),
       ),
@@ -694,7 +884,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         if (_isFeaturedLoading || _featuredItems.isNotEmpty)
           const SizedBox(height: 30),
 
+        if (!_isFeaturedLoading && !_hasAnyHomeContent)
+          _animatedSection(2, _buildHomeEmptyState()),
+
         // Știri Section
+        if (_news.isNotEmpty) ...[
         _animatedSection(
           2,
           ContentSection(
@@ -711,8 +905,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ads: _adsByPlacement['home_after_news'] ?? const <AdItem>[],
           onAdTap: _handleAdTap,
         ),
+        ],
 
         // Reviste Section
+        if (_publications.isNotEmpty) ...[
         _animatedSection(
           3,
           ContentSection(
@@ -729,8 +925,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ads: _adsByPlacement['home_after_publications'] ?? const <AdItem>[],
           onAdTap: _handleAdTap,
         ),
+        ],
 
         // Evenimente Section
+        if (_events.isNotEmpty) ...[
         _animatedSection(
           4,
           ContentSection(
@@ -747,8 +945,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ads: _adsByPlacement['home_after_events'] ?? const <AdItem>[],
           onAdTap: _handleAdTap,
         ),
+        ],
 
         // Cursuri Section
+        if (_courses.isNotEmpty) ...[
         _animatedSection(
           5,
           ContentSection(
@@ -765,6 +965,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ads: _adsByPlacement['home_after_courses'] ?? const <AdItem>[],
           onAdTap: _handleAdTap,
         ),
+        ],
 
         const SizedBox(height: 100),
       ],
@@ -864,15 +1065,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             _animatedSection(
               0,
               HomeHeader(
-                doctorName: _userName ?? 'Medic curent',
+                doctorName: 'Andrei',
                 avatarUrl: '',
                 onSavedTap: _openSavedContent,
+                onProfileTap: _openProfile,
                 onLogoutTap: _logout,
-                onProfileTap: () async {
-                  // navigate to profile mock-up
-                  final route = MaterialPageRoute(builder: (_) => const ProfileScreen());
-                  await Navigator.of(context).push(route);
-                },
               ),
             ),
             // Conținutul paginii cu tranziții

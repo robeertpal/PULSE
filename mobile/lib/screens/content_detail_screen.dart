@@ -24,7 +24,12 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   bool _isLoading = true;
   bool _isSaved = false;
   bool _isSaving = false;
+  bool _isAiSummaryLoading = false;
   String? _errorMessage;
+  String? _aiSummary;
+  List<String> _aiKeyPoints = [];
+  String? _aiDisclaimer;
+  String? _aiSummaryError;
 
   @override
   void initState() {
@@ -102,6 +107,59 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           _isSaving = false;
         });
       }
+    }
+  }
+
+  String _friendlyError(Object error) {
+    final message = error.toString().replaceFirst(
+          RegExp(r'^Exception:\s*'),
+          '',
+        );
+    return message.trim().isEmpty
+        ? 'Serviciul AI nu este disponibil momentan.'
+        : message;
+  }
+
+  Future<void> _generateAiSummary() async {
+    if (_isAiSummaryLoading) return;
+
+    setState(() {
+      _isAiSummaryLoading = true;
+      _aiSummaryError = null;
+    });
+
+    try {
+      final result = await _apiService.generateAiSummaryResult(
+        widget.contentItemId,
+      );
+      final rawKeyPoints = result['key_points'];
+      final keyPoints = rawKeyPoints is List
+          ? rawKeyPoints
+              .map((point) => point.toString().trim())
+              .where((point) => point.isNotEmpty)
+              .toList()
+          : <String>[];
+
+      if (!mounted) return;
+      setState(() {
+        _aiSummary = result['summary'].toString().trim();
+        _aiKeyPoints = keyPoints;
+        _aiDisclaimer = result['disclaimer']?.toString();
+        _isAiSummaryLoading = false;
+      });
+    } catch (e) {
+      final message = _friendlyError(e);
+      if (!mounted) return;
+      setState(() {
+        _aiSummaryError = message;
+        _isAiSummaryLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -231,6 +289,175 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     );
   }
 
+  Widget _buildAiSummaryButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: _isAiSummaryLoading ? null : _generateAiSummary,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: PulseTheme.primary,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: PulseTheme.primary.withValues(alpha: 0.58),
+          disabledForegroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          elevation: 0,
+        ),
+        icon: _isAiSummaryLoading
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.auto_awesome_outlined),
+        label: Text(
+          _isAiSummaryLoading
+              ? 'Se generează rezumatul...'
+              : 'Generează rezumat AI',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAiSummarySection() {
+    if (_aiSummary == null && _aiSummaryError == null) {
+      return const SizedBox.shrink();
+    }
+
+    final hasSummary = _aiSummary != null && _aiSummary!.trim().isNotEmpty;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: hasSummary
+            ? PulseTheme.primary.withValues(alpha: 0.07)
+            : PulseTheme.newsContent.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: hasSummary
+              ? PulseTheme.primary.withValues(alpha: 0.14)
+              : PulseTheme.newsContent.withValues(alpha: 0.18),
+        ),
+      ),
+      child: hasSummary
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(
+                      Icons.auto_awesome,
+                      color: PulseTheme.primary,
+                      size: 20,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Rezumat AI',
+                      style: TextStyle(
+                        color: PulseTheme.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _aiSummary!,
+                  style: const TextStyle(
+                    color: PulseTheme.textPrimary,
+                    fontSize: 15,
+                    height: 1.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (_aiKeyPoints.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Idei cheie',
+                    style: TextStyle(
+                      color: PulseTheme.textPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ..._aiKeyPoints.map(
+                    (point) => Padding(
+                      padding: const EdgeInsets.only(bottom: 7),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.only(top: 8, right: 9),
+                            decoration: const BoxDecoration(
+                              color: PulseTheme.primary,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              point,
+                              style: const TextStyle(
+                                color: PulseTheme.textSecondary,
+                                height: 1.42,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                if (_aiDisclaimer != null && _aiDisclaimer!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _aiDisclaimer!,
+                    style: const TextStyle(
+                      color: PulseTheme.textTertiary,
+                      fontSize: 12,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.info_outline,
+                  color: PulseTheme.newsContent,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _aiSummaryError ??
+                        'Serviciul AI nu este disponibil momentan.',
+                    style: const TextStyle(
+                      color: PulseTheme.textSecondary,
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
   Widget _buildDetail(ContentItem item) {
     final title = item.publicationName ?? item.title;
     final body = _cleanBody(item.body);
@@ -321,26 +548,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                     ),
                   ],
                   const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'AI summary will be added in the next task.',
-                                ),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.auto_awesome_outlined),
-                          label: const Text('AI Summary'),
-                        ),
-                      ),
-                    ],
-                  ),
+                  _buildAiSummaryButton(),
+                  _buildAiSummarySection(),
                   const SizedBox(height: 24),
                   Text(
                     body.isNotEmpty
