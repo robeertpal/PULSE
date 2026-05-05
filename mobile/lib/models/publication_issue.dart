@@ -10,6 +10,7 @@ class PublicationIssue {
   final String? coverImageUrl;
   final String? description;
   final DateTime? publishedAt;
+  final String? issueUrl;
 
   const PublicationIssue({
     required this.id,
@@ -23,6 +24,7 @@ class PublicationIssue {
     this.coverImageUrl,
     this.description,
     this.publishedAt,
+    this.issueUrl,
   });
 
   factory PublicationIssue.fromJson(Map<String, dynamic> json) {
@@ -43,6 +45,7 @@ class PublicationIssue {
       coverImageUrl: json['cover_image_url'],
       description: json['description'],
       publishedAt: parseDate(json['published_at']),
+      issueUrl: json['issue_url'],
     );
   }
 
