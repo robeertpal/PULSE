@@ -9,6 +9,8 @@ class HomeHeader extends StatefulWidget {
   final String avatarUrl;
   final int emcPoints;
   final VoidCallback? onSavedTap;
+  final VoidCallback? onLogoutTap;
+  final VoidCallback? onProfileTap;
 
   final bool compactMode;
 
@@ -18,6 +20,8 @@ class HomeHeader extends StatefulWidget {
     this.avatarUrl = '',
     this.emcPoints = 142,
     this.onSavedTap,
+    this.onLogoutTap,
+    this.onProfileTap,
     this.compactMode = false,
   });
 
@@ -47,7 +51,7 @@ class _HomeHeaderState extends State<HomeHeader> {
             children: [
               // Avatar with premium gradient ring
               GestureDetector(
-                onTap: () {},
+                onTap: widget.onProfileTap,
                 child: _buildAvatar(),
               ),
               const SizedBox(width: 14),
@@ -277,7 +281,12 @@ class _HomeHeaderState extends State<HomeHeader> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildDropdownItem(context, 'Profilul meu', 'assets/icons/people.svg'),
+                          _buildDropdownItem(
+                            context,
+                            'Profilul meu',
+                            'assets/icons/people.svg',
+                            onTap: widget.onProfileTap,
+                          ),
                           _buildDropdownItem(context, 'Cursurile mele', 'assets/icons/graduation.svg'),
                           _buildDropdownItem(context, 'Revistele mele', 'assets/icons/books.svg'),
                           _buildDropdownItem(context, 'Biletele mele', 'assets/icons/events.svg'),
@@ -291,6 +300,8 @@ class _HomeHeaderState extends State<HomeHeader> {
                             'assets/icons/heart.svg',
                             onTap: widget.onSavedTap,
                           ),
+                          if (widget.onLogoutTap != null)
+                            _buildLogoutItem(context),
                         ],
                       ),
                     ),
@@ -372,6 +383,48 @@ class _HomeHeaderState extends State<HomeHeader> {
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                   color: PulseTheme.textPrimary,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogoutItem(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).pop();
+        Future.delayed(const Duration(milliseconds: 200), () {
+          widget.onLogoutTap?.call();
+        });
+      },
+      splashColor: Colors.red.withValues(alpha: 0.1),
+      highlightColor: Colors.red.withValues(alpha: 0.05),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 26,
+              child: Center(
+                child: Icon(
+                  Icons.logout,
+                  size: 20,
+                  color: Colors.redAccent,
+                ),
+              ),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Ieșire',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.redAccent,
                   letterSpacing: -0.3,
                 ),
               ),
