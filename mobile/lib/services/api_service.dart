@@ -5,15 +5,27 @@ import '../models/ad_item.dart';
 import '../models/content_item.dart';
 import '../models/filter_option.dart';
 import '../models/publication_issue.dart';
+import 'auth_storage.dart';
 
 class ApiService {
-  // Pentru local development:
-  // - iOS Simulator / Web: http://127.0.0.1:8000
-  // - Android Emulator: http://10.0.2.2:8000
+  // Use --dart-define=PULSE_API_BASE_URL=... for local development.
   static const String _baseUrl = String.fromEnvironment(
     'PULSE_API_BASE_URL',
     defaultValue: 'https://pulse-backend-5f9b.onrender.com',
   );
+  static String get baseUrl => _baseUrl;
+
+  final AuthStorage _authStorage = AuthStorage();
+
+  Future<Map<String, String>> _buildAuthHeaders() async {
+    final sessionToken = await _authStorage.getSessionToken();
+    if (sessionToken == null || sessionToken.isEmpty) {
+      throw Exception('No active session token');
+    }
+    return {
+      'Authorization': 'Bearer $sessionToken',
+    };
+  }
 
   String _buildRepeatedQueryString(Map<String, List<String>> queryParams) {
     final parts = <String>[];
@@ -44,6 +56,95 @@ class ApiService {
       // Keep the caller's friendly fallback when the backend body is not JSON.
     }
     return fallback;
+  }
+
+  Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'email': email,
+            'password': password,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_responseErrorMessage(response, 'Autentificare eșuată'));
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Răspuns de autentificare neașteptat.');
+    }
+    return decoded;
+  }
+
+  Future<Map<String, dynamic>> register(Map<String, dynamic> payload) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/register'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_responseErrorMessage(response, 'Înregistrare eșuată'));
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Răspuns de înregistrare neașteptat.');
+    }
+    return decoded;
+  }
+
+  Future<void> logout() async {
+    final sessionToken = await _authStorage.getSessionToken();
+    if (sessionToken == null || sessionToken.isEmpty) {
+      return;
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/logout'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'session_token': sessionToken}),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200 && response.statusCode != 404) {
+      throw Exception(_responseErrorMessage(response, 'Logout eșuat'));
+    }
+  }
+
+  Future<Map<String, dynamic>> getMyProfile() async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/me/profile'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut încărca profilul.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Răspuns profil neașteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching profile: $e');
+      rethrow;
+    }
   }
 
   Future<List<ContentItem>> _getContentList(

@@ -7,6 +7,9 @@ import '../models/ad_item.dart';
 import '../models/content_item.dart';
 import '../models/filter_option.dart';
 import '../services/api_service.dart';
+import '../services/auth_storage.dart';
+import 'login_screen.dart';
+import 'profile_screen.dart';
 import 'saved_content_screen.dart';
 import '../widgets/home_header.dart';
 import '../widgets/featured_card.dart';
@@ -29,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late List<Animation<Offset>> _slideAnimations;
 
   final ApiService _apiService = ApiService();
+  final AuthStorage _authStorage = AuthStorage();
   List<ContentItem> _courses = [];
   List<ContentItem> _events = [];
   List<ContentItem> _publications = [];
@@ -251,6 +255,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       MaterialPageRoute(builder: (context) => const SavedContentScreen()),
     );
     _loadSavedContentIds();
+  }
+
+  Future<void> _openProfile() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ProfileScreen()),
+    );
+  }
+
+  Future<void> _logout() async {
+    try {
+      await _apiService.logout();
+    } catch (e) {
+      debugPrint('Logout request failed: $e');
+    }
+
+    await _authStorage.clearSession();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   Widget _savedContentCard(ContentItem item) {
@@ -1042,6 +1068,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 doctorName: 'Andrei',
                 avatarUrl: '',
                 onSavedTap: _openSavedContent,
+                onProfileTap: _openProfile,
+                onLogoutTap: _logout,
               ),
             ),
             // Conținutul paginii cu tranziții

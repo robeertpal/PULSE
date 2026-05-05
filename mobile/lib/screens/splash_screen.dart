@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'home_screen.dart';
+import '../services/auth_storage.dart';
 import '../theme/pulse_theme.dart';
 import 'login_screen.dart';
 import '../services/api_service.dart';
@@ -13,6 +15,7 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> {
   final ApiService _apiService = ApiService();
+  final AuthStorage _authStorage = AuthStorage();
 
   @override
   void initState() {
@@ -45,8 +48,26 @@ class _SplashScreenState extends State<SplashScreen> {
     ]);
 
     if (mounted) {
-      _navigateToLogin();
+      final isAuthenticated = await _authStorage.isAuthenticated();
+      if (!mounted) return;
+      if (isAuthenticated) {
+        _navigateToHome();
+      } else {
+        _navigateToLogin();
+      }
     }
+  }
+
+  void _navigateToHome() {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 1000),
+      ),
+    );
   }
 
   void _navigateToLogin() {
