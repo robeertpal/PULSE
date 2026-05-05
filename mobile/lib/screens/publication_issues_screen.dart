@@ -86,6 +86,19 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
     return issues;
   }
 
+  List<PublicationIssue> _issuesForSelectedYearAndIssue() {
+    final issuesForYear = _issuesForYear(_selectedYear);
+    if (_selectedIssueNumber == null) return issuesForYear;
+    return issuesForYear
+        .where((issue) => issue.issueNumber == _selectedIssueNumber)
+        .toList();
+  }
+
+  String _issueCountLabel(int count) {
+    if (count == 1) return '1 ediție găsită';
+    return '$count ediții găsite';
+  }
+
   String? _formatDate(DateTime? date) {
     if (date == null) return null;
     const months = [
@@ -176,32 +189,70 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
     final description = widget.publicationDescription?.trim();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: _imageFor(
-              widget.publicationLogoUrl,
-              width: 72,
-              height: 72,
-              fit: BoxFit.contain,
-              fallbackIcon: Icons.library_books_outlined,
-            ),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(
+            color: PulseTheme.magazineContent.withValues(alpha: 0.10),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          boxShadow: [
+            BoxShadow(
+              color: PulseTheme.magazineContent.withValues(alpha: 0.08),
+              blurRadius: 24,
+              offset: const Offset(0, 14),
+              spreadRadius: -14,
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 78,
+              height: 78,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: PulseTheme.magazineContent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: PulseTheme.magazineContent.withValues(alpha: 0.14),
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: _imageFor(
+                  widget.publicationLogoUrl,
+                  width: 62,
+                  height: 62,
+                  fit: BoxFit.contain,
+                  fallbackIcon: Icons.library_books_outlined,
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 Text(
                   widget.publicationName,
                   style: const TextStyle(
                     color: PulseTheme.textPrimary,
-                    fontSize: 22,
+                    fontSize: 23,
                     fontWeight: FontWeight.w800,
                     height: 1.16,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Alege anul și ediția dorită',
+                  style: TextStyle(
+                    color: PulseTheme.magazineContent,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
                 if (description != null && description.isNotEmpty) ...[
@@ -218,10 +269,11 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                     ),
                   ),
                 ],
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -250,32 +302,56 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                 final selected = year == _selectedYear;
                 return Padding(
                   padding: const EdgeInsets.only(right: 10),
-                  child: ChoiceChip(
-                    label: Text(year.toString()),
-                    selected: selected,
-                    onSelected: (_) {
-                      final issues = _issuesForYear(year);
-                      setState(() {
-                        _selectedYear = year;
-                        _selectedIssueNumber = issues.isNotEmpty
-                            ? issues.first.issueNumber
-                            : null;
-                      });
-                    },
-                    showCheckmark: false,
-                    selectedColor:
-                        PulseTheme.magazineContent.withValues(alpha: 0.14),
-                    backgroundColor: Colors.white,
-                    side: BorderSide(
-                      color: selected
-                          ? PulseTheme.magazineContent
-                          : PulseTheme.border,
+                  child: AnimatedContainer(
+                    duration: PulseTheme.animFast,
+                    curve: PulseTheme.animCurve,
+                    decoration: BoxDecoration(
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: PulseTheme.magazineContent.withValues(
+                                  alpha: 0.18,
+                                ),
+                                blurRadius: 16,
+                                offset: const Offset(0, 8),
+                                spreadRadius: -6,
+                              ),
+                            ]
+                          : const [],
                     ),
-                    labelStyle: TextStyle(
-                      color: selected
-                          ? PulseTheme.magazineContent
-                          : PulseTheme.textSecondary,
-                      fontWeight: FontWeight.w800,
+                    child: ChoiceChip(
+                      label: Text(year.toString()),
+                      selected: selected,
+                      onSelected: (_) {
+                        final issues = _issuesForYear(year);
+                        setState(() {
+                          _selectedYear = year;
+                          _selectedIssueNumber = issues.isNotEmpty
+                              ? issues.first.issueNumber
+                              : null;
+                        });
+                      },
+                      showCheckmark: false,
+                      selectedColor: PulseTheme.magazineContent,
+                      backgroundColor: Colors.white,
+                      side: BorderSide(
+                        color: selected
+                            ? PulseTheme.magazineContent
+                            : PulseTheme.border,
+                        width: selected ? 1.2 : 1,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 10,
+                      ),
+                      labelStyle: TextStyle(
+                        color: selected ? Colors.white : PulseTheme.textSecondary,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 );
@@ -311,28 +387,52 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                 final selected = issue.issueNumber == _selectedIssueNumber;
                 return Padding(
                   padding: const EdgeInsets.only(right: 10),
-                  child: ChoiceChip(
-                    label: Text('Nr. ${issue.issueNumber}'),
-                    selected: selected,
-                    onSelected: (_) {
-                      setState(() {
-                        _selectedIssueNumber = issue.issueNumber;
-                      });
-                    },
-                    showCheckmark: false,
-                    selectedColor:
-                        PulseTheme.magazineContent.withValues(alpha: 0.14),
-                    backgroundColor: Colors.white,
-                    side: BorderSide(
-                      color: selected
-                          ? PulseTheme.magazineContent
-                          : PulseTheme.border,
+                  child: AnimatedContainer(
+                    duration: PulseTheme.animFast,
+                    curve: PulseTheme.animCurve,
+                    decoration: BoxDecoration(
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: PulseTheme.magazineContent.withValues(
+                                  alpha: 0.18,
+                                ),
+                                blurRadius: 16,
+                                offset: const Offset(0, 8),
+                                spreadRadius: -6,
+                              ),
+                            ]
+                          : const [],
                     ),
-                    labelStyle: TextStyle(
-                      color: selected
-                          ? PulseTheme.magazineContent
-                          : PulseTheme.textSecondary,
-                      fontWeight: FontWeight.w800,
+                    child: ChoiceChip(
+                      label: Text('Nr. ${issue.issueNumber}'),
+                      selected: selected,
+                      onSelected: (_) {
+                        setState(() {
+                          _selectedIssueNumber = issue.issueNumber;
+                        });
+                      },
+                      showCheckmark: false,
+                      selectedColor: PulseTheme.magazineContent,
+                      backgroundColor: Colors.white,
+                      side: BorderSide(
+                        color: selected
+                            ? PulseTheme.magazineContent
+                            : PulseTheme.border,
+                        width: selected ? 1.2 : 1,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 10,
+                      ),
+                      labelStyle: TextStyle(
+                        color: selected ? Colors.white : PulseTheme.textSecondary,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 );
@@ -347,9 +447,10 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
   Widget _buildIssueCard(PublicationIssue issue) {
     final dateLabel = _formatDate(issue.publishedAt);
     final description = issue.description?.trim();
+    final hasIssueUrl = issue.issueUrl?.trim().isNotEmpty == true;
 
     return InkWell(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(22),
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
@@ -364,19 +465,26 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(22),
           border: Border.all(color: PulseTheme.borderLight),
-          boxShadow: PulseTheme.cardShadow,
+          boxShadow: [
+            BoxShadow(
+              color: PulseTheme.magazineContent.withValues(alpha: 0.07),
+              blurRadius: 24,
+              offset: const Offset(0, 14),
+              spreadRadius: -16,
+            ),
+          ],
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               child: _imageFor(
                 issue.coverImageUrl,
-                width: 86,
-                height: 118,
+                width: 92,
+                height: 126,
                 fallbackIcon: Icons.menu_book_outlined,
               ),
             ),
@@ -385,13 +493,44 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    issue.publicationName ?? widget.publicationName,
-                    style: const TextStyle(
-                      color: PulseTheme.magazineContent,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          issue.publicationName ?? widget.publicationName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: PulseTheme.magazineContent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      if (hasIssueUrl) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: PulseTheme.magazineContent.withValues(
+                              alpha: 0.10,
+                            ),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: const Text(
+                            'PDF',
+                            style: TextStyle(
+                              color: PulseTheme.magazineContent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -442,6 +581,46 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSelectionEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: PulseTheme.borderLight),
+        boxShadow: [
+          BoxShadow(
+            color: PulseTheme.magazineContent.withValues(alpha: 0.06),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+            spreadRadius: -14,
+          ),
+        ],
+      ),
+      child: const Column(
+        children: [
+          Icon(
+            Icons.filter_alt_off_outlined,
+            color: PulseTheme.magazineContent,
+            size: 30,
+          ),
+          SizedBox(height: 12),
+          Text(
+            'Nu există ediții pentru selecția curentă.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: PulseTheme.textSecondary,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              height: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -506,7 +685,8 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
     }
 
     final years = _yearsFor(_issues);
-    final visibleIssues = _issuesForYear(_selectedYear);
+    final issuesForSelectedYear = _issuesForYear(_selectedYear);
+    final filteredIssues = _issuesForSelectedYearAndIssue();
 
     return RefreshIndicator(
       color: PulseTheme.primary,
@@ -519,18 +699,33 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
         children: [
           _buildHeader(),
           _buildYearSelector(years),
-          _buildIssueSelector(visibleIssues),
+          _buildIssueSelector(issuesForSelectedYear),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
-              children: visibleIssues
-                  .map(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    _issueCountLabel(filteredIssues.length),
+                    style: const TextStyle(
+                      color: PulseTheme.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                if (filteredIssues.isEmpty)
+                  _buildSelectionEmptyState()
+                else
+                  ...filteredIssues.map(
                     (issue) => Padding(
                       padding: const EdgeInsets.only(bottom: 14),
                       child: _buildIssueCard(issue),
                     ),
-                  )
-                  .toList(),
+                  ),
+              ],
             ),
           ),
         ],
