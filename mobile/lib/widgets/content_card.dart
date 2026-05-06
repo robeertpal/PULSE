@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 import '../models/content_item.dart';
@@ -19,9 +19,19 @@ class ContentCard extends StatefulWidget {
   final String? locationLabel;
   final String? providerLabel;
   final String? contentType;
+  final String? contentTitle;
+  final String? contentShortDescription;
+  final String? contentBody;
+  final String? contentHeroImageUrl;
+  final String? contentThumbnailUrl;
+  final DateTime? contentPublishedAt;
   final int? publicationId;
   final String? publicationDescription;
   final String? publicationLogoUrl;
+  final String? publicationEmcCreditsText;
+  final String? publicationCreditationText;
+  final String? publicationIndexingText;
+  final String? publicationSubscriptionUrl;
   final int? id; // For debug logging
   final bool isSaved;
   final ValueChanged<int>? onSaveToggle;
@@ -44,9 +54,19 @@ class ContentCard extends StatefulWidget {
     this.locationLabel,
     this.providerLabel,
     this.contentType,
+    this.contentTitle,
+    this.contentShortDescription,
+    this.contentBody,
+    this.contentHeroImageUrl,
+    this.contentThumbnailUrl,
+    this.contentPublishedAt,
     this.publicationId,
     this.publicationDescription,
     this.publicationLogoUrl,
+    this.publicationEmcCreditsText,
+    this.publicationCreditationText,
+    this.publicationIndexingText,
+    this.publicationSubscriptionUrl,
     this.isSaved = false,
     this.onSaveToggle,
     this.onDetailClosed,
@@ -70,7 +90,8 @@ class ContentCard extends StatefulWidget {
     String iconAsset = 'assets/icons/newspaper.svg';
 
     if (model.contentType == 'article') {
-      categoryColor = PulseTheme.courseContent; // In design articles are news-like but here courseContent
+      categoryColor = PulseTheme
+          .courseContent; // In design articles are news-like but here courseContent
       iconAsset = 'assets/icons/newspaper.svg';
     } else if (model.contentType == 'news') {
       categoryColor = PulseTheme.newsContent;
@@ -102,7 +123,8 @@ class ContentCard extends StatefulWidget {
       chosenImageUrl = model.thumbnailUrl;
     } else if (model.heroImageUrl != null && model.heroImageUrl!.isNotEmpty) {
       chosenImageUrl = model.heroImageUrl;
-    } else if (model.publicationLogoUrl != null && model.publicationLogoUrl!.isNotEmpty) {
+    } else if (model.publicationLogoUrl != null &&
+        model.publicationLogoUrl!.isNotEmpty) {
       chosenImageUrl = model.publicationLogoUrl;
     }
 
@@ -125,12 +147,12 @@ class ContentCard extends StatefulWidget {
       return '${date.day} ${months[date.month - 1]} ${date.year}';
     }
 
-    final String? eventLocation =
-        model.venueName?.trim().isNotEmpty == true
-            ? model.venueName
-            : model.cityName;
+    final String? eventLocation = model.venueName?.trim().isNotEmpty == true
+        ? model.venueName
+        : model.cityName;
 
-    final subtitle = model.shortDescription ??
+    final subtitle =
+        model.shortDescription ??
         model.publicationDescription ??
         model.specializationName ??
         model.categoryName ??
@@ -151,9 +173,20 @@ class ContentCard extends StatefulWidget {
       locationLabel: eventLocation,
       providerLabel: model.provider,
       contentType: model.contentType,
+      contentTitle: model.title,
+      contentShortDescription: model.shortDescription,
+      contentBody: model.body,
+      contentHeroImageUrl: model.heroImageUrl,
+      contentThumbnailUrl: model.thumbnailUrl,
+      contentPublishedAt: model.publishedAt,
       publicationId: model.publicationId,
       publicationDescription: model.publicationDescription,
       publicationLogoUrl: model.publicationLogoUrl,
+      publicationEmcCreditsText: model.publicationEmcCreditsText,
+      publicationCreditationText: model.publicationCreditationText,
+      publicationIndexingText: model.publicationIndexingText,
+      publicationSubscriptionUrl:
+          model.publicationSubscriptionUrl ?? model.contentUrl,
       isSaved: isSaved,
       onSaveToggle: onSaveToggle,
       onDetailClosed: onDetailClosed,
@@ -215,7 +248,7 @@ class _ContentCardState extends State<ContentCard>
 
   Widget _buildImageContent() {
     final String? rawUrl = widget.imageUrl?.trim();
-    
+
     if (rawUrl == null || rawUrl.isEmpty) {
       return _buildIconPlaceholder();
     }
@@ -227,7 +260,9 @@ class _ContentCardState extends State<ContentCard>
         rawUrl,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
-          debugPrint('[ContentCard ID:${widget.id}] ERROR loading remote image: $rawUrl');
+          debugPrint(
+            '[ContentCard ID:${widget.id}] ERROR loading remote image: $rawUrl',
+          );
           return _buildIconPlaceholder();
         },
         loadingBuilder: (context, child, loadingProgress) {
@@ -235,8 +270,8 @@ class _ContentCardState extends State<ContentCard>
           return _buildIconPlaceholder();
         },
       );
-    } 
-    
+    }
+
     if (!rawUrl.startsWith('assets/') && !rawUrl.startsWith('images/')) {
       return _buildIconPlaceholder();
     }
@@ -252,7 +287,9 @@ class _ContentCardState extends State<ContentCard>
       assetPath = 'assets/images/$rawUrl';
     }
 
-    debugPrint('[ContentCard ID:${widget.id}] Loading LOCAL asset: $assetPath (Original: $rawUrl)');
+    debugPrint(
+      '[ContentCard ID:${widget.id}] Loading LOCAL asset: $assetPath (Original: $rawUrl)',
+    );
     return Image.asset(
       assetPath,
       fit: BoxFit.cover,
@@ -359,9 +396,7 @@ class _ContentCardState extends State<ContentCard>
                 child: Stack(
                   children: [
                     // â”€â”€ Image or Placeholder Icon â”€â”€
-                    Positioned.fill(
-                      child: _buildImageContent(),
-                    ),
+                    Positioned.fill(child: _buildImageContent()),
                     // EMC Points badge (consistent with featured cards)
                     if (widget.emcPoints != null)
                       Positioned(
@@ -369,11 +404,7 @@ class _ContentCardState extends State<ContentCard>
                         top: 10,
                         child: EmcBadge(points: widget.emcPoints!),
                       ),
-                    Positioned(
-                      left: 10,
-                      top: 10,
-                      child: _buildSaveButton(),
-                    ),
+                    Positioned(left: 10, top: 10, child: _buildSaveButton()),
                   ],
                 ),
               ),
@@ -386,7 +417,10 @@ class _ContentCardState extends State<ContentCard>
                     children: [
                       // Tag pill
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: widget.categoryColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
@@ -462,8 +496,12 @@ class _ContentCardState extends State<ContentCard>
                           child: LinearProgressIndicator(
                             value: widget.progress!,
                             minHeight: 4,
-                            backgroundColor: widget.categoryColor.withValues(alpha: 0.1),
-                            valueColor: AlwaysStoppedAnimation<Color>(widget.categoryColor),
+                            backgroundColor: widget.categoryColor.withValues(
+                              alpha: 0.1,
+                            ),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              widget.categoryColor,
+                            ),
                           ),
                         ),
                       ],
@@ -491,8 +529,18 @@ class _ContentCardState extends State<ContentCard>
           builder: (context) => PublicationIssuesScreen(
             publicationId: widget.publicationId!,
             publicationName: widget.title,
+            contentTitle: widget.contentTitle,
+            contentShortDescription: widget.contentShortDescription,
+            contentBody: widget.contentBody,
+            contentHeroImageUrl: widget.contentHeroImageUrl,
+            contentThumbnailUrl: widget.contentThumbnailUrl,
+            contentPublishedAt: widget.contentPublishedAt,
             publicationDescription: widget.publicationDescription,
             publicationLogoUrl: widget.publicationLogoUrl ?? widget.imageUrl,
+            emcCreditsText: widget.publicationEmcCreditsText,
+            creditationText: widget.publicationCreditationText,
+            indexingText: widget.publicationIndexingText,
+            subscriptionUrl: widget.publicationSubscriptionUrl,
           ),
         ),
       );
@@ -531,10 +579,7 @@ class _MetaPill extends StatelessWidget {
   final String label;
   final Color color;
 
-  const _MetaPill({
-    required this.label,
-    required this.color,
-  });
+  const _MetaPill({required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {

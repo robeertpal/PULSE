@@ -8,10 +8,11 @@ import '../models/publication_issue.dart';
 import 'auth_storage.dart';
 
 class ApiService {
-  // Use --dart-define=PULSE_API_BASE_URL=... for local development.
-  static const String _baseUrl = String.fromEnvironment(
+  // Pentru local development:
+  // - iOS Simulator / Web: http://127.0.0.1:8000
+  // - Android Emulator: http://10.0.2.2:8000
+  static const String _configuredBaseUrl = String.fromEnvironment(
     'PULSE_API_BASE_URL',
-    defaultValue: 'https://pulse-backend-5f9b.onrender.com',
   );
   static String get baseUrl => _baseUrl;
 
@@ -22,9 +23,23 @@ class ApiService {
     if (sessionToken == null || sessionToken.isEmpty) {
       throw Exception('No active session token');
     }
-    return {
-      'Authorization': 'Bearer $sessionToken',
-    };
+    return {'Authorization': 'Bearer $sessionToken'};
+  }
+
+  static String get _baseUrl {
+    final configured = _configuredBaseUrl.trim();
+    if (configured.isNotEmpty) {
+      return configured.replaceAll(RegExp(r'/+$'), '');
+    }
+
+    if (kDebugMode) {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        return 'http://10.0.2.2:8000';
+      }
+      return 'http://127.0.0.1:8000';
+    }
+
+    return 'https://pulse-backend-5f9b.onrender.com';
   }
 
   String _buildRepeatedQueryString(Map<String, List<String>> queryParams) {
@@ -66,10 +81,7 @@ class ApiService {
         .post(
           Uri.parse('$baseUrl/api/login'),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'email': email,
-            'password': password,
-          }),
+          body: jsonEncode({'email': email, 'password': password}),
         )
         .timeout(const Duration(seconds: 15));
 
@@ -259,9 +271,7 @@ class ApiService {
     );
   }
 
-  Future<List<PublicationIssue>> getPublicationIssues(
-    int publicationId,
-  ) async {
+  Future<List<PublicationIssue>> getPublicationIssues(int publicationId) async {
     try {
       final response = await http
           .get(Uri.parse('$_baseUrl/publications/$publicationId/issues'))
@@ -278,10 +288,19 @@ class ApiService {
         throw Exception('Unexpected publication issues response format');
       }
 
-      return decoded
+      final issues = decoded
           .whereType<Map<String, dynamic>>()
           .map((json) => PublicationIssue.fromJson(json))
           .toList();
+      if (kDebugMode) {
+        for (final issue in issues) {
+          debugPrint(
+            'Publication issue PDF [list]: '
+            'id=${issue.id}, issue.pdfUrl=${issue.pdfUrl}',
+          );
+        }
+      }
+      return issues;
     } catch (e) {
       debugPrint('Error fetching publication issues: $e');
       rethrow;
@@ -308,10 +327,59 @@ class ApiService {
         throw Exception('Unexpected publication issue response format');
       }
 
-      return PublicationIssue.fromJson(decoded);
+      final issue = PublicationIssue.fromJson(decoded);
+      _logPublicationIssuePdf('detail', issue, decoded);
+      return issue;
     } catch (e) {
       debugPrint('Error fetching publication issue detail: $e');
       rethrow;
+    }
+  }
+
+  String getPublicationIssuePdfUrl(int issueId) {
+    return '$_baseUrl/publication-issues/$issueId/pdf';
+  }
+
+  void _logPublicationIssuePdf(
+    String source,
+    PublicationIssue issue,
+    Map<String, dynamic> json,
+  ) {
+    if (!kDebugMode) return;
+    debugPrint(
+      'Publication issue PDF [$source]: '
+      'id=${issue.id}, '
+      'issue.pdfUrl=${issue.pdfUrl}, '
+      'json.pdf_url=${json['pdf_url']}, '
+      'json.issue_url=${json['issue_url']}, '
+      'json.document_url=${json['document_url']}',
+    );
+  }
+
+  Future<Map<String, String?>> getPublicationIssuePdfDiagnostics(
+    int issueId,
+  ) async {
+    final url = getPublicationIssuePdfUrl(issueId);
+    try {
+      final response = await http
+          .head(Uri.parse(url))
+          .timeout(const Duration(seconds: 12));
+      final diagnostics = {
+        'url': url,
+        'statusCode': response.statusCode.toString(),
+        'contentType': response.headers['content-type'],
+        'contentLength': response.headers['content-length'],
+        'acceptRanges': response.headers['accept-ranges'],
+      };
+      if (kDebugMode) {
+        debugPrint('Publication issue PDF diagnostics: $diagnostics');
+      }
+      return diagnostics;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Publication issue PDF diagnostics failed: url=$url, $e');
+      }
+      return {'url': url, 'error': e.toString()};
     }
   }
 
@@ -356,7 +424,9 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> generateAiSummaryResult(int contentItemId) async {
+  Future<Map<String, dynamic>> generateAiSummaryResult(
+    int contentItemId,
+  ) async {
     try {
       final response = await http
           .post(Uri.parse('$_baseUrl/content-items/$contentItemId/ai-summary'))
@@ -393,9 +463,45 @@ class ApiService {
     return result['summary'] as String;
   }
 
+  Future<Map<String, dynamic>> generatePublicationIssueAiSummaryResult(
+    int issueId,
+  ) async {
+    try {
+      final response = await http
+          .post(Uri.parse('$_baseUrl/publication-issues/$issueId/ai-summary'))
+          .timeout(const Duration(seconds: 60));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Rezumatul nu a putut fi generat. Încearcă din nou.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns AI neasteptat.');
+      }
+
+      final summary = decoded['summary'];
+      if (summary is! String || summary.trim().isEmpty) {
+        throw Exception('Rezumatul nu a putut fi generat. Încearcă din nou.');
+      }
+
+      return decoded;
+    } catch (e) {
+      debugPrint('Error generating publication issue AI summary: $e');
+      rethrow;
+    }
+  }
+
   Future<List<FilterOption>> getCategories() async {
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/content-categories'));
+      final response = await http.get(
+        Uri.parse('$_baseUrl/content-categories'),
+      );
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         return data.map((json) => FilterOption.fromJson(json)).toList();
@@ -443,7 +549,9 @@ class ApiService {
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
-        throw Exception('Failed to load saved content ids: ${response.statusCode}');
+        throw Exception(
+          'Failed to load saved content ids: ${response.statusCode}',
+        );
       }
 
       final decoded = json.decode(response.body);
@@ -480,7 +588,9 @@ class ApiService {
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
-        throw Exception('Failed to remove saved content: ${response.statusCode}');
+        throw Exception(
+          'Failed to remove saved content: ${response.statusCode}',
+        );
       }
     } catch (e) {
       debugPrint('Error removing saved content: $e');

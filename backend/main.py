@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 import enum
 import hashlib
+from io import BytesIO
 import json
 import logging
 import os
@@ -12,9 +13,11 @@ from pathlib import Path
 from typing import List, Optional
 from uuid import uuid4
 
+import httpx
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pypdf import PdfReader
 from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
@@ -35,15 +38,25 @@ logger = logging.getLogger("pulse.admin")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-    "http://localhost:5500",
-    "http://127.0.0.1:5500",
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-    "https://pulse-medichub.web.app",
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "https://pulse-medichub.web.app",
     ],
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[
+        "Accept-Ranges",
+        "Content-Disposition",
+        "Content-Length",
+        "Content-Range",
+        "Content-Type",
+        "ETag",
+        "Last-Modified",
+    ],
 )
 
 
@@ -507,6 +520,127 @@ def build_gemini_summary_prompt(summary_input: str):
     )
 
 
+def generate_ai_summary_payload(summary_input: str):
+    provider = os.getenv("AI_PROVIDER", "gemini").strip().lower()
+    api_key = os.getenv("GEMINI_API_KEY")
+    if provider != "gemini" or not api_key or genai is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Serviciul AI nu este configurat momentan.",
+        )
+
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    prompt_text = build_gemini_summary_prompt(summary_input)
+
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt_text,
+        )
+        payload = parse_plain_ai_summary_response(response.text or "")
+    except Exception:
+        logger.exception("Gemini AI summary generation failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Serviciul AI nu este disponibil momentan. Încearcă din nou mai târziu.",
+        )
+
+    if not payload["summary"]:
+        raise HTTPException(
+            status_code=503,
+            detail="Serviciul AI nu este disponibil momentan. Încearcă din nou mai târziu.",
+        )
+
+    return payload, model
+
+
+def download_publication_issue_pdf_bytes(issue: models.PublicationIssue) -> bytes:
+    pdf_url = (issue.issue_url or "").strip()
+    if not pdf_url:
+        raise HTTPException(
+            status_code=404,
+            detail="PDF-ul ediției nu este disponibil momentan.",
+        )
+
+    if not (pdf_url.startswith("http://") or pdf_url.startswith("https://")):
+        raise HTTPException(
+            status_code=422,
+            detail="URL-ul PDF configurat pentru ediție nu este valid.",
+        )
+
+    try:
+        with httpx.Client(timeout=45.0, follow_redirects=True) as client:
+            response = client.get(
+                pdf_url,
+                headers={
+                    "Accept": "application/pdf",
+                    "User-Agent": "PULSE/1.0",
+                },
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("Publication issue PDF download failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail="Documentul nu a putut fi deschis. Verifică fișierul PDF sau încearcă din nou.",
+        )
+
+    content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+    if response.status_code != 200 or content_type != "application/pdf":
+        raise HTTPException(
+            status_code=502,
+            detail="Documentul nu a putut fi deschis. Verifică fișierul PDF sau încearcă din nou.",
+        )
+
+    return response.content
+
+
+def extract_pdf_text(pdf_bytes: bytes, max_pages: int = 40, max_chars: int = 24000) -> str:
+    try:
+        reader = PdfReader(BytesIO(pdf_bytes))
+        parts = []
+        for page in reader.pages[:max_pages]:
+            text = clean_ai_summary_text(page.extract_text() or "")
+            if text:
+                parts.append(text)
+            if sum(len(part) for part in parts) >= max_chars:
+                break
+    except Exception:
+        logger.exception("Publication issue PDF text extraction failed")
+        raise HTTPException(
+            status_code=422,
+            detail="Textul PDF-ului nu a putut fi extras pentru rezumat.",
+        )
+
+    text = "\n\n".join(parts)
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        raise HTTPException(
+            status_code=422,
+            detail="PDF-ul nu conține suficient text pentru rezumat.",
+        )
+    return text[:max_chars]
+
+
+def build_publication_issue_summary_input(issue: models.PublicationIssue, pdf_text: str):
+    publication_name = clean_ai_summary_text(issue.publication.name if issue.publication else "")
+    issue_label = clean_ai_summary_text(issue.issue_label)
+    description = clean_ai_summary_text(issue.description)
+
+    return "\n\n".join(
+        part
+        for part in [
+            f"Publicație: {publication_name}" if publication_name else None,
+            f"Ediție: {issue_label}" if issue_label else None,
+            f"An: {issue.year}",
+            f"Număr: {issue.issue_number}",
+            f"Descriere: {description}" if description else None,
+            f"Conținut extras din PDF: {pdf_text}",
+        ]
+        if part
+    )
+
+
 def public_content_ordering():
     return (
         models.ContentItem.is_featured.desc(),
@@ -522,6 +656,7 @@ def serialize_content_card(item):
         "slug": item.slug,
         "content_type": serialize_value(item.content_type),
         "short_description": item.short_description,
+        "body": item.body,
         "thumbnail_url": item.thumbnail_url,
         "hero_image_url": item.hero_image_url,
         "category_id": item.category_id,
@@ -575,6 +710,9 @@ def serialize_content_card(item):
             "name": item.publication.name,
             "logo_url": item.publication.logo_url,
             "description": item.publication.description,
+            "emc_credits_text": item.publication.emc_credits_text,
+            "creditation_text": item.publication.creditation_text,
+            "indexing_text": item.publication.indexing_text,
             "subscription_url": item.publication.subscription_url,
         }
         data.update(
@@ -584,6 +722,10 @@ def serialize_content_card(item):
                 "name": item.publication.name,
                 "logo_url": item.publication.logo_url,
                 "description": item.publication.description,
+                "emc_credits_text": item.publication.emc_credits_text,
+                "creditation_text": item.publication.creditation_text,
+                "indexing_text": item.publication.indexing_text,
+                "subscription_url": item.publication.subscription_url,
             }
         )
 
@@ -598,6 +740,10 @@ def serialize_publication_issue(issue: models.PublicationIssue, include_publicat
         "publication_name": publication.name if publication else None,
         "publication_logo_url": publication.logo_url if publication else None,
         "publication_description": publication.description if publication else None,
+        "publication_emc_credits_text": publication.emc_credits_text if publication else None,
+        "publication_creditation_text": publication.creditation_text if publication else None,
+        "publication_indexing_text": publication.indexing_text if publication else None,
+        "publication_subscription_url": publication.subscription_url if publication else None,
         "year": issue.year,
         "issue_number": issue.issue_number,
         "issue_label": issue.issue_label,
@@ -605,6 +751,8 @@ def serialize_publication_issue(issue: models.PublicationIssue, include_publicat
         "description": issue.description,
         "published_at": serialize_value(issue.published_at),
         "issue_url": issue.issue_url,
+        "pdf_url": issue.issue_url,
+        "document_url": issue.issue_url,
     }
 
 
@@ -737,36 +885,7 @@ def generate_content_ai_summary(
         )
 
     summary_input = build_ai_summary_input(item)
-    provider = os.getenv("AI_PROVIDER", "gemini").strip().lower()
-    api_key = os.getenv("GEMINI_API_KEY")
-    if provider != "gemini" or not api_key or genai is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Serviciul AI nu este configurat momentan.",
-        )
-
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    prompt_text = build_gemini_summary_prompt(summary_input)
-
-    try:
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt_text,
-        )
-        payload = parse_plain_ai_summary_response(response.text or "")
-    except Exception:
-        logger.exception("Gemini AI summary generation failed")
-        raise HTTPException(
-            status_code=503,
-            detail="Serviciul AI nu este disponibil momentan. Încearcă din nou mai târziu.",
-        )
-
-    if not payload["summary"]:
-        raise HTTPException(
-            status_code=503,
-            detail="Serviciul AI nu este disponibil momentan. Încearcă din nou mai târziu.",
-        )
+    payload, model = generate_ai_summary_payload(summary_input)
 
     return {
         "content_item_id": content_item_id,
@@ -972,6 +1091,127 @@ def get_publication_issue_detail(
 ):
     issue = get_public_publication_issue_or_404(db, issue_id)
     return serialize_publication_issue(issue)
+
+
+@app.post("/publication-issues/{issue_id}/ai-summary")
+def generate_publication_issue_ai_summary(
+    issue_id: int,
+    db: Session = Depends(get_db),
+):
+    issue = get_public_publication_issue_or_404(db, issue_id)
+    pdf_bytes = download_publication_issue_pdf_bytes(issue)
+    pdf_text = extract_pdf_text(pdf_bytes)
+    summary_input = build_publication_issue_summary_input(issue, pdf_text)
+    payload, model = generate_ai_summary_payload(summary_input)
+
+    return {
+        "publication_issue_id": issue_id,
+        "summary": payload["summary"],
+        "key_points": payload["key_points"],
+        "disclaimer": AI_SUMMARY_DISCLAIMER,
+        "model": model,
+    }
+
+
+def build_publication_issue_pdf_response(
+    issue_id: int,
+    range_header: Optional[str],
+    db: Session,
+    include_body: bool = True,
+):
+    issue = get_public_publication_issue_or_404(db, issue_id)
+    pdf_url = (issue.issue_url or "").strip()
+
+    if not pdf_url:
+        raise HTTPException(
+            status_code=404,
+            detail="PDF-ul ediției nu este disponibil momentan.",
+        )
+
+    if not (pdf_url.startswith("http://") or pdf_url.startswith("https://")):
+        raise HTTPException(
+            status_code=422,
+            detail="URL-ul PDF configurat pentru ediție nu este valid.",
+        )
+
+    request_headers = {
+        "Accept": "application/pdf",
+        "User-Agent": "PULSE/1.0",
+    }
+    if range_header:
+        request_headers["Range"] = range_header
+
+    try:
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            if include_body:
+                upstream = client.get(pdf_url, headers=request_headers)
+            else:
+                upstream = client.head(pdf_url, headers=request_headers)
+    except httpx.HTTPError as exc:
+        logger.warning("Publication issue PDF fetch failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail="Documentul nu a putut fi deschis. Verifică fișierul PDF sau încearcă din nou.",
+        )
+
+    if upstream.status_code not in (200, 206):
+        raise HTTPException(
+            status_code=502,
+            detail="Documentul nu a putut fi deschis. Verifică fișierul PDF sau încearcă din nou.",
+        )
+
+    content_type = upstream.headers.get("content-type", "").split(";")[0].strip().lower()
+    looks_like_pdf_url = pdf_url.split("?", 1)[0].lower().endswith(".pdf")
+    if content_type != "application/pdf" and not looks_like_pdf_url:
+        raise HTTPException(
+            status_code=502,
+            detail="Documentul nu a putut fi deschis. Verifică fișierul PDF sau încearcă din nou.",
+        )
+
+    response_headers = {
+        "Cache-Control": "private, max-age=300",
+        "Content-Disposition": f'inline; filename="publication-issue-{issue_id}.pdf"',
+        "Accept-Ranges": upstream.headers.get("accept-ranges", "bytes"),
+    }
+    for source_name, target_name in (
+        ("content-range", "Content-Range"),
+        ("content-length", "Content-Length"),
+        ("etag", "ETag"),
+        ("last-modified", "Last-Modified"),
+    ):
+        value = upstream.headers.get(source_name)
+        if value:
+            response_headers[target_name] = value
+
+    return Response(
+        content=upstream.content if include_body else b"",
+        status_code=upstream.status_code,
+        media_type="application/pdf",
+        headers=response_headers,
+    )
+
+
+@app.get("/publication-issues/{issue_id}/pdf")
+def get_publication_issue_pdf(
+    issue_id: int,
+    range_header: Optional[str] = Header(default=None, alias="Range"),
+    db: Session = Depends(get_db),
+):
+    return build_publication_issue_pdf_response(issue_id, range_header, db)
+
+
+@app.head("/publication-issues/{issue_id}/pdf")
+def head_publication_issue_pdf(
+    issue_id: int,
+    range_header: Optional[str] = Header(default=None, alias="Range"),
+    db: Session = Depends(get_db),
+):
+    return build_publication_issue_pdf_response(
+        issue_id,
+        range_header,
+        db,
+        include_body=False,
+    )
 
 
 @app.get("/saved-content/ids")

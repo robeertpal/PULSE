@@ -112,9 +112,9 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
 
   String _friendlyError(Object error) {
     final message = error.toString().replaceFirst(
-          RegExp(r'^Exception:\s*'),
-          '',
-        );
+      RegExp(r'^Exception:\s*'),
+      '',
+    );
     return message.trim().isEmpty
         ? 'Serviciul AI nu este disponibil momentan.'
         : message;
@@ -135,9 +135,9 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
       final rawKeyPoints = result['key_points'];
       final keyPoints = rawKeyPoints is List
           ? rawKeyPoints
-              .map((point) => point.toString().trim())
-              .where((point) => point.isNotEmpty)
-              .toList()
+                .map((point) => point.toString().trim())
+                .where((point) => point.isNotEmpty)
+                .toList()
           : <String>[];
 
       if (!mounted) return;
@@ -155,10 +155,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         _isAiSummaryLoading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
     }
   }
@@ -253,8 +250,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     final assetPath = imageUrl.startsWith('assets/')
         ? imageUrl
         : imageUrl.startsWith('images/')
-            ? 'assets/$imageUrl'
-            : 'assets/images/$imageUrl';
+        ? 'assets/$imageUrl'
+        : 'assets/images/$imageUrl';
     return Image.asset(
       assetPath,
       height: 220,
@@ -475,10 +472,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(28),
-                bottomRight: Radius.circular(28),
-              ),
+              borderRadius: BorderRadius.circular(28),
               child: _buildHeroImage(item),
             ),
             Padding(
