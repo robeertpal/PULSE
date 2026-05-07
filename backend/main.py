@@ -32,19 +32,27 @@ except ImportError:
 
 load_dotenv()
 
-app = FastAPI(title="PULSE Backend API")
+app = FastAPI(title="PULSE Backend API", docs_url=None, redoc_url=None, openapi_url=None)
 logger = logging.getLogger("pulse.admin")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+environment = os.getenv("ENVIRONMENT", "development").lower()
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "https://pulse-medichub.web.app")
+allow_origins = [origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()]
+
+allow_origin_regex = None
+if environment == "development":
+    allow_origins.extend([
         "http://localhost:5500",
         "http://127.0.0.1:5500",
         "http://localhost:8080",
         "http://127.0.0.1:8080",
-        "https://pulse-medichub.web.app",
-    ],
-    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
+    ])
+    allow_origin_regex = r"^http://(localhost|127\.0\.0\.1):\d+$"
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -162,6 +170,34 @@ def get_current_user_id(
     return user.id
 
 
+def get_current_admin_user_id(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> int:
+    role_model = model_class("Role")
+    user_role_model = model_class("UserRole")
+
+    if role_model is None or user_role_model is None:
+        raise HTTPException(status_code=500, detail="Eroare la configurarea rolurilor.")
+
+    # Find the admin role
+    admin_role = db.query(role_model).filter(role_model.name == "admin").first()
+    if not admin_role:
+        raise HTTPException(status_code=403, detail="Acces respins. Rolul de administrator nu este definit.")
+
+    # Check if the user has the admin role
+    user_role = db.query(user_role_model).filter(
+        user_role_model.user_id == user_id,
+        user_role_model.role_id == admin_role.id
+    ).first()
+
+    if not user_role:
+        raise HTTPException(status_code=403, detail="Acces respins. Necesită privilegii de administrator.")
+
+    return user_id
+
+
+
 def visible_content_query(db: Session):
     return (
         db.query(models.ContentItem)
@@ -199,11 +235,6 @@ def apply_content_filters(query, category_ids: Optional[List[int]] = None, speci
     return query
 
 
-def get_current_demo_user_id() -> int:
-    # TODO: Replace demo user id with authenticated user once login is implemented.
-    return 1
-
-
 def hash_password(password: str, salt: bytes | None = None) -> str:
     salt = salt or secrets.token_bytes(16)
     iterations = 120_000
@@ -237,25 +268,6 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 def create_session_token() -> str:
     return uuid4().hex
-
-
-def ensure_demo_user_exists(db: Session, user_id: int):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if user is not None:
-        return
-
-    now = datetime.utcnow()
-    db.add(
-        models.User(
-            id=user_id,
-            email=f"demo-doctor-{user_id}@pulse.local",
-            password_hash="demo-auth-placeholder",
-            is_active=True,
-            created_at=now,
-            updated_at=now,
-        )
-    )
-    db.commit()
 
 
 def _normalize_name(value: Optional[str]) -> Optional[str]:
@@ -812,7 +824,6 @@ def root():
     return {
         "message": "PULSE API is running",
         "environment": os.getenv("ENVIRONMENT", "development"),
-        "docs": "/docs",
     }
 
 
@@ -827,9 +838,9 @@ def health(db: Session = Depends(get_db)):
     try:
         db.execute(text("SELECT 1"))
         result["database"] = "connected"
-    except Exception as e:
+    except Exception:
         result["status"] = "degraded"
-        result["error"] = str(e)
+        result["error"] = "Database connection failed"
 
     return result
 
@@ -851,8 +862,8 @@ def get_content_items(
         query = apply_content_filters(query, category_ids, specialization_ids)
         items = query.offset(skip).limit(limit).all()
         return [serialize_model(item, include_relationships=True) for item in items]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/content-items/{content_item_id}")
@@ -919,8 +930,8 @@ def get_featured_content(
             .all()
         )
         return [serialize_content_card(item) for item in items]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/articles")
@@ -942,8 +953,8 @@ def get_articles(
             .all()
         )
         return [serialize_model(item, include_relationships=True) for item in items]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/news")
@@ -965,8 +976,8 @@ def get_news(
             .all()
         )
         return [serialize_content_card(item) for item in items]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/courses")
@@ -988,8 +999,8 @@ def get_courses(
             .all()
         )
         return [serialize_content_card(item) for item in items]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/events")
@@ -1011,8 +1022,8 @@ def get_events(
             .all()
         )
         return [serialize_content_card(item) for item in items]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/courses-events")
@@ -1038,8 +1049,8 @@ def get_courses_events(
             .all()
         )
         return [serialize_content_card(item) for item in items]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/publications")
@@ -1061,8 +1072,8 @@ def get_publications(
             .all()
         )
         return [serialize_content_card(item) for item in items]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/publications/{publication_id}/issues")
@@ -1217,7 +1228,7 @@ def head_publication_issue_pdf(
 @app.get("/saved-content/ids")
 def get_saved_content_ids(
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_demo_user_id),
+    user_id: int = Depends(get_current_user_id),
 ):
     rows = (
         db.query(models.SavedContent.content_item_id)
@@ -1237,7 +1248,7 @@ def get_saved_content_ids(
 @app.get("/saved-content")
 def get_saved_content(
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_demo_user_id),
+    user_id: int = Depends(get_current_user_id),
 ):
     saved_rows = (
         db.query(models.SavedContent)
@@ -1279,10 +1290,9 @@ def get_saved_content(
 def save_content(
     content_item_id: int,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_demo_user_id),
+    user_id: int = Depends(get_current_user_id),
 ):
     get_public_content_item_or_404(db, content_item_id)
-    ensure_demo_user_exists(db, user_id)
 
     existing = (
         db.query(models.SavedContent)
@@ -1311,7 +1321,7 @@ def save_content(
 def remove_saved_content(
     content_item_id: int,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_demo_user_id),
+    user_id: int = Depends(get_current_user_id),
 ):
     existing = (
         db.query(models.SavedContent)
@@ -1399,11 +1409,11 @@ def get_public_ads(
         )
         rows = db.execute(query, {"placement": placement, "limit": limit}).mappings().all()
         return [serialize_mapping(row) for row in rows]
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=500,
-            detail=f"Nu s-au putut încărca reclamele publice din active_ads_public: {e}",
-        ) from e
+            detail="Eroare la procesarea cererii.",
+        )
 
 
 # -------------------------
@@ -1414,64 +1424,64 @@ def get_public_ads(
 def get_counties(db: Session = Depends(get_db)):
     try:
         return [serialize_model(item) for item in db.query(models.County).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/cities")
 def get_cities(db: Session = Depends(get_db)):
     try:
         return [serialize_model(item) for item in db.query(models.City).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/occupations")
 def get_occupations(db: Session = Depends(get_db)):
     try:
         return [serialize_model(item) for item in db.query(models.Occupation).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/specializations")
 def get_specializations(db: Session = Depends(get_db)):
     try:
         return [serialize_model(item) for item in db.query(models.Specialization).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/interests")
 def get_interests(db: Session = Depends(get_db)):
     try:
         return [serialize_model(item) for item in db.query(models.Interest).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/professional-grades")
 def get_professional_grades(db: Session = Depends(get_db)):
     try:
         return [serialize_model(item) for item in db.query(models.ProfessionalGrade).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/institutions")
 def get_institutions(db: Session = Depends(get_db)):
     try:
         return [serialize_model(item) for item in db.query(models.Institution).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/content-categories")
 def get_content_categories(db: Session = Depends(get_db)):
     try:
         return [serialize_model(item) for item in db.query(models.ContentCategory).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 # -------------------------
@@ -1489,8 +1499,8 @@ def get_event_gallery(
             .all()
         )
         return [serialize_model(item) for item in items]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 # -------------------------
 # USERS / AUTH
@@ -1665,62 +1675,62 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
 
 
 @app.get("/users")
-def get_users(db: Session = Depends(get_db)):
+def get_users(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         user_model = model_class("User")
         if user_model is None:
             return []
         return [serialize_model(item) for item in db.query(user_model).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/user-profiles")
-def get_user_profiles(db: Session = Depends(get_db)):
+def get_user_profiles(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.UserProfile).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/roles")
-def get_roles(db: Session = Depends(get_db)):
+def get_roles(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.Role).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/user-roles")
-def get_user_roles(db: Session = Depends(get_db)):
+def get_user_roles(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.UserRole).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/user-email-verifications")
-def get_user_email_verifications(db: Session = Depends(get_db)):
+def get_user_email_verifications(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.UserEmailVerification).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/user-password-resets")
-def get_user_password_resets(db: Session = Depends(get_db)):
+def get_user_password_resets(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.UserPasswordReset).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/user-sessions")
-def get_user_sessions(db: Session = Depends(get_db)):
+def get_user_sessions(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.UserSession).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 # -------------------------
@@ -1728,11 +1738,11 @@ def get_user_sessions(db: Session = Depends(get_db)):
 # -------------------------
 
 @app.get("/persons")
-def get_persons(db: Session = Depends(get_db)):
+def get_persons(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.Person).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 # -------------------------
@@ -1740,19 +1750,19 @@ def get_persons(db: Session = Depends(get_db)):
 # -------------------------
 
 @app.get("/event-details")
-def get_event_details(db: Session = Depends(get_db)):
+def get_event_details(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.Event).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/event-sessions")
-def get_event_sessions(db: Session = Depends(get_db)):
+def get_event_sessions(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.EventSession).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 # -------------------------
@@ -1760,27 +1770,27 @@ def get_event_sessions(db: Session = Depends(get_db)):
 # -------------------------
 
 @app.get("/course-details")
-def get_course_details(db: Session = Depends(get_db)):
+def get_course_details(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.Course).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/course-modules")
-def get_course_modules(db: Session = Depends(get_db)):
+def get_course_modules(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.CourseModule).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/course-lessons")
-def get_course_lessons(db: Session = Depends(get_db)):
+def get_course_lessons(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.CourseLesson).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 # -------------------------
@@ -1788,15 +1798,15 @@ def get_course_lessons(db: Session = Depends(get_db)):
 # -------------------------
 
 @app.get("/publication-details")
-def get_publication_details(db: Session = Depends(get_db)):
+def get_publication_details(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.Publication).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/publication-issues")
-def get_publication_issues(db: Session = Depends(get_db)):
+def get_publication_issues(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         issues = (
             public_publication_issue_query(db)
@@ -1807,8 +1817,8 @@ def get_publication_issues(db: Session = Depends(get_db)):
             .all()
         )
         return [serialize_publication_issue(issue) for issue in issues]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 # -------------------------
@@ -1816,27 +1826,27 @@ def get_publication_issues(db: Session = Depends(get_db)):
 # -------------------------
 
 @app.get("/user-courses")
-def get_user_courses(db: Session = Depends(get_db)):
+def get_user_courses(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.UserCourse).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/user-event-registrations")
-def get_user_event_registrations(db: Session = Depends(get_db)):
+def get_user_event_registrations(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.UserEventRegistration).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/user-activity-logs")
-def get_user_activity_logs(db: Session = Depends(get_db)):
+def get_user_activity_logs(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.UserActivityLog).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 # -------------------------
@@ -1844,27 +1854,27 @@ def get_user_activity_logs(db: Session = Depends(get_db)):
 # -------------------------
 
 @app.get("/emc-credit-rules")
-def get_emc_credit_rules(db: Session = Depends(get_db)):
+def get_emc_credit_rules(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.EmcCreditRule).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/user-emc-point-logs")
-def get_user_emc_point_logs(db: Session = Depends(get_db)):
+def get_user_emc_point_logs(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.UserEmcPointLog).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/user-emc-certificates")
-def get_user_emc_certificates(db: Session = Depends(get_db)):
+def get_user_emc_certificates(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.UserEmcCertificate).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 # -------------------------
@@ -1872,27 +1882,27 @@ def get_user_emc_certificates(db: Session = Depends(get_db)):
 # -------------------------
 
 @app.get("/subscription-plans")
-def get_subscription_plans(db: Session = Depends(get_db)):
+def get_subscription_plans(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.SubscriptionPlan).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/user-subscriptions")
-def get_user_subscriptions(db: Session = Depends(get_db)):
+def get_user_subscriptions(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.UserSubscription).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/payments")
-def get_payments(db: Session = Depends(get_db)):
+def get_payments(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.Payment).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 # -------------------------
@@ -1900,11 +1910,11 @@ def get_payments(db: Session = Depends(get_db)):
 # -------------------------
 
 @app.get("/audit-logs")
-def get_audit_logs(db: Session = Depends(get_db)):
+def get_audit_logs(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         return [serialize_model(item) for item in db.query(models.AuditLog).all()]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 # -------------------------
 # ADMIN ENDPOINTS
 # -------------------------
@@ -2023,7 +2033,7 @@ async def handle_upload(
 
 
 @app.post("/admin/uploads/image")
-async def admin_upload_image(file: UploadFile = File(...)):
+async def admin_upload_image(file: UploadFile = File(...), current_user_id: int = Depends(get_current_admin_user_id)):
     return await handle_upload(
         file=file,
         folder="images",
@@ -2034,7 +2044,7 @@ async def admin_upload_image(file: UploadFile = File(...)):
 
 
 @app.post("/admin/uploads/pdf")
-async def admin_upload_pdf(file: UploadFile = File(...)):
+async def admin_upload_pdf(file: UploadFile = File(...), current_user_id: int = Depends(get_current_admin_user_id)):
     return await handle_upload(
         file=file,
         folder="documents",
@@ -2537,7 +2547,7 @@ def apply_ad_data(db_ad: models.Ad, data: dict):
 
 
 @app.get("/admin/ad-design-templates")
-def admin_get_ad_design_templates(db: Session = Depends(get_db)):
+def admin_get_ad_design_templates(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         templates = (
             db.query(models.AdDesignTemplate)
@@ -2546,12 +2556,12 @@ def admin_get_ad_design_templates(db: Session = Depends(get_db)):
             .all()
         )
         return [serialize_model(template) for template in templates]
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception:
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.get("/admin/ad-font-presets")
-def admin_get_ad_font_presets(db: Session = Depends(get_db)):
+def admin_get_ad_font_presets(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         presets = (
             db.query(models.AdFontPreset)
@@ -2560,15 +2570,15 @@ def admin_get_ad_font_presets(db: Session = Depends(get_db)):
             .all()
         )
         return [serialize_model(preset) for preset in presets]
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception:
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.get("/admin/content-options")
 def admin_get_content_options(
     type: str = Query(default="all"),
     db: Session = Depends(get_db),
-):
+    current_user_id: int = Depends(get_current_admin_user_id)):
     requested_type = (type or "all").lower()
     allowed = RELEVANT_AD_CONTENT_TYPES | {"all"}
     if requested_type not in allowed:
@@ -2590,14 +2600,14 @@ def admin_get_content_options(
             query = query.filter(models.ContentItem.content_type == models.ContentItemType(requested_type))
 
         return [serialize_content_option(item) for item in query.all()]
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.get("/admin/ads")
-def admin_get_ads(db: Session = Depends(get_db)):
+def admin_get_ads(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         ads = (
             db.query(models.Ad)
@@ -2611,23 +2621,23 @@ def admin_get_ads(db: Session = Depends(get_db)):
             .all()
         )
         return [serialize_ad(ad) for ad in ads]
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception:
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.get("/admin/ads/{id}")
-def admin_get_ad(id: int, db: Session = Depends(get_db)):
+def admin_get_ad(id: int, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         ad = get_ad_or_404(db, id)
         return serialize_ad(ad)
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.post("/admin/ads")
-def admin_create_ad(item: AdCreate, db: Session = Depends(get_db)):
+def admin_create_ad(item: AdCreate, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         data = normalize_ad_data(ad_data(item))
         data.setdefault("status", models.AdStatus.draft)
@@ -2642,15 +2652,16 @@ def admin_create_ad(item: AdCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(db_ad)
         return serialize_ad(db_ad)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.put("/admin/ads/{id}")
-def admin_update_ad(id: int, item: AdUpdate, db: Session = Depends(get_db)):
+def admin_update_ad(id: int, item: AdUpdate, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_ad = get_ad_or_404(db, id)
         data = normalize_ad_data(ad_data(item, exclude_unset=True))
@@ -2661,15 +2672,16 @@ def admin_update_ad(id: int, item: AdUpdate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(db_ad)
         return serialize_ad(db_ad)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.patch("/admin/ads/{id}/archive")
-def admin_archive_ad(id: int, db: Session = Depends(get_db)):
+def admin_archive_ad(id: int, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_ad = get_ad_or_404(db, id)
         log_admin_action(
@@ -2684,15 +2696,16 @@ def admin_archive_ad(id: int, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(db_ad)
         return serialize_ad(db_ad)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.delete("/admin/ads/{id}")
-def admin_delete_ad(id: int, db: Session = Depends(get_db)):
+def admin_delete_ad(id: int, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_ad = get_ad_or_404(db, id)
         log_admin_action(
@@ -2705,14 +2718,15 @@ def admin_delete_ad(id: int, db: Session = Depends(get_db)):
         db.delete(db_ad)
         db.commit()
         return {"success": True, "message": "Ad deleted permanently"}
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 @app.get("/admin/dashboard/stats")
-def get_admin_dashboard_stats(db: Session = Depends(get_db)):
+def get_admin_dashboard_stats(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         articles_count = db.query(models.ContentItem).filter(models.ContentItem.content_type == models.ContentItemType.article).count()
         news_count = db.query(models.ContentItem).filter(models.ContentItem.content_type == models.ContentItemType.news).count()
@@ -2734,20 +2748,20 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db)):
             },
             "recent_content": [serialize_content_item(item) for item in recent_items]
         }
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 @app.get("/admin/content-items")
-def admin_get_content_items(db: Session = Depends(get_db)):
+def admin_get_content_items(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         items = db.query(models.ContentItem).order_by(models.ContentItem.created_at.desc()).all()
         return [serialize_content_item(item) for item in items]
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        raise HTTPException(status_code=500, detail="A apărut o eroare internă.")
 
 
 @app.get("/admin/articles")
-def admin_get_articles(db: Session = Depends(get_db)):
+def admin_get_articles(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         items = (
             db.query(models.ContentItem)
@@ -2765,14 +2779,14 @@ def admin_get_articles(db: Session = Depends(get_db)):
             .all()
         )
         return [serialize_admin_specialized_content_item(item) for item in items]
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.get("/admin/news")
-def admin_get_news(db: Session = Depends(get_db)):
+def admin_get_news(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         items = (
             db.query(models.ContentItem)
@@ -2790,38 +2804,39 @@ def admin_get_news(db: Session = Depends(get_db)):
             .all()
         )
         return [serialize_admin_specialized_content_item(item) for item in items]
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.post("/admin/content-items")
-def admin_create_content_item(item: ContentItemCreate, db: Session = Depends(get_db)):
+def admin_create_content_item(item: ContentItemCreate, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_item = models.ContentItem(**normalize_content_item_data(content_item_data(item)))
         db.add(db_item)
         db.commit()
         db.refresh(db_item)
         return serialize_content_item(db_item)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 @app.get("/admin/content-items/{id}")
-def admin_get_content_item(id: int, db: Session = Depends(get_db)):
+def admin_get_content_item(id: int, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         item = get_content_item_or_404(db, id)
         return serialize_content_item(item)
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 @app.put("/admin/content-items/{id}")
-def admin_update_content_item(id: int, item: ContentItemUpdate, db: Session = Depends(get_db)):
+def admin_update_content_item(id: int, item: ContentItemUpdate, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_item = get_content_item_or_404(db, id)
         update_data = normalize_content_item_data(content_item_data(item, exclude_unset=True))
@@ -2833,14 +2848,15 @@ def admin_update_content_item(id: int, item: ContentItemUpdate, db: Session = De
         db.commit()
         db.refresh(db_item)
         return serialize_content_item(db_item)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 @app.patch("/admin/content-items/{id}/archive")
-def admin_archive_content_item(id: int, db: Session = Depends(get_db)):
+def admin_archive_content_item(id: int, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_item = get_content_item_or_404(db, id)
         log_admin_action(
@@ -2854,41 +2870,43 @@ def admin_archive_content_item(id: int, db: Session = Depends(get_db)):
         db_item.is_active = False
         db.commit()
         return {"success": True}
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 @app.delete("/admin/content-items/{id}")
-def admin_delete_content_item(id: int, db: Session = Depends(get_db)):
+def admin_delete_content_item(id: int, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_item = get_content_item_or_404(db, id)
         log_admin_action("DELETE", f"/admin/content-items/{id}", id, payload=None, update_data={"delete": "content_items only"})
         db.delete(db_item)
         db.commit()
         return {"success": True}
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 @app.get("/admin/categories")
-def admin_get_categories(db: Session = Depends(get_db)):
+def admin_get_categories(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     return get_content_categories(db)
 
 @app.get("/admin/specializations")
-def admin_get_specializations(db: Session = Depends(get_db)):
+def admin_get_specializations(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     return get_specializations(db)
 
 @app.get("/admin/cities")
-def admin_get_cities(db: Session = Depends(get_db)):
+def admin_get_cities(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     return get_cities(db)
 
 @app.get("/admin/users")
-def admin_get_users(db: Session = Depends(get_db)):
-    return get_users(db)
+def admin_get_users(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
+    return get_users(db, current_user_id)
 
 
 def update_course_details(db_course: models.Course, details: CourseDetailsPayload):
@@ -3062,7 +3080,7 @@ def publication_issue_data(payload: BaseModel, exclude_unset: bool = False):
 
 
 @app.get("/admin/events")
-def admin_get_events(db: Session = Depends(get_db)):
+def admin_get_events(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         items = (
             db.query(models.ContentItem)
@@ -3081,14 +3099,14 @@ def admin_get_events(db: Session = Depends(get_db)):
             .all()
         )
         return [serialize_admin_specialized_content_item(item, "event") for item in items]
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.post("/admin/events")
-def admin_create_event(item: EventAdminPayload, db: Session = Depends(get_db)):
+def admin_create_event(item: EventAdminPayload, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_item = create_content_item(db, item, "event")
         db_event = models.Event(content_item_id=db_item.id)
@@ -3097,15 +3115,16 @@ def admin_create_event(item: EventAdminPayload, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(db_item)
         return serialize_content_item(db_item)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.put("/admin/events/{content_item_id}")
-def admin_update_event(content_item_id: int, item: EventAdminPayload, db: Session = Depends(get_db)):
+def admin_update_event(content_item_id: int, item: EventAdminPayload, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_item = get_content_item_or_404(db, content_item_id)
         ensure_content_type(db_item, "event")
@@ -3123,15 +3142,16 @@ def admin_update_event(content_item_id: int, item: EventAdminPayload, db: Sessio
         db.commit()
         db.refresh(db_item)
         return serialize_content_item(db_item)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.get("/admin/courses")
-def admin_get_courses(db: Session = Depends(get_db)):
+def admin_get_courses(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         items = (
             db.query(models.ContentItem)
@@ -3150,14 +3170,14 @@ def admin_get_courses(db: Session = Depends(get_db)):
             .all()
         )
         return [serialize_admin_specialized_content_item(item, "course") for item in items]
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.post("/admin/courses")
-def admin_create_course(item: CourseAdminPayload, db: Session = Depends(get_db)):
+def admin_create_course(item: CourseAdminPayload, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_item = create_content_item(db, item, "course")
         db_course = models.Course(content_item_id=db_item.id)
@@ -3166,15 +3186,16 @@ def admin_create_course(item: CourseAdminPayload, db: Session = Depends(get_db))
         db.commit()
         db.refresh(db_item)
         return serialize_content_item(db_item)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.put("/admin/courses/{content_item_id}")
-def admin_update_course(content_item_id: int, item: CourseAdminPayload, db: Session = Depends(get_db)):
+def admin_update_course(content_item_id: int, item: CourseAdminPayload, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_item = get_content_item_or_404(db, content_item_id)
         ensure_content_type(db_item, "course")
@@ -3192,15 +3213,16 @@ def admin_update_course(content_item_id: int, item: CourseAdminPayload, db: Sess
         db.commit()
         db.refresh(db_item)
         return serialize_content_item(db_item)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.get("/admin/publications")
-def admin_get_publications(db: Session = Depends(get_db)):
+def admin_get_publications(db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         items = (
             db.query(models.ContentItem)
@@ -3219,14 +3241,14 @@ def admin_get_publications(db: Session = Depends(get_db)):
             .all()
         )
         return [serialize_admin_specialized_content_item(item, "publication") for item in items]
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.get("/admin/publications/{publication_id}/issues")
-def admin_get_publication_issues(publication_id: int, db: Session = Depends(get_db)):
+def admin_get_publication_issues(publication_id: int, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         get_admin_publication_or_404(db, publication_id)
         issues = (
@@ -3240,10 +3262,10 @@ def admin_get_publication_issues(publication_id: int, db: Session = Depends(get_
             .all()
         )
         return [serialize_publication_issue(issue) for issue in issues]
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.post("/admin/publications/{publication_id}/issues")
@@ -3251,7 +3273,7 @@ def admin_create_publication_issue(
     publication_id: int,
     item: PublicationIssueCreatePayload,
     db: Session = Depends(get_db),
-):
+    current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         get_admin_publication_or_404(db, publication_id)
         validate_publication_issue_values(item.year, item.issue_number)
@@ -3264,15 +3286,16 @@ def admin_create_publication_issue(
         db.commit()
         db.refresh(db_issue)
         return serialize_publication_issue(db_issue)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.post("/admin/publications")
-def admin_create_publication(item: PublicationAdminPayload, db: Session = Depends(get_db)):
+def admin_create_publication(item: PublicationAdminPayload, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_item = create_content_item(db, item, "publication")
         db_publication = models.Publication(content_item_id=db_item.id)
@@ -3281,11 +3304,12 @@ def admin_create_publication(item: PublicationAdminPayload, db: Session = Depend
         db.commit()
         db.refresh(db_item)
         return serialize_content_item(db_item)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.put("/admin/publication-issues/{issue_id}")
@@ -3293,7 +3317,7 @@ def admin_update_publication_issue(
     issue_id: int,
     item: PublicationIssueUpdatePayload,
     db: Session = Depends(get_db),
-):
+    current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_issue = get_admin_publication_issue_or_404(db, issue_id)
         data = publication_issue_data(item, exclude_unset=True)
@@ -3312,29 +3336,31 @@ def admin_update_publication_issue(
         db.commit()
         db.refresh(db_issue)
         return serialize_publication_issue(db_issue)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.delete("/admin/publication-issues/{issue_id}")
-def admin_delete_publication_issue(issue_id: int, db: Session = Depends(get_db)):
+def admin_delete_publication_issue(issue_id: int, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_issue = get_admin_publication_issue_or_404(db, issue_id)
         db.delete(db_issue)
         db.commit()
         return {"success": True, "message": "Ediția a fost ștearsă"}
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
 
 
 @app.put("/admin/publications/{content_item_id}")
-def admin_update_publication(content_item_id: int, item: PublicationAdminPayload, db: Session = Depends(get_db)):
+def admin_update_publication(content_item_id: int, item: PublicationAdminPayload, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_admin_user_id)):
     try:
         db_item = get_content_item_or_404(db, content_item_id)
         ensure_content_type(db_item, "publication")
@@ -3352,8 +3378,9 @@ def admin_update_publication(content_item_id: int, item: PublicationAdminPayload
         db.commit()
         db.refresh(db_item)
         return serialize_content_item(db_item)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="A apărut o eroare la procesarea cererii.") from e
