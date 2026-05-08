@@ -1,4 +1,7 @@
 .DS_Store
+.env
+*.env
 
 backend/venv/
+backend/.venv314/
 backend/.env

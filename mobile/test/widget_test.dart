@@ -276,7 +276,7 @@ void main() {
     );
     final title = tester.widget<Text>(find.text('Campanie mega hero'));
     expect(title.textAlign, TextAlign.center);
-    expect(title.style?.fontFamily, 'Georgia');
+    expect(title.style?.fontFamily, 'Lora_700');
     expect(find.text('Promovat'), findsNothing);
   });
 

@@ -1,4 +1,26 @@
 const UI = {
+    formatMessage: (message, fallback = 'A apărut o eroare.') => {
+        if (!message) return fallback;
+        if (typeof message === 'string') return message;
+        if (Array.isArray(message)) {
+            const messages = message
+                .map((item) => UI.formatMessage(item, ''))
+                .filter(Boolean);
+            return messages.join(' ') || fallback;
+        }
+        if (typeof message === 'object') {
+            if (typeof message.detail === 'string') return message.detail;
+            if (message.detail) return UI.formatMessage(message.detail, fallback);
+            if (typeof message.message === 'string') return message.message;
+            if (typeof message.error === 'string') return message.error;
+            if (Array.isArray(message.loc) && typeof message.msg === 'string') {
+                return `${message.loc.join('.')}: ${message.msg}`;
+            }
+            if (typeof message.msg === 'string') return message.msg;
+        }
+        return fallback;
+    },
+
     renderSidebar: (activePage) => {
         const sidebarHTML = `
             <div class="sidebar">
@@ -58,7 +80,7 @@ const UI = {
 
         const messageNode = document.createElement('span');
         messageNode.className = 'alert-message';
-        messageNode.textContent = message;
+        messageNode.textContent = UI.formatMessage(message);
 
         const closeButton = document.createElement('button');
         closeButton.type = 'button';

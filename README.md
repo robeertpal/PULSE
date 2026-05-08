@@ -537,7 +537,7 @@ ManagementSystem/css/styles.css
 
 ## CORS
 
-Backend-ul permite în prezent request-uri din:
+Backend-ul citește origin-urile permise din variabila `ALLOWED_ORIGINS`, cu valori separate prin virgulă. Pentru local development sunt folosite explicit origin-uri locale, iar în producție nu trebuie folosit `*`.
 
 ```text
 http://localhost:5500
@@ -545,7 +545,7 @@ http://127.0.0.1:5500
 https://pulse-medichub.web.app
 ```
 
-Dacă se adaugă un domeniu nou pentru frontend sau admin, configurația CORS din backend trebuie actualizată înainte de deploy.
+Dacă se adaugă un domeniu nou pentru frontend sau admin, actualizează `ALLOWED_ORIGINS` în `.env` local și în Render înainte de deploy.
 
 ---
 
@@ -556,6 +556,7 @@ Dacă se adaugă un domeniu nou pentru frontend sau admin, configurația CORS di
 - Credentialele Azure Blob Storage aparțin backend-ului.
 - Service account-ul Firebase aparține secretelor GitHub Actions.
 - Variabilele de producție Render trebuie configurate în dashboard-ul Render.
+- Checklist-ul complet de hardening, variabile și setări manuale este în `docs/security-hardening.md`.
 
 ---
 

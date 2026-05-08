@@ -73,6 +73,15 @@ class ApiService {
     return fallback;
   }
 
+  Future<void> _handleAuthFailure(http.Response response) async {
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      await _authStorage.clearSession();
+      throw Exception(
+        'Sesiunea a expirat. Te rugăm să te autentifici din nou.',
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> login({
     required String email,
     required String password,
@@ -142,6 +151,7 @@ class ApiService {
           .get(Uri.parse('$baseUrl/api/me/profile'), headers: headers)
           .timeout(const Duration(seconds: 15));
 
+      await _handleAuthFailure(response);
       if (response.statusCode != 200) {
         throw Exception(
           _responseErrorMessage(response, 'Nu am putut încărca profilul.'),
@@ -544,10 +554,12 @@ class ApiService {
 
   Future<Set<int>> getSavedContentIds() async {
     try {
+      final headers = await _buildAuthHeaders();
       final response = await http
-          .get(Uri.parse('$_baseUrl/saved-content/ids'))
+          .get(Uri.parse('$_baseUrl/saved-content/ids'), headers: headers)
           .timeout(const Duration(seconds: 10));
 
+      await _handleAuthFailure(response);
       if (response.statusCode != 200) {
         throw Exception(
           'Failed to load saved content ids: ${response.statusCode}',
@@ -568,10 +580,15 @@ class ApiService {
 
   Future<void> saveContent(int contentItemId) async {
     try {
+      final headers = await _buildAuthHeaders();
       final response = await http
-          .post(Uri.parse('$_baseUrl/saved-content/$contentItemId'))
+          .post(
+            Uri.parse('$_baseUrl/saved-content/$contentItemId'),
+            headers: headers,
+          )
           .timeout(const Duration(seconds: 10));
 
+      await _handleAuthFailure(response);
       if (response.statusCode != 200) {
         throw Exception('Failed to save content: ${response.statusCode}');
       }
@@ -583,10 +600,15 @@ class ApiService {
 
   Future<void> unsaveContent(int contentItemId) async {
     try {
+      final headers = await _buildAuthHeaders();
       final response = await http
-          .delete(Uri.parse('$_baseUrl/saved-content/$contentItemId'))
+          .delete(
+            Uri.parse('$_baseUrl/saved-content/$contentItemId'),
+            headers: headers,
+          )
           .timeout(const Duration(seconds: 10));
 
+      await _handleAuthFailure(response);
       if (response.statusCode != 200) {
         throw Exception(
           'Failed to remove saved content: ${response.statusCode}',
@@ -600,10 +622,12 @@ class ApiService {
 
   Future<List<ContentItem>> getSavedContent() async {
     try {
+      final headers = await _buildAuthHeaders();
       final response = await http
-          .get(Uri.parse('$_baseUrl/saved-content'))
+          .get(Uri.parse('$_baseUrl/saved-content'), headers: headers)
           .timeout(const Duration(seconds: 15));
 
+      await _handleAuthFailure(response);
       if (response.statusCode != 200) {
         throw Exception('Failed to load saved content: ${response.statusCode}');
       }
