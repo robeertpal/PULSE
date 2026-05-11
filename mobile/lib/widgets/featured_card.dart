@@ -567,34 +567,42 @@ bool _showsInlineDate(String type) {
 }
 
 String? _emcPointsForItem(ContentItem item) {
-  if (!_supportsEmcBadge(item.contentType)) return null;
-  final numericCredits = item.emcCredits;
-  if (numericCredits != null && numericCredits > 0) {
-    return '+$numericCredits';
-  }
-
-  if (item.contentType == 'publication') {
-    final parsedCredits = _parsePositiveEmcCredits(
-      item.publicationEmcCreditsText,
-    );
-    if (parsedCredits != null) return '+$parsedCredits';
-  }
-
-  return null;
+  return item.emcBadgePoints;
 }
 
-bool _supportsEmcBadge(String type) {
-  return type == 'event' || type == 'course' || type == 'publication';
-}
+extension _FeaturedCardEmcBadgeContentItemX on ContentItem {
+  String? get emcBadgePoints {
+    if (!supportsEmcBadge) return null;
+    final numericCredits = emcCredits;
+    if (numericCredits != null && numericCredits > 0) {
+      return '+$numericCredits';
+    }
 
-int? _parsePositiveEmcCredits(String? value) {
-  final text = value?.trim();
-  if (text == null || text.isEmpty) return null;
-  final match = RegExp(r'\d+(?:[.,]\d+)?').firstMatch(text);
-  if (match == null) return null;
-  final parsed = num.tryParse(match.group(0)!.replaceAll(',', '.'));
-  if (parsed == null || parsed <= 0) return null;
-  return parsed.toInt();
+    if (contentType == 'publication') {
+      final parsedCredits = _parsePositiveEmcCredits(
+        publicationEmcCreditsText,
+      );
+      if (parsedCredits != null) return '+$parsedCredits';
+    }
+
+    return null;
+  }
+
+  bool get supportsEmcBadge {
+    return contentType == 'event' ||
+        contentType == 'course' ||
+        contentType == 'publication';
+  }
+
+  int? _parsePositiveEmcCredits(String? value) {
+    final text = value?.trim();
+    if (text == null || text.isEmpty) return null;
+    final match = RegExp(r'\d+(?:[.,]\d+)?').firstMatch(text);
+    if (match == null) return null;
+    final parsed = num.tryParse(match.group(0)!.replaceAll(',', '.'));
+    if (parsed == null || parsed <= 0) return null;
+    return parsed.toInt();
+  }
 }
 
 String _formatDate(DateTime date) {
