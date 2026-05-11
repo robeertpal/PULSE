@@ -2,7 +2,18 @@
   <img src="https://storageforpulse.blob.core.windows.net/content-images/images/2026/05/Screenshot%202026-05-11%20at%2005.02.31.png" alt="PULSE / MedicHub preview" width="100%">
 </p>
 
-<h1 align="center">pulse</h1>
+<h1 align="center">PULSE / MedicHub</h1>
+
+<p align="center">
+  Platformă medicală digitală pentru conținut editorial, reviste, știri, evenimente, cursuri și experiențe administrative integrate.
+</p>
+
+<p align="center">
+  <strong>Live app:</strong>
+  <a href="https://pulse-medichub.web.app">https://pulse-medichub.web.app</a>
+</p>
+
+---
 
 PULSE este o platformă medicală digitală construită pentru ecosistemul MedicHub. Platforma centralizează conținut editorial, reviste, știri, evenimente, cursuri și reclame într-o experiență unitară pentru medici și profesioniști din domeniul sănătății.
 
