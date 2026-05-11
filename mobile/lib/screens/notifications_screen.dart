@@ -109,11 +109,6 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           .where((n) => n.type == NotificationType.emc)
           .toList();
     }
-    if (_selectedFilterIndex == 3) {
-      return _allNotifications
-          .where((n) => n.type == NotificationType.system)
-          .toList();
-    }
     return _allNotifications;
   }
 
