@@ -8,7 +8,11 @@ import '../models/content_item.dart';
 import '../models/publication_issue.dart';
 import '../services/api_service.dart';
 import '../theme/pulse_theme.dart';
+import '../widgets/ai_summary.dart';
+import '../widgets/content_card.dart';
 import '../widgets/emc_badge.dart';
+import '../widgets/favorite_button.dart';
+import '../widgets/skeleton_loading.dart';
 
 const Color _editorialNavy = Color(0xFF102A43);
 const Color _medicalTeal = Color(0xFF0F766E);
@@ -21,7 +25,6 @@ const String _checkmarkIconAsset = 'assets/icons/checkmark.svg';
 const String _arrowRightIconAsset = 'assets/icons/arrow.right.svg';
 const String _arrowBackwardIconAsset = 'assets/icons/arrow.backward.svg';
 const String _calendarIconAsset = 'assets/icons/calendar.svg';
-const String _heartIconAsset = 'assets/icons/heart.svg';
 const String _pdfOpenErrorMessage =
     'Documentul nu a putut fi deschis. Verifică fișierul PDF sau încearcă din nou.';
 
@@ -67,6 +70,7 @@ class PublicationIssuesScreen extends StatefulWidget {
 }
 
 class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
+  static const double _heroHeight = 292;
   final ApiService _apiService = ApiService();
   List<PublicationIssue> _issues = [];
   bool _isLoading = true;
@@ -74,6 +78,7 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
   int? _selectedYear;
   bool _isSaved = false;
   bool _isSaving = false;
+  List<ContentItem> _morePublications = [];
 
   @override
   void initState() {
@@ -88,12 +93,21 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
     });
 
     try {
-      final issues = await _apiService.getPublicationIssues(
+      final issuesFuture = _apiService.getPublicationIssues(
         widget.publicationId,
       );
+      final publicationsFuture = _apiService.getPublications(limit: 8);
+      final issues = await issuesFuture;
+      final publications = await publicationsFuture;
       if (!mounted) return;
       setState(() {
         _issues = _sortIssues(issues);
+        _morePublications = publications
+            .where(
+              (publication) =>
+                  publication.publicationId != widget.publicationId,
+            )
+            .toList();
         _selectedYear = null;
         _isLoading = false;
       });
@@ -197,12 +211,6 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
         _clean(_latestIssue?.publicationDescription) ??
         _clean(widget.contentShortDescription) ??
         _plainText(widget.contentBody);
-  }
-
-  String? get _publicationBackgroundUrl {
-    return _clean(widget.contentHeroImageUrl) ??
-        _clean(widget.contentThumbnailUrl) ??
-        _publicationLogoUrl;
   }
 
   String? get _emcCreditsText {
@@ -423,30 +431,9 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
   }
 
   Widget _buildFavoriteButton() {
-    return Material(
-      color: Colors.white,
-      shape: const CircleBorder(),
-      elevation: 10,
-      shadowColor: const Color(0xFF0E7490).withValues(alpha: 0.12),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: _isSaving ? null : _toggleSaved,
-        child: SizedBox(
-          width: 62,
-          height: 62,
-          child: Center(
-            child: SvgPicture.asset(
-              _heartIconAsset,
-              width: 28,
-              height: 28,
-              colorFilter: ColorFilter.mode(
-                _isSaved ? const Color(0xFFEF4444) : PulseTheme.textPrimary,
-                BlendMode.srcIn,
-              ),
-            ),
-          ),
-        ),
-      ),
+    return FavoriteButton(
+      isSaved: _isSaved,
+      onTap: _isSaving ? null : _toggleSaved,
     );
   }
 
@@ -456,7 +443,7 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
 
     return SizedBox(
       width: double.infinity,
-      height: 410,
+      height: _heroHeight,
       child: ClipRRect(
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(32),
@@ -467,18 +454,18 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            _heroBackground(_publicationBackgroundUrl),
+            _heroBackground(widget.contentHeroImageUrl),
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withValues(alpha: 0.08),
                     Colors.black.withValues(alpha: 0.34),
-                    Colors.black.withValues(alpha: 0.78),
+                    _medicalTeal.withValues(alpha: 0.12),
+                    Colors.black.withValues(alpha: 0.82),
                   ],
-                  stops: const [0.0, 0.48, 1.0],
+                  stops: const [0.0, 0.50, 1.0],
                 ),
               ),
             ),
@@ -488,11 +475,11 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    Colors.black.withValues(alpha: 0.58),
-                    Colors.black.withValues(alpha: 0.18),
-                    Colors.black.withValues(alpha: 0.30),
+                    Colors.black.withValues(alpha: 0.68),
+                    _medicalTeal.withValues(alpha: 0.14),
+                    Colors.black.withValues(alpha: 0.42),
                   ],
-                  stops: const [0.0, 0.55, 1.0],
+                  stops: const [0.0, 0.60, 1.0],
                 ),
               ),
             ),
@@ -514,7 +501,7 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
             Positioned(
               left: 22,
               right: 22,
-              bottom: 72,
+              bottom: 56,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -563,14 +550,7 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                         ),
                       ),
                       const SizedBox(width: 16),
-                      _HeroLogo(
-                        logoUrl: _publicationLogoUrl,
-                        imageBuilder: (url) => _remoteOrAssetImage(
-                          url,
-                          fit: BoxFit.contain,
-                          accent: _medicalTeal,
-                        ),
-                      ),
+                      _HeroLogo(logoUrl: _publicationLogoUrl),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -735,6 +715,39 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
     );
   }
 
+  Widget _buildMorePublicationsSection() {
+    if (_morePublications.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 0, 0, 30),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionTitle(
+            title: 'Vezi mai mult',
+            subtitle: 'Alte reviste recomandate',
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 300,
+            child: ListView.builder(
+              clipBehavior: Clip.none,
+              scrollDirection: Axis.horizontal,
+              itemCount: _morePublications.length,
+              itemBuilder: (context, index) {
+                return ContentCard.fromModel(
+                  _morePublications[index],
+                  cardWidth: 240,
+                  margin: const EdgeInsets.only(right: 16),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLoading() {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(
@@ -862,12 +875,13 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                         _buildYearFilter(),
                         _buildLatestSection(),
                         _buildArchiveSection(),
+                        _buildMorePublicationsSection(),
                         if (_emcCreditsText != null)
                           Padding(
                             padding: const EdgeInsets.fromLTRB(22, 8, 22, 16),
                             child: Center(
                               child: Text(
-                                'Abonamentul pe întregul an ${DateTime.now().year} asigură un total de ${_emcCreditsText!.toLowerCase()}.',
+                                'Abonamentul pe întregul an ${DateTime.now().year} asigură un total de ${_emcCreditsText!.toLowerCase()} credite EMC.',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: PulseTheme.textSecondary,
@@ -884,7 +898,11 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                 ),
               ],
             ),
-            Positioned(top: 410 - 57, right: 26, child: _buildFavoriteButton()),
+            Positioned(
+              top: _heroHeight - 57,
+              right: 26,
+              child: _buildFavoriteButton(),
+            ),
           ],
         ),
       ),
@@ -922,18 +940,15 @@ class _PublicationAuthorsCarouselState
 
   void _startAutoAdvance() {
     if (widget.authors.length <= 1) return;
-    _autoAdvanceTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) {
-        if (!_controller.hasClients) return;
-        final nextPage = (_currentPage + 1) % widget.authors.length;
-        _controller.animateToPage(
-          nextPage,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOutCubic,
-        );
-      },
-    );
+    _autoAdvanceTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!_controller.hasClients) return;
+      final nextPage = (_currentPage + 1) % widget.authors.length;
+      _controller.animateToPage(
+        nextPage,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOutCubic,
+      );
+    });
   }
 
   @override
@@ -972,7 +987,7 @@ class _PublicationAuthorsCarouselState
 
     final isWide = MediaQuery.sizeOf(context).width >= 720;
     final showControls = widget.authors.length > 1 && isWide;
-    final carouselHeight = isWide ? 176.0 : 188.0;
+    final carouselHeight = isWide ? 204.0 : 216.0;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 28),
@@ -1015,7 +1030,7 @@ class _PublicationAuthorsCarouselState
           const SizedBox(height: 14),
           if (widget.authors.length == 1)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 22),
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
               child: _PublicationAuthorCard(author: widget.authors.first),
             )
           else
@@ -1023,6 +1038,7 @@ class _PublicationAuthorsCarouselState
               height: carouselHeight,
               child: PageView.builder(
                 controller: _controller,
+                clipBehavior: Clip.none,
                 physics: const BouncingScrollPhysics(),
                 itemCount: widget.authors.length,
                 onPageChanged: (index) {
@@ -1032,9 +1048,11 @@ class _PublicationAuthorsCarouselState
                 },
                 itemBuilder: (context, index) {
                   return Padding(
-                    padding: EdgeInsets.only(
-                      left: index == 0 ? 22 : 6,
-                      right: index == widget.authors.length - 1 ? 22 : 6,
+                    padding: EdgeInsets.fromLTRB(
+                      index == 0 ? 22 : 6,
+                      12,
+                      index == widget.authors.length - 1 ? 22 : 6,
+                      16,
                     ),
                     child: _PublicationAuthorCard(
                       author: widget.authors[index],
@@ -1418,13 +1436,13 @@ class _PublicationIssueDetailScreenState
       ),
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 34),
       children: const [
-        _SkeletonBox(height: 420, radius: 34),
+        SkeletonBlock(height: 420, radius: 34),
         SizedBox(height: 22),
-        _SkeletonBox(width: 190, height: 24, radius: 10),
+        SkeletonBlock(width: 190, height: 24, radius: 10),
         SizedBox(height: 14),
-        _SkeletonBox(height: 110, radius: 24),
+        SkeletonBlock(height: 110, radius: 24),
         SizedBox(height: 18),
-        _SkeletonBox(height: 270, radius: 28),
+        SkeletonBlock(height: 270, radius: 28),
       ],
     );
   }
@@ -1486,19 +1504,25 @@ class _PublicationIssueDetailScreenState
   }
 
   Widget _buildHero(PublicationIssue issue, String? dateLabel) {
+    final topInset = MediaQuery.of(context).padding.top;
     final publicationName = issue.publicationName?.trim();
     final description = issue.description?.trim();
     final hasPdf = issue.pdfUrl?.trim().isNotEmpty == true;
     final emcCreditsText = issue.publicationEmcCreditsText?.trim();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 24),
       child: Stack(
         children: [
           Container(
             decoration: BoxDecoration(
               color: _warmSurface,
-              borderRadius: BorderRadius.circular(34),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(32),
+                topRight: Radius.circular(32),
+                bottomLeft: Radius.circular(26),
+                bottomRight: Radius.circular(26),
+              ),
               border: Border.all(color: _medicalTeal.withValues(alpha: 0.08)),
               boxShadow: [
                 BoxShadow(
@@ -1510,12 +1534,17 @@ class _PublicationIssueDetailScreenState
               ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(34),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(32),
+                topRight: Radius.circular(32),
+                bottomLeft: Radius.circular(26),
+                bottomRight: Radius.circular(26),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
+                    padding: EdgeInsets.fromLTRB(20, topInset + 70, 20, 24),
                     decoration: const BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
@@ -1603,9 +1632,7 @@ class _PublicationIssueDetailScreenState
                       children: [
                         if (description != null && description.isNotEmpty) ...[
                           const SizedBox(height: 18),
-                          const _SectionTitle(
-                            title: 'Descriere editorială',
-                          ),
+                          const _SectionTitle(title: 'Descriere editorială'),
                           const SizedBox(height: 10),
                           Text(
                             description,
@@ -1619,7 +1646,8 @@ class _PublicationIssueDetailScreenState
                         ],
                         if (hasPdf) ...[
                           SizedBox(
-                            height: description != null && description.isNotEmpty
+                            height:
+                                description != null && description.isNotEmpty
                                 ? 18
                                 : dateLabel != null
                                 ? 16
@@ -1647,10 +1675,19 @@ class _PublicationIssueDetailScreenState
               ),
             ),
           ),
+          Positioned(
+            top: topInset + 12,
+            left: 18,
+            child: _buildGlassButton(
+              tooltip: 'Înapoi',
+              iconAsset: _arrowBackwardIconAsset,
+              onTap: () => Navigator.of(context).maybePop(),
+            ),
+          ),
           if (emcCreditsText != null)
             Positioned(
               right: 18,
-              top: 18,
+              top: topInset + 12,
               child: EmcBadge(points: emcCreditsText),
             ),
         ],
@@ -1671,7 +1708,7 @@ class _PublicationIssueDetailScreenState
 
     return ListView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.only(top: 50, bottom: 34),
+      padding: const EdgeInsets.only(bottom: 34),
       children: [
         _buildHero(issue, dateLabel),
         Padding(
@@ -1690,25 +1727,7 @@ class _PublicationIssueDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _warmCanvas,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            _buildBody(),
-            Positioned(
-              top: 12,
-              left: 18,
-              child: _buildGlassButton(
-                tooltip: 'Înapoi',
-                iconAsset: _arrowBackwardIconAsset,
-                onTap: () => Navigator.of(context).maybePop(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return Scaffold(backgroundColor: _warmCanvas, body: _buildBody());
   }
 }
 
@@ -1726,257 +1745,6 @@ class PdfPreviewCard extends StatefulWidget {
 
   @override
   State<PdfPreviewCard> createState() => _PdfPreviewCardState();
-}
-
-class AiSummaryInlineSection extends StatelessWidget {
-  final String? summary;
-  final List<String> keyPoints;
-  final String? disclaimer;
-  final String? error;
-
-  const AiSummaryInlineSection({
-    super.key,
-    required this.summary,
-    required this.keyPoints,
-    required this.disclaimer,
-    required this.error,
-  });
-
-  bool get _hasSummary => summary?.trim().isNotEmpty == true;
-  bool get _hasError => error?.trim().isNotEmpty == true;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_hasSummary && !_hasError) return const SizedBox.shrink();
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: _medicalTeal.withValues(alpha: 0.045),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _medicalTeal.withValues(alpha: 0.10)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 1,
-            margin: const EdgeInsets.only(bottom: 14),
-            color: _medicalTeal.withValues(alpha: 0.12),
-          ),
-          if (_hasError) _AiSummaryErrorState(error: error),
-          if (_hasSummary)
-            _AiSummaryContent(
-              summary: summary!.trim(),
-              keyPoints: keyPoints,
-              disclaimer: disclaimer,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class AiSummaryButton extends StatelessWidget {
-  final bool isLoading;
-  final VoidCallback onGenerate;
-
-  const AiSummaryButton({
-    super.key,
-    required this.isLoading,
-    required this.onGenerate,
-  });
-
-  Widget _buildGenerateButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton(
-        onPressed: isLoading ? null : onGenerate,
-        style: FilledButton.styleFrom(
-          backgroundColor: PulseTheme.textPrimary,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: PulseTheme.textPrimary.withValues(
-            alpha: 0.62,
-          ),
-          disabledForegroundColor: Colors.white,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isLoading)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            else
-              const Icon(Icons.auto_awesome_outlined, size: 19),
-            const SizedBox(width: 9),
-            Text(
-              isLoading ? 'Se generează rezumatul...' : 'Generează rezumat AI',
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => _buildGenerateButton();
-}
-
-class _AiSummaryContent extends StatelessWidget {
-  final String summary;
-  final List<String> keyPoints;
-  final String? disclaimer;
-
-  const _AiSummaryContent({
-    required this.summary,
-    required this.keyPoints,
-    required this.disclaimer,
-  });
-
-  Widget _buildSummaryState() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Row(
-          children: [
-            Icon(Icons.auto_awesome, color: _medicalTeal, size: 20),
-            SizedBox(width: 8),
-            Text(
-              'Rezumat AI',
-              style: TextStyle(
-                color: _editorialNavy,
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 13),
-        Text(
-          summary.trim(),
-          style: const TextStyle(
-            color: PulseTheme.textPrimary,
-            fontSize: 15,
-            height: 1.55,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        if (keyPoints.isNotEmpty) ...[
-          const SizedBox(height: 15),
-          const Text(
-            'Idei cheie',
-            style: TextStyle(
-              color: _editorialNavy,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 9),
-          ...keyPoints.map(
-            (point) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    margin: const EdgeInsets.only(top: 8, right: 9),
-                    decoration: const BoxDecoration(
-                      color: _medicalTeal,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      point,
-                      style: const TextStyle(
-                        color: PulseTheme.textSecondary,
-                        height: 1.42,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-        if (disclaimer?.trim().isNotEmpty == true) ...[
-          const SizedBox(height: 10),
-          Text(
-            disclaimer!.trim(),
-            style: const TextStyle(
-              color: PulseTheme.textTertiary,
-              fontSize: 12,
-              height: 1.35,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => _buildSummaryState();
-}
-
-class _AiSummaryErrorState extends StatelessWidget {
-  final String? error;
-
-  const _AiSummaryErrorState({required this.error});
-
-  Widget _buildErrorState() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: PulseTheme.newsContent.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: PulseTheme.newsContent.withValues(alpha: 0.16),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.info_outline,
-            color: PulseTheme.newsContent,
-            size: 20,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              error ?? 'Rezumatul nu a putut fi generat. Încearcă din nou.',
-              style: const TextStyle(
-                color: PulseTheme.textSecondary,
-                fontWeight: FontWeight.w600,
-                height: 1.4,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => _buildErrorState();
 }
 
 class _PdfPreviewCardState extends State<PdfPreviewCard> {
@@ -2149,64 +1917,101 @@ class _PublicationIssuePdfViewerScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _warmCanvas,
-      appBar: AppBar(
-        title: Text(
-          widget.issue.displayLabel,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        backgroundColor: _warmCanvas,
-        elevation: 0,
-        leading: _BackButton(onPressed: () => Navigator.of(context).maybePop()),
-      ),
       body: SafeArea(
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(14, 8, 14, 18),
-          decoration: BoxDecoration(
-            color: _warmSurface,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: _medicalTeal.withValues(alpha: 0.08)),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: SfPdfViewer.network(
-                  widget.pdfUrl,
-                  canShowScrollHead: true,
-                  canShowPaginationDialog: true,
-                  pageLayoutMode: PdfPageLayoutMode.continuous,
-                  onDocumentLoaded: (_) {
-                    if (!mounted) return;
-                    setState(() {
-                      _isLoading = false;
-                      _hasError = false;
-                    });
-                  },
-                  onDocumentLoadFailed: (details) {
-                    if (kDebugMode) {
-                      debugPrint(
-                        'SfPdfViewer full screen failed: '
-                        'url=${widget.pdfUrl}, '
-                        'error=${details.error}, '
-                        'description=${details.description}',
-                      );
-                    }
-                    if (!mounted) return;
-                    setState(() {
-                      _isLoading = false;
-                      _hasError = true;
-                    });
-                  },
+        child: Stack(
+          children: [
+            Container(
+              margin: const EdgeInsets.fromLTRB(14, 8, 14, 18),
+              decoration: BoxDecoration(
+                color: _warmSurface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: _medicalTeal.withValues(alpha: 0.08)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: SfPdfViewer.network(
+                      widget.pdfUrl,
+                      canShowScrollHead: true,
+                      canShowPaginationDialog: true,
+                      pageLayoutMode: PdfPageLayoutMode.continuous,
+                      onDocumentLoaded: (_) {
+                        if (!mounted) return;
+                        setState(() {
+                          _isLoading = false;
+                          _hasError = false;
+                        });
+                      },
+                      onDocumentLoadFailed: (details) {
+                        if (kDebugMode) {
+                          debugPrint(
+                            'SfPdfViewer full screen failed: '
+                            'url=${widget.pdfUrl}, '
+                            'error=${details.error}, '
+                            'description=${details.description}',
+                          );
+                        }
+                        if (!mounted) return;
+                        setState(() {
+                          _isLoading = false;
+                          _hasError = true;
+                        });
+                      },
+                    ),
+                  ),
+                  if (_isLoading) const _PdfLoadingOverlay(),
+                  if (_hasError)
+                    const _PdfErrorOverlay(
+                      title: 'Documentul nu a putut fi deschis.',
+                      message: _pdfOpenErrorMessage,
+                    ),
+                ],
+              ),
+            ),
+            Positioned(
+              top: 12,
+              left: 18,
+              child: _GlassBackButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassBackButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _GlassBackButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Înapoi',
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(18),
+          child: SizedBox(
+            width: 46,
+            height: 46,
+            child: Center(
+              child: SvgPicture.asset(
+                _arrowBackwardIconAsset,
+                width: 20,
+                height: 20,
+                colorFilter: const ColorFilter.mode(
+                  Colors.white,
+                  BlendMode.srcIn,
                 ),
               ),
-              if (_isLoading) const _PdfLoadingOverlay(),
-              if (_hasError)
-                const _PdfErrorOverlay(
-                  title: 'Documentul nu a putut fi deschis.',
-                  message: _pdfOpenErrorMessage,
-                ),
-            ],
+            ),
           ),
         ),
       ),
@@ -2642,42 +2447,43 @@ class _ArrowRightIcon extends StatelessWidget {
   }
 }
 
-class _BackButton extends StatelessWidget {
-  final VoidCallback onPressed;
-
-  const _BackButton({required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: 'Înapoi',
-      onPressed: onPressed,
-      icon: SvgPicture.asset(
-        _arrowBackwardIconAsset,
-        width: 22,
-        height: 22,
-        colorFilter: const ColorFilter.mode(
-          PulseTheme.textPrimary,
-          BlendMode.srcIn,
-        ),
-      ),
-    );
-  }
-}
-
 class _HeroLogo extends StatelessWidget {
   final String? logoUrl;
-  final Widget Function(String? url) imageBuilder;
 
-  const _HeroLogo({required this.logoUrl, required this.imageBuilder});
+  const _HeroLogo({required this.logoUrl});
 
   @override
   Widget build(BuildContext context) {
-    if (logoUrl == null || logoUrl!.trim().isEmpty) {
+    final value = logoUrl?.trim();
+    if (value == null || value.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    return SizedBox(width: 86, height: 86, child: imageBuilder(logoUrl));
+    Widget image;
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      image = Image.network(
+        value,
+        width: 86,
+        height: 86,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+      );
+    } else {
+      final assetPath = value.startsWith('assets/')
+          ? value
+          : value.startsWith('images/')
+          ? 'assets/$value'
+          : 'assets/images/$value';
+      image = Image.asset(
+        assetPath,
+        width: 86,
+        height: 86,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+      );
+    }
+
+    return SizedBox(width: 86, height: 86, child: image);
   }
 }
 
@@ -2992,50 +2798,22 @@ class _PublicationSkeleton extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _SkeletonBox(height: 314, radius: 32),
+          const SkeletonBlock(height: 314, radius: 32),
           const SizedBox(height: 28),
-          const _SkeletonBox(width: 190, height: 24, radius: 10),
+          const SkeletonBlock(width: 190, height: 24, radius: 10),
           const SizedBox(height: 12),
-          const _SkeletonBox(height: 218, radius: 30),
+          const SkeletonBlock(height: 218, radius: 30),
           const SizedBox(height: 28),
-          const _SkeletonBox(width: 150, height: 22, radius: 10),
+          const SkeletonBlock(width: 150, height: 22, radius: 10),
           const SizedBox(height: 14),
           ...List.generate(
             3,
             (_) => const Padding(
               padding: EdgeInsets.only(bottom: 14),
-              child: _SkeletonBox(height: 136, radius: 26),
+              child: SkeletonBlock(height: 136, radius: 26),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SkeletonBox extends StatelessWidget {
-  final double? width;
-  final double height;
-  final double radius;
-
-  const _SkeletonBox({this.width, required this.height, required this.radius});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: width ?? double.infinity,
-      height: height,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(radius),
-        gradient: LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [
-            Colors.white.withValues(alpha: 0.76),
-            const Color(0xFFEAE5D8),
-            Colors.white.withValues(alpha: 0.76),
-          ],
-        ),
       ),
     );
   }

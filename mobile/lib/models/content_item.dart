@@ -92,13 +92,28 @@ class ContentItem {
     if (json['content_type'] == 'event') derivedTag = 'Eveniment';
     if (json['content_type'] == 'publication') derivedTag = 'Revistă';
 
-    // Extract EMC credits if available (from nested event or course)
-    int? credits = json['emc_credits'];
+    int? parseEmcCredits(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toInt();
+      final text = value.toString().trim();
+      if (text.isEmpty) return null;
+      final match = RegExp(r'\d+(?:[.,]\d+)?').firstMatch(text);
+      if (match == null) return null;
+      final normalized = match.group(0)!.replaceAll(',', '.');
+      final parsed = num.tryParse(normalized);
+      return parsed?.toInt();
+    }
+
+    // Extract EMC credits if available (from nested content entities)
+    int? credits = parseEmcCredits(json['emc_credits']);
     if (json['event'] != null) {
-      credits = json['event']['emc_credits'] ?? credits;
+      credits = parseEmcCredits(json['event']['emc_credits']) ?? credits;
     }
     if (json['course'] != null) {
-      credits = json['course']['emc_credits'] ?? credits;
+      credits = parseEmcCredits(json['course']['emc_credits']) ?? credits;
+    }
+    if (json['publication'] != null) {
+      credits = parseEmcCredits(json['publication']['emc_credits']) ?? credits;
     }
 
     // Extract preferred content URL
