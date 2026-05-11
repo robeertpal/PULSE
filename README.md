@@ -4,8 +4,6 @@
 
 <h1 align="center">pulse</h1>
 
----
-
 PULSE este o platformă medicală digitală construită pentru ecosistemul MedicHub. Platforma centralizează conținut editorial, reviste, știri, evenimente, cursuri și reclame într-o experiență unitară pentru medici și profesioniști din domeniul sănătății.
 
 Proiectul este un sistem complet format din:
