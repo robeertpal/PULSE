@@ -860,7 +860,10 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              [?date, '${_readingMinutes(item)} min citire'].join(' • '),
+              [
+                if (date != null) date,
+                '${_readingMinutes(item)} min citire',
+              ].join(' • '),
               style: const TextStyle(
                 color: PulseTheme.textSecondary,
                 fontSize: 13,
