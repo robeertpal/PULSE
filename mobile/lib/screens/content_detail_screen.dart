@@ -105,7 +105,9 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
       };
       return items.where((candidate) => candidate.id != item.id).toList();
     } catch (e) {
-      debugPrint('Error fetching recommendations: $e');
+      if (kDebugMode) {
+        debugPrint('Error fetching recommendations: $e');
+      }
       return const [];
     }
   }
