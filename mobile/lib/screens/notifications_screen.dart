@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -14,7 +13,6 @@ class NotificationItem {
   final String body;
   final String time;
   final NotificationType type;
-  final String imageUrl;
   bool isRead;
   final int? emcPoints;
 
@@ -24,7 +22,6 @@ class NotificationItem {
     required this.body,
     required this.time,
     required this.type,
-    required this.imageUrl,
     this.isRead = false,
     this.emcPoints,
   });
@@ -37,7 +34,8 @@ class NotificationsScreen extends StatefulWidget {
   State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends State<NotificationsScreen> with SingleTickerProviderStateMixin {
+class _NotificationsScreenState extends State<NotificationsScreen>
+    with SingleTickerProviderStateMixin {
   int _selectedFilterIndex = 0;
   final List<String> _filters = ['Toate', 'Necitite', 'Puncte EMC'];
   final Set<String> _expandedIds = {};
@@ -47,38 +45,38 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
     NotificationItem(
       id: '1',
       title: 'Au fost adăugate 15 Puncte EMC!',
-      body: 'Felicitări pentru finalizarea modulului "Managementul Durerii Cronice". Punctele au fost adăugate în portofoliul tău profesional.',
+      body:
+          'Felicitări pentru finalizarea modulului "Managementul Durerii Cronice". Punctele au fost adăugate în portofoliul tău profesional.',
       time: 'Acum 2 ore',
       type: NotificationType.emc,
-      imageUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&q=80&w=100',
       isRead: false,
     ),
     NotificationItem(
       id: '2',
       title: 'Curs nou disponibil',
-      body: 'Te-ar putea interesa un nou curs: "Imunoterapia în Oncologie - Update 2026".',
+      body:
+          'Te-ar putea interesa un nou curs: "Imunoterapia în Oncologie - Update 2026".',
       time: 'Acum 5 ore',
       type: NotificationType.course,
-      imageUrl: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=100',
       isRead: false,
       emcPoints: 12,
     ),
     NotificationItem(
       id: '3',
       title: 'Actualizare sistem PULSE',
-      body: 'Platforma a fost actualizată pentru a fi mai fluidă și mai stabilă. Verifică noile secțiuni!',
+      body:
+          'Platforma a fost actualizată pentru a fi mai fluidă și mai stabilă. Verifică noile secțiuni!',
       time: 'Ieri, 14:30',
       type: NotificationType.system,
-      imageUrl: 'https://images.unsplash.com/photo-1551076805-e18690c5e53b?auto=format&fit=crop&q=80&w=100',
       isRead: true,
     ),
     NotificationItem(
       id: '4',
       title: 'Reminder Eveniment',
-      body: 'Simpozionul de Medicină Internă începe mâine dimineață la ora 09:00. Pregătește-te de conferință!',
+      body:
+          'Simpozionul de Medicină Internă începe mâine dimineață la ora 09:00. Pregătește-te de conferință!',
       time: '29 Martie',
       type: NotificationType.event,
-      imageUrl: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&q=80&w=100',
       isRead: true,
       emcPoints: 5,
     ),
@@ -103,9 +101,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
 
   List<NotificationItem> get _filteredNotifications {
     if (_selectedFilterIndex == 0) return _allNotifications;
-    if (_selectedFilterIndex == 1) return _allNotifications.where((n) => !n.isRead).toList();
-    if (_selectedFilterIndex == 2) return _allNotifications.where((n) => n.type == NotificationType.emc).toList();
-    if (_selectedFilterIndex == 3) return _allNotifications.where((n) => n.type == NotificationType.system).toList();
+    if (_selectedFilterIndex == 1) {
+      return _allNotifications.where((n) => !n.isRead).toList();
+    }
+    if (_selectedFilterIndex == 2) {
+      return _allNotifications
+          .where((n) => n.type == NotificationType.emc)
+          .toList();
+    }
+    if (_selectedFilterIndex == 3) {
+      return _allNotifications
+          .where((n) => n.type == NotificationType.system)
+          .toList();
+    }
     return _allNotifications;
   }
 
@@ -180,13 +188,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Același header ca pe pagina principală
-                const HomeHeader(
-                  doctorName: 'Robert',
-                ),
-                
+                const HomeHeader(doctorName: 'Robert'),
+
                 // Back Button & Title
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                    vertical: 8.0,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -197,12 +206,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                           'assets/icons/arrow.backward.svg',
                           width: 18,
                           height: 18,
-                          colorFilter: const ColorFilter.mode(PulseTheme.textPrimary, BlendMode.srcIn),
+                          colorFilter: const ColorFilter.mode(
+                            PulseTheme.textPrimary,
+                            BlendMode.srcIn,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 8),
                       ShaderMask(
-                        shaderCallback: (bounds) => PulseTheme.primaryGradient.createShader(bounds),
+                        shaderCallback: (bounds) =>
+                            PulseTheme.primaryGradient.createShader(bounds),
                         child: const Text(
                           'Notificări',
                           style: TextStyle(
@@ -216,11 +229,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                     ],
                   ),
                 ),
-                
+
                 // Conținutul paginii cu scroll
                 Expanded(
                   child: CustomScrollView(
-                    physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                    physics: const BouncingScrollPhysics(
+                      parent: AlwaysScrollableScrollPhysics(),
+                    ),
                     slivers: [
                       _buildFilters(),
                       if (items.isEmpty)
@@ -229,13 +244,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                         SliverPadding(
                           padding: const EdgeInsets.only(bottom: 40),
                           sliver: SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                                final notification = items[index];
-                                return _buildAnimatedNotificationCard(notification, index);
-                              },
-                              childCount: items.length,
-                            ),
+                            delegate: SliverChildBuilderDelegate((
+                              context,
+                              index,
+                            ) {
+                              final notification = items[index];
+                              return _buildAnimatedNotificationCard(
+                                notification,
+                                index,
+                              );
+                            }, childCount: items.length),
                           ),
                         ),
                     ],
@@ -311,8 +329,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                               child: Text(
                                 _filters[index],
                                 style: TextStyle(
-                                  color: isActive ? PulseTheme.textPrimary : PulseTheme.textSecondary.withValues(alpha: 0.6),
-                                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                                  color: isActive
+                                      ? PulseTheme.textPrimary
+                                      : PulseTheme.textSecondary.withValues(
+                                          alpha: 0.6,
+                                        ),
+                                  fontWeight: isActive
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
                                   fontSize: 14,
                                   letterSpacing: -0.2,
                                 ),
@@ -351,7 +375,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                   'assets/icons/bell.svg',
                   width: 40,
                   height: 40,
-                  colorFilter: ColorFilter.mode(PulseTheme.primary.withValues(alpha: 0.5), BlendMode.srcIn),
+                  colorFilter: ColorFilter.mode(
+                    PulseTheme.primary.withValues(alpha: 0.5),
+                    BlendMode.srcIn,
+                  ),
                 ),
               ),
             ),
@@ -383,19 +410,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
 
   Widget _buildAnimatedNotificationCard(NotificationItem item, int index) {
     return SlideTransition(
-      position: Tween<Offset>(
-        begin: const Offset(0, 0.2),
-        end: Offset.zero,
-      ).animate(
-        CurvedAnimation(
-          parent: _animController,
-          curve: Interval(
-            (index * 0.1).clamp(0.0, 1.0),
-            1.0,
-            curve: Curves.easeOutCubic,
+      position: Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero)
+          .animate(
+            CurvedAnimation(
+              parent: _animController,
+              curve: Interval(
+                (index * 0.1).clamp(0.0, 1.0),
+                1.0,
+                curve: Curves.easeOutCubic,
+              ),
+            ),
           ),
-        ),
-      ),
       child: FadeTransition(
         opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
           CurvedAnimation(
@@ -450,12 +475,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
               color: const Color(0xFFEF4444).withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4),
-            )
+            ),
           ],
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 28),
-        child: const Icon(Icons.delete_sweep_rounded, color: Colors.white, size: 32),
+        child: const Icon(
+          Icons.delete_sweep_rounded,
+          color: Colors.white,
+          size: 32,
+        ),
       ),
       child: GestureDetector(
         onTap: () => _toggleExpand(item.id),
@@ -464,7 +493,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
           curve: Curves.easeOutCubic,
           margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
           decoration: BoxDecoration(
-            color: item.isRead ? PulseTheme.surface : PulseTheme.surfaceElevated,
+            color: item.isRead
+                ? PulseTheme.surface
+                : PulseTheme.surfaceElevated,
             borderRadius: BorderRadius.circular(24),
             boxShadow: item.isRead
                 ? [
@@ -472,14 +503,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                       color: Colors.black.withValues(alpha: 0.02),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
-                    )
+                    ),
                   ]
                 : [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.04),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
-                    )
+                    ),
                   ],
           ),
           child: ClipRRect(
@@ -494,7 +525,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Circular Image with category badge overlay
+                          // Circular local fallback with category badge overlay
                           SizedBox(
                             width: 54,
                             height: 54,
@@ -506,17 +537,34 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                                   height: 54,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    image: DecorationImage(
-                                      image: NetworkImage(item.imageUrl),
-                                      fit: BoxFit.cover,
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        iconColor.withValues(alpha: 0.16),
+                                        iconColor.withValues(alpha: 0.05),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.1),
+                                        color: Colors.black.withValues(
+                                          alpha: 0.1,
+                                        ),
                                         blurRadius: 8,
                                         offset: const Offset(0, 2),
                                       ),
                                     ],
+                                  ),
+                                  child: Center(
+                                    child: SvgPicture.asset(
+                                      iconPath,
+                                      width: 24,
+                                      height: 24,
+                                      colorFilter: ColorFilter.mode(
+                                        iconColor,
+                                        BlendMode.srcIn,
+                                      ),
+                                    ),
                                   ),
                                 ),
                                 Positioned(
@@ -528,14 +576,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                                     decoration: BoxDecoration(
                                       color: iconColor,
                                       shape: BoxShape.circle,
-                                      border: Border.all(color: item.isRead ? PulseTheme.surface : PulseTheme.surfaceElevated, width: 2.5),
+                                      border: Border.all(
+                                        color: item.isRead
+                                            ? PulseTheme.surface
+                                            : PulseTheme.surfaceElevated,
+                                        width: 2.5,
+                                      ),
                                     ),
                                     child: Center(
                                       child: SvgPicture.asset(
                                         iconPath,
                                         width: 14,
                                         height: 14,
-                                        colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                                        colorFilter: const ColorFilter.mode(
+                                          Colors.white,
+                                          BlendMode.srcIn,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -553,7 +609,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                                       decoration: BoxDecoration(
                                         color: const Color(0xFFEF4444),
                                         shape: BoxShape.circle,
-                                        border: Border.all(color: item.isRead ? PulseTheme.surface : PulseTheme.surfaceElevated, width: 2.5),
+                                        border: Border.all(
+                                          color: item.isRead
+                                              ? PulseTheme.surface
+                                              : PulseTheme.surfaceElevated,
+                                          width: 2.5,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -575,8 +636,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                                     item.time,
                                     style: TextStyle(
                                       fontSize: 12,
-                                      fontWeight: item.isRead ? FontWeight.w500 : FontWeight.w600,
-                                      color: item.isRead ? PulseTheme.textPrimary.withValues(alpha: 0.8) : PulseTheme.textPrimary,
+                                      fontWeight: item.isRead
+                                          ? FontWeight.w500
+                                          : FontWeight.w600,
+                                      color: item.isRead
+                                          ? PulseTheme.textPrimary.withValues(
+                                              alpha: 0.8,
+                                            )
+                                          : PulseTheme.textPrimary,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -584,8 +651,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                                     item.title,
                                     style: TextStyle(
                                       fontSize: 16,
-                                      fontWeight: item.isRead ? FontWeight.w700 : FontWeight.w800,
-                                      color: item.isRead ? PulseTheme.textPrimary.withValues(alpha: 0.8) : PulseTheme.textPrimary,
+                                      fontWeight: item.isRead
+                                          ? FontWeight.w700
+                                          : FontWeight.w800,
+                                      color: item.isRead
+                                          ? PulseTheme.textPrimary.withValues(
+                                              alpha: 0.8,
+                                            )
+                                          : PulseTheme.textPrimary,
                                       letterSpacing: -0.3,
                                       height: 1.2,
                                     ),
@@ -602,14 +675,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                         firstCurve: Curves.easeOutCubic,
                         secondCurve: Curves.easeOutCubic,
                         sizeCurve: Curves.easeOutCubic,
-                        crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-                        firstChild: const SizedBox(width: double.infinity, height: 0),
+                        crossFadeState: isExpanded
+                            ? CrossFadeState.showSecond
+                            : CrossFadeState.showFirst,
+                        firstChild: const SizedBox(
+                          width: double.infinity,
+                          height: 0,
+                        ),
                         secondChild: Padding(
                           padding: const EdgeInsets.only(top: 16.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if ((item.type == NotificationType.course || item.type == NotificationType.event) && item.emcPoints != null) ...[
+                              if ((item.type == NotificationType.course ||
+                                      item.type == NotificationType.event) &&
+                                  item.emcPoints != null) ...[
                                 EmcBadge(points: '+${item.emcPoints}'),
                                 const SizedBox(height: 12),
                               ],
@@ -618,15 +698,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w400,
-                                  color: item.isRead ? PulseTheme.textSecondary.withValues(alpha: 0.7) : PulseTheme.textSecondary,
+                                  color: item.isRead
+                                      ? PulseTheme.textSecondary.withValues(
+                                          alpha: 0.7,
+                                        )
+                                      : PulseTheme.textSecondary,
                                   height: 1.45,
                                 ),
                               ),
                               const SizedBox(height: 16),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: PulseTheme.primary.withValues(alpha: 0.1),
+                                  color: PulseTheme.primary.withValues(
+                                    alpha: 0.1,
+                                  ),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Row(
@@ -645,7 +734,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                                       'assets/icons/arrow.right.svg',
                                       width: 14,
                                       height: 14,
-                                      colorFilter: const ColorFilter.mode(PulseTheme.primary, BlendMode.srcIn),
+                                      colorFilter: const ColorFilter.mode(
+                                        PulseTheme.primary,
+                                        BlendMode.srcIn,
+                                      ),
                                     ),
                                   ],
                                 ),

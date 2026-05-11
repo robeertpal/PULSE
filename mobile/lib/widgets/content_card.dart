@@ -5,6 +5,7 @@ import '../models/content_item.dart';
 import '../screens/content_detail_screen.dart';
 import '../screens/publication_issues_screen.dart';
 import 'emc_badge.dart';
+import 'favorite_button.dart';
 
 class ContentCard extends StatefulWidget {
   final String title;
@@ -165,11 +166,11 @@ class ContentCard extends StatefulWidget {
       id: model.id,
       title: model.publicationName ?? model.title,
       subtitle: subtitle,
-      tag: model.tag ?? model.contentType,
+      tag: _typeLabelForContentCard(model.contentType),
       categoryColor: categoryColor,
       iconAsset: iconAsset,
       progress: progress,
-      emcPoints: model.emcCredits != null ? '+${model.emcCredits}' : null,
+      emcPoints: _emcPointsForModel(model),
       imageUrl: chosenImageUrl,
       dateLabel: formatDate(model.startDate ?? model.publishedAt),
       locationLabel: eventLocation,
@@ -308,48 +309,9 @@ class _ContentCardState extends State<ContentCard>
       return const SizedBox.shrink();
     }
 
-    const favoriteColor = Color(0xFFFF4B4B);
-    final backgroundColor = widget.isSaved
-        ? Colors.white.withValues(alpha: 0.95)
-        : Colors.black.withValues(alpha: 0.28);
-    final borderColor = widget.isSaved
-        ? Colors.white.withValues(alpha: 0.78)
-        : Colors.white.withValues(alpha: 0.2);
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    return FavoriteButton(
+      isSaved: widget.isSaved,
       onTap: () => widget.onSaveToggle!(widget.id!),
-      child: Semantics(
-        button: true,
-        label: widget.isSaved ? 'Elimina din salvate' : 'Salveaza',
-        child: AnimatedContainer(
-          duration: PulseTheme.animFast,
-          curve: PulseTheme.animCurve,
-          width: 38,
-          height: 38,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            shape: BoxShape.circle,
-            border: Border.all(color: borderColor),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
-                spreadRadius: -4,
-              ),
-            ],
-          ),
-          child: Center(
-            child: Icon(
-              widget.isSaved ? Icons.favorite : Icons.favorite_border,
-              size: 22,
-              color: widget.isSaved ? favoriteColor : Colors.white,
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -539,7 +501,7 @@ class _ContentCardState extends State<ContentCard>
             contentThumbnailUrl: widget.contentThumbnailUrl,
             contentPublishedAt: widget.contentPublishedAt,
             publicationDescription: widget.publicationDescription,
-            publicationLogoUrl: widget.publicationLogoUrl ?? widget.imageUrl,
+            publicationLogoUrl: widget.publicationLogoUrl,
             emcCreditsText: widget.publicationEmcCreditsText,
             creditationText: widget.publicationCreditationText,
             indexingText: widget.publicationIndexingText,
@@ -577,6 +539,54 @@ class _ContentCardState extends State<ContentCard>
   Widget build(BuildContext context) {
     return _buildTappableCard();
   }
+}
+
+String? _emcPointsForModel(ContentItem model) {
+  if (!_supportsEmcBadge(model.contentType)) return null;
+  final numericCredits = model.emcCredits;
+  if (numericCredits != null && numericCredits > 0) {
+    return '+$numericCredits';
+  }
+
+  if (model.contentType == 'publication') {
+    final parsedCredits = _parsePositiveEmcCredits(
+      model.publicationEmcCreditsText,
+    );
+    if (parsedCredits != null) return '+$parsedCredits';
+  }
+
+  return null;
+}
+
+bool _supportsEmcBadge(String type) {
+  return type == 'event' || type == 'course' || type == 'publication';
+}
+
+String _typeLabelForContentCard(String type) {
+  switch (type) {
+    case 'publication':
+      return 'Revistă';
+    case 'news':
+      return 'Știre';
+    case 'event':
+      return 'Eveniment';
+    case 'course':
+      return 'Curs';
+    case 'article':
+      return 'Articol';
+    default:
+      return type;
+  }
+}
+
+int? _parsePositiveEmcCredits(String? value) {
+  final text = value?.trim();
+  if (text == null || text.isEmpty) return null;
+  final match = RegExp(r'\d+(?:[.,]\d+)?').firstMatch(text);
+  if (match == null) return null;
+  final parsed = num.tryParse(match.group(0)!.replaceAll(',', '.'));
+  if (parsed == null || parsed <= 0) return null;
+  return parsed.toInt();
 }
 
 class _MetaPill extends StatelessWidget {

@@ -1,14 +1,31 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../models/content_item.dart';
 import '../theme/pulse_theme.dart';
+import 'content_type_badge.dart';
 import 'emc_badge.dart';
+import 'favorite_button.dart';
 
 class FeaturedCard extends StatefulWidget {
   final List<ContentItem> items;
   final bool isLoading;
+  final bool iconOnlyTypeBadge;
+  final bool autoSlide;
+  final Set<int> savedContentIds;
+  final ValueChanged<int>? onSaveToggle;
+  final ValueChanged<ContentItem>? onItemTap;
 
-  const FeaturedCard({super.key, required this.items, this.isLoading = false});
+  const FeaturedCard({
+    super.key,
+    required this.items,
+    this.isLoading = false,
+    this.iconOnlyTypeBadge = false,
+    this.autoSlide = false,
+    this.savedContentIds = const {},
+    this.onSaveToggle,
+    this.onItemTap,
+  });
 
   @override
   State<FeaturedCard> createState() => _FeaturedCardState();
@@ -17,6 +34,7 @@ class FeaturedCard extends StatefulWidget {
 class _FeaturedCardState extends State<FeaturedCard> {
   late final PageController _pageController;
   double _currentPage = 0;
+  Timer? _autoSlideTimer;
 
   @override
   void initState() {
@@ -28,6 +46,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
         _currentPage = _pageController.page ?? 0;
       });
     });
+    _syncAutoSlideTimer();
   }
 
   @override
@@ -38,6 +57,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
       if (_pageController.hasClients) {
         _pageController.jumpToPage(0);
       }
+      _syncAutoSlideTimer();
       return;
     }
 
@@ -45,12 +65,36 @@ class _FeaturedCardState extends State<FeaturedCard> {
         widget.items.isNotEmpty) {
       _currentPage = _currentPage.clamp(0, widget.items.length - 1).toDouble();
     }
+    _syncAutoSlideTimer();
   }
 
   @override
   void dispose() {
+    _autoSlideTimer?.cancel();
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _syncAutoSlideTimer() {
+    _autoSlideTimer?.cancel();
+    _autoSlideTimer = null;
+
+    if (!widget.autoSlide || widget.isLoading || widget.items.length < 2) {
+      return;
+    }
+
+    _autoSlideTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || !_pageController.hasClients || widget.items.length < 2) {
+        return;
+      }
+      final current = _currentPage.round().clamp(0, widget.items.length - 1);
+      final next = (current + 1) % widget.items.length;
+      _pageController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 480),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 
   @override
@@ -89,7 +133,17 @@ class _FeaturedCardState extends State<FeaturedCard> {
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 6,
                                 ),
-                                child: _FeaturedSlide(item: item),
+                                child: _FeaturedSlide(
+                                  item: item,
+                                  iconOnlyTypeBadge: widget.iconOnlyTypeBadge,
+                                  isSaved: widget.savedContentIds.contains(
+                                    item.id,
+                                  ),
+                                  onSaveToggle: widget.onSaveToggle,
+                                  onTap: widget.onItemTap == null
+                                      ? null
+                                      : () => widget.onItemTap!(item),
+                                ),
                               ),
                             );
                           },
@@ -124,8 +178,18 @@ class _FeaturedCardState extends State<FeaturedCard> {
 
 class _FeaturedSlide extends StatelessWidget {
   final ContentItem item;
+  final bool iconOnlyTypeBadge;
+  final bool isSaved;
+  final ValueChanged<int>? onSaveToggle;
+  final VoidCallback? onTap;
 
-  const _FeaturedSlide({required this.item});
+  const _FeaturedSlide({
+    required this.item,
+    required this.iconOnlyTypeBadge,
+    required this.isSaved,
+    this.onSaveToggle,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -137,126 +201,144 @@ class _FeaturedSlide extends StatelessWidget {
         item.specializationName ??
         item.categoryName ??
         '';
+    final emcPoints = _emcPointsForItem(item);
+    final showInlineDate =
+        item.publishedAt != null && _showsInlineDate(item.contentType);
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.24),
-            blurRadius: 28,
-            offset: const Offset(0, 14),
-            spreadRadius: -6,
-          ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-            spreadRadius: -4,
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (imageUrl != null)
-              _FeaturedImage(imageUrl: imageUrl, fallbackColor: color)
-            else
-              _FeaturedFallback(color: color),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.05),
-                    Colors.black.withValues(alpha: 0.26),
-                    Colors.black.withValues(alpha: 0.78),
-                  ],
-                  stops: const [0.0, 0.44, 1.0],
-                ),
-              ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.24),
+              blurRadius: 28,
+              offset: const Offset(0, 14),
+              spreadRadius: -6,
             ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.42),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-            if (item.emcCredits != null)
-              Positioned(
-                right: 16,
-                top: 16,
-                child: EmcBadge(points: '+${item.emcCredits}'),
-              ),
-            Positioned(
-              left: 22,
-              right: 22,
-              bottom: 22,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      _TypeBadge(
-                        label: item.tag ?? _labelForType(item.contentType),
-                        color: color,
-                      ),
-                      const SizedBox(width: 10),
-                      if (item.publishedAt != null)
-                        Flexible(
-                          child: Text(
-                            _formatDate(item.publishedAt!),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.78),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    item.publicationName ?? item.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      height: 1.15,
-                    ),
-                  ),
-                  if (subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.84),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+              spreadRadius: -4,
             ),
           ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (imageUrl != null)
+                _FeaturedImage(imageUrl: imageUrl, fallbackColor: color)
+              else
+                _FeaturedFallback(color: color),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.05),
+                      Colors.black.withValues(alpha: 0.26),
+                      Colors.black.withValues(alpha: 0.78),
+                    ],
+                    stops: const [0.0, 0.44, 1.0],
+                  ),
+                ),
+              ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.42),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+              if (onSaveToggle != null)
+                Positioned(
+                  left: 16,
+                  top: 16,
+                  child: FavoriteButton(
+                    isSaved: isSaved,
+                    onTap: () => onSaveToggle!(item.id),
+                  ),
+                ),
+              if (emcPoints != null)
+                Positioned(
+                  right: 16,
+                  top: 16,
+                  child: EmcBadge(points: emcPoints),
+                ),
+              Positioned(
+                left: 22,
+                right: 22,
+                bottom: 22,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        _TypeBadge(
+                          label: _labelForType(item.contentType),
+                          color: color,
+                          contentType: item.contentType,
+                          iconOnly: iconOnlyTypeBadge,
+                        ),
+                        if (showInlineDate) ...[
+                          const SizedBox(width: 10),
+                          Flexible(
+                            child: Text(
+                              _formatDate(item.publishedAt!),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.78),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      item.publicationName ?? item.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        height: 1.15,
+                      ),
+                    ),
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.84),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -346,26 +428,23 @@ class _FeaturedFallback extends StatelessWidget {
 class _TypeBadge extends StatelessWidget {
   final String label;
   final Color color;
+  final String contentType;
+  final bool iconOnly;
 
-  const _TypeBadge({required this.label, required this.color});
+  const _TypeBadge({
+    required this.label,
+    required this.color,
+    required this.contentType,
+    required this.iconOnly,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        label.toUpperCase(),
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.6,
-        ),
-      ),
+    return ContentTypeBadge(
+      label: label,
+      color: color,
+      iconAsset: iconOnly ? _iconForType(contentType) : null,
+      iconOnly: iconOnly,
     );
   }
 }
@@ -466,6 +545,56 @@ String _labelForType(String type) {
     default:
       return type;
   }
+}
+
+String _iconForType(String type) {
+  switch (type) {
+    case 'course':
+      return 'assets/icons/graduation.svg';
+    case 'event':
+      return 'assets/icons/events.svg';
+    case 'publication':
+      return 'assets/icons/books.svg';
+    case 'news':
+    case 'article':
+    default:
+      return 'assets/icons/newspaper.svg';
+  }
+}
+
+bool _showsInlineDate(String type) {
+  return type != 'event' && type != 'publication';
+}
+
+String? _emcPointsForItem(ContentItem item) {
+  if (!_supportsEmcBadge(item.contentType)) return null;
+  final numericCredits = item.emcCredits;
+  if (numericCredits != null && numericCredits > 0) {
+    return '+$numericCredits';
+  }
+
+  if (item.contentType == 'publication') {
+    final parsedCredits = _parsePositiveEmcCredits(
+      item.publicationEmcCreditsText,
+    );
+    if (parsedCredits != null) return '+$parsedCredits';
+  }
+
+  return null;
+}
+
+bool _supportsEmcBadge(String type) {
+  return type == 'event' || type == 'course' || type == 'publication';
+}
+
+int? _parsePositiveEmcCredits(String? value) {
+  final text = value?.trim();
+  if (text == null || text.isEmpty) return null;
+  final match = RegExp(r'\d+(?:[.,]\d+)?').firstMatch(text);
+  if (match == null) return null;
+  final parsed = num.tryParse(match.group(0)!.replaceAll(',', '.'));
+  if (parsed == null || parsed <= 0) return null;
+  return parsed.toInt();
 }
 
 String _formatDate(DateTime date) {

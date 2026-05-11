@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../theme/pulse_theme.dart';
+import '../widgets/skeleton_loading.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -59,98 +60,98 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       body: SafeArea(
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const SkeletonLoading.profile()
             : _errorMessage != null
-                ? Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Center(
-                      child: Text(
-                        'Nu am putut încărca profilul: $_errorMessage',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: PulseTheme.textSecondary),
-                      ),
-                    ),
-                  )
-                : ListView(
-                    padding: const EdgeInsets.all(20),
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: PulseTheme.borderLight),
-                          boxShadow: PulseTheme.cardShadow,
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 64,
-                              height: 64,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: PulseTheme.avatarRingGradient,
-                              ),
-                              padding: const EdgeInsets.all(3),
-                              child: Container(
-                                decoration: const BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.person,
-                                  color: PulseTheme.textSecondary,
-                                  size: 32,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _value('display_name', fallback: 'Medic'),
-                                    style: const TextStyle(
-                                      color: PulseTheme.textPrimary,
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _value('email', fallback: 'Email necunoscut'),
-                                    style: const TextStyle(
-                                      color: PulseTheme.textSecondary,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      _profileCard(
-                        title: 'Date de bază',
-                        rows: {
-                          'Telefon': _value('phone'),
-                          'Județ': _value('county_name'),
-                          'Oraș': _value('city_name'),
-                        },
-                      ),
-                      const SizedBox(height: 14),
-                      _profileCard(
-                        title: 'Date profesionale',
-                        rows: {
-                          'Ocupație': _value('occupation_name'),
-                          'Specializare': _value('specialization_name'),
-                          'Titlu universitar': _value('professional_grade_name'),
-                        },
-                      ),
-                    ],
+            ? Padding(
+                padding: const EdgeInsets.all(20),
+                child: Center(
+                  child: Text(
+                    'Nu am putut încărca profilul: $_errorMessage',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: PulseTheme.textSecondary),
                   ),
+                ),
+              )
+            : ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: PulseTheme.borderLight),
+                      boxShadow: PulseTheme.cardShadow,
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: PulseTheme.avatarRingGradient,
+                          ),
+                          padding: const EdgeInsets.all(3),
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.person,
+                              color: PulseTheme.textSecondary,
+                              size: 32,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _value('display_name', fallback: 'Medic'),
+                                style: const TextStyle(
+                                  color: PulseTheme.textPrimary,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _value('email', fallback: 'Email necunoscut'),
+                                style: const TextStyle(
+                                  color: PulseTheme.textSecondary,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  _profileCard(
+                    title: 'Date de bază',
+                    rows: {
+                      'Telefon': _value('phone'),
+                      'Județ': _value('county_name'),
+                      'Oraș': _value('city_name'),
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  _profileCard(
+                    title: 'Date profesionale',
+                    rows: {
+                      'Ocupație': _value('occupation_name'),
+                      'Specializare': _value('specialization_name'),
+                      'Titlu universitar': _value('professional_grade_name'),
+                    },
+                  ),
+                ],
+              ),
       ),
     );
   }

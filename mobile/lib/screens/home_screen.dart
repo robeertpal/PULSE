@@ -9,6 +9,8 @@ import '../models/filter_option.dart';
 import '../services/api_service.dart';
 import '../services/auth_storage.dart';
 import 'login_screen.dart';
+import 'content_detail_screen.dart';
+import 'publication_issues_screen.dart';
 import 'profile_screen.dart';
 import 'saved_content_screen.dart';
 import '../widgets/home_header.dart';
@@ -16,7 +18,7 @@ import '../widgets/featured_card.dart';
 import '../widgets/content_section.dart';
 import '../widgets/content_card.dart';
 import '../widgets/advertisement_feed_slot.dart';
-import '../widgets/premium_loading_indicator.dart';
+import '../widgets/skeleton_loading.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -288,6 +290,56 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  List<ContentItem> _withoutFeaturedItems(List<ContentItem> items) {
+    if (_featuredItems.isEmpty) return items;
+    final featuredKeys = _featuredItems.map(_contentIdentityKey).toSet();
+    return items
+        .where((item) => !featuredKeys.contains(_contentIdentityKey(item)))
+        .toList();
+  }
+
+  String _contentIdentityKey(ContentItem item) =>
+      '${item.contentType}:${item.id}';
+
+  Future<void> _openContentItem(ContentItem item) async {
+    if (item.contentType == 'publication') {
+      final publicationId = item.publicationId ?? item.id;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => PublicationIssuesScreen(
+            publicationId: publicationId,
+            publicationName: item.publicationName ?? item.title,
+            contentTitle: item.title,
+            contentShortDescription: item.shortDescription,
+            contentBody: item.body,
+            contentHeroImageUrl: item.heroImageUrl,
+            contentThumbnailUrl: item.thumbnailUrl,
+            contentPublishedAt: item.publishedAt,
+            publicationDescription: item.publicationDescription,
+            publicationLogoUrl: item.publicationLogoUrl,
+            emcCreditsText: item.publicationEmcCreditsText,
+            creditationText: item.publicationCreditationText,
+            indexingText: item.publicationIndexingText,
+            subscriptionUrl: item.publicationSubscriptionUrl ?? item.contentUrl,
+            authors: item.publicationAuthors,
+          ),
+        ),
+      );
+      _loadSavedContentIds();
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ContentDetailScreen(
+          contentItemId: item.id,
+          initiallySaved: _savedContentIds.contains(item.id),
+        ),
+      ),
+    );
+    _loadSavedContentIds();
+  }
+
   void _toggleCategory(int id) {
     setState(() {
       if (!_selectedCategoryIds.add(id)) {
@@ -409,10 +461,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             : const [],
       ),
       child: FilterChip(
-        label: Text(
-          option.name,
-          overflow: TextOverflow.ellipsis,
-        ),
+        label: Text(option.name, overflow: TextOverflow.ellipsis),
         selected: selected,
         onSelected: (_) => onSelected(option.id),
         showCheckmark: false,
@@ -696,20 +745,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ],
                     )
                   : _hasActiveFilters
-                      ? Padding(
-                          padding: const EdgeInsets.fromLTRB(52, 6, 12, 2),
-                          child: Text(
-                            _activeFilterSummary(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: PulseTheme.textSecondary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(52, 6, 12, 2),
+                      child: Text(
+                        _activeFilterSummary(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: PulseTheme.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
             ),
           ],
         ),
@@ -843,10 +892,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildAcasaFeed() {
     if (_isLoading) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 150.0),
-        child: PremiumLoadingIndicator(text: 'Se pregătește feed-ul...'),
-      );
+      return const SkeletonLoading.feed(scrollable: false);
     }
 
     if (_errorMessage != null) {
@@ -870,6 +916,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       );
     }
 
+    final newsSectionItems = _withoutFeaturedItems(_news).take(3).toList();
+    final publicationSectionItems = _withoutFeaturedItems(
+      _publications,
+    ).take(3).toList();
+    final eventSectionItems = _withoutFeaturedItems(_events).take(3).toList();
+    final courseSectionItems = _withoutFeaturedItems(_courses).take(3).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -878,7 +931,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
         _animatedSection(
           1,
-          FeaturedCard(items: _featuredItems, isLoading: _isFeaturedLoading),
+          FeaturedCard(
+            items: _featuredItems,
+            isLoading: _isFeaturedLoading,
+            autoSlide: true,
+            savedContentIds: _savedContentIds,
+            onSaveToggle: _toggleSavedContent,
+            onItemTap: _openContentItem,
+          ),
         ),
 
         if (_isFeaturedLoading || _featuredItems.isNotEmpty)
@@ -888,83 +948,111 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _animatedSection(2, _buildHomeEmptyState()),
 
         // Știri Section
-        if (_news.isNotEmpty) ...[
-        _animatedSection(
-          2,
-          ContentSection(
-            title: 'Știri',
-            emptyMessage: 'Nu există încă știri publicate.',
-            emptyIconAsset: 'assets/icons/newspaper.svg',
-            categoryColor: PulseTheme.newsContent,
-            onActionTap: () => _navigateToTab(4),
-            children: _news.map(_savedContentCard).toList(),
+        if (newsSectionItems.isNotEmpty) ...[
+          _animatedSection(
+            2,
+            ContentSection(
+              title: 'Știri',
+              emptyMessage: 'Nu există încă știri publicate.',
+              emptyIconAsset: 'assets/icons/newspaper.svg',
+              categoryColor: PulseTheme.newsContent,
+              editorialLayout: true,
+              featuredChild: FeaturedCard(
+                items: newsSectionItems,
+                savedContentIds: _savedContentIds,
+                onSaveToggle: _toggleSavedContent,
+                onItemTap: _openContentItem,
+              ),
+              onActionTap: () => _navigateToTab(4),
+              children: const [],
+            ),
           ),
-        ),
 
-        AdvertisementFeedSlot(
-          ads: _adsByPlacement['home_after_news'] ?? const <AdItem>[],
-          onAdTap: _handleAdTap,
-        ),
+          AdvertisementFeedSlot(
+            ads: _adsByPlacement['home_after_news'] ?? const <AdItem>[],
+            onAdTap: _handleAdTap,
+          ),
         ],
 
         // Reviste Section
-        if (_publications.isNotEmpty) ...[
-        _animatedSection(
-          3,
-          ContentSection(
-            title: 'Reviste',
-            emptyMessage: 'Nu există încă reviste publicate.',
-            emptyIconAsset: 'assets/icons/books.svg',
-            categoryColor: PulseTheme.magazineContent,
-            onActionTap: () => _navigateToTab(2),
-            children: _publications.map(_savedContentCard).toList(),
+        if (publicationSectionItems.isNotEmpty) ...[
+          _animatedSection(
+            3,
+            ContentSection(
+              title: 'Reviste',
+              emptyMessage: 'Nu există încă reviste publicate.',
+              emptyIconAsset: 'assets/icons/books.svg',
+              categoryColor: PulseTheme.magazineContent,
+              editorialLayout: true,
+              featuredChild: FeaturedCard(
+                items: publicationSectionItems,
+                savedContentIds: _savedContentIds,
+                onSaveToggle: _toggleSavedContent,
+                onItemTap: _openContentItem,
+              ),
+              onActionTap: () => _navigateToTab(2),
+              children: const [],
+            ),
           ),
-        ),
 
-        AdvertisementFeedSlot(
-          ads: _adsByPlacement['home_after_publications'] ?? const <AdItem>[],
-          onAdTap: _handleAdTap,
-        ),
+          AdvertisementFeedSlot(
+            ads: _adsByPlacement['home_after_publications'] ?? const <AdItem>[],
+            onAdTap: _handleAdTap,
+          ),
         ],
 
         // Evenimente Section
-        if (_events.isNotEmpty) ...[
-        _animatedSection(
-          4,
-          ContentSection(
-            title: 'Evenimente',
-            emptyMessage: 'Nu există încă evenimente publicate.',
-            emptyIconAsset: 'assets/icons/events.svg',
-            categoryColor: PulseTheme.eventContent,
-            onActionTap: () => _navigateToTab(3),
-            children: _events.map(_savedContentCard).toList(),
+        if (eventSectionItems.isNotEmpty) ...[
+          _animatedSection(
+            4,
+            ContentSection(
+              title: 'Evenimente',
+              emptyMessage: 'Nu există încă evenimente publicate.',
+              emptyIconAsset: 'assets/icons/events.svg',
+              categoryColor: PulseTheme.eventContent,
+              editorialLayout: true,
+              featuredChild: FeaturedCard(
+                items: eventSectionItems,
+                savedContentIds: _savedContentIds,
+                onSaveToggle: _toggleSavedContent,
+                onItemTap: _openContentItem,
+              ),
+              onActionTap: () => _navigateToTab(3),
+              children: const [],
+            ),
           ),
-        ),
 
-        AdvertisementFeedSlot(
-          ads: _adsByPlacement['home_after_events'] ?? const <AdItem>[],
-          onAdTap: _handleAdTap,
-        ),
+          AdvertisementFeedSlot(
+            ads: _adsByPlacement['home_after_events'] ?? const <AdItem>[],
+            onAdTap: _handleAdTap,
+          ),
         ],
 
         // Cursuri Section
-        if (_courses.isNotEmpty) ...[
-        _animatedSection(
-          5,
-          ContentSection(
-            title: 'Cursuri',
-            emptyMessage: 'Nu există încă cursuri publicate.',
-            emptyIconAsset: 'assets/icons/graduation.svg',
-            categoryColor: PulseTheme.courseContent,
-            onActionTap: () => _navigateToTab(1),
-            children: _courses.map(_savedContentCard).toList(),
+        if (courseSectionItems.isNotEmpty) ...[
+          _animatedSection(
+            5,
+            ContentSection(
+              title: 'Cursuri',
+              emptyMessage: 'Nu există încă cursuri publicate.',
+              emptyIconAsset: 'assets/icons/graduation.svg',
+              categoryColor: PulseTheme.courseContent,
+              editorialLayout: true,
+              featuredChild: FeaturedCard(
+                items: courseSectionItems,
+                savedContentIds: _savedContentIds,
+                onSaveToggle: _toggleSavedContent,
+                onItemTap: _openContentItem,
+              ),
+              onActionTap: () => _navigateToTab(1),
+              children: const [],
+            ),
           ),
-        ),
 
-        AdvertisementFeedSlot(
-          ads: _adsByPlacement['home_after_courses'] ?? const <AdItem>[],
-          onAdTap: _handleAdTap,
-        ),
+          AdvertisementFeedSlot(
+            ads: _adsByPlacement['home_after_courses'] ?? const <AdItem>[],
+            onAdTap: _handleAdTap,
+          ),
         ],
 
         const SizedBox(height: 100),
@@ -995,10 +1083,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     required List<ContentItem> items,
   }) {
     if (_isLoading) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 150.0),
-        child: PremiumLoadingIndicator(text: 'Se pregătește feed-ul...'),
-      );
+      return const SkeletonLoading.list(scrollable: false);
     }
 
     if (_errorMessage != null) {

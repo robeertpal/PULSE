@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../models/content_item.dart';
 import '../services/api_service.dart';
 import '../theme/pulse_theme.dart';
+import '../widgets/ai_summary.dart';
+import '../widgets/content_card.dart';
+import '../widgets/content_type_badge.dart';
 import '../widgets/emc_badge.dart';
-import '../widgets/premium_loading_indicator.dart';
+import '../widgets/favorite_button.dart';
+import '../widgets/skeleton_loading.dart';
 
 class ContentDetailScreen extends StatefulWidget {
   final int contentItemId;
@@ -23,17 +26,15 @@ class ContentDetailScreen extends StatefulWidget {
 }
 
 class _ContentDetailScreenState extends State<ContentDetailScreen> {
-  static const String _aiIcon = 'assets/icons/AI.svg';
   static const String _backIcon = 'assets/icons/arrow.backward.svg';
   static const String _checkIcon = 'assets/icons/checkmark.svg';
   static const String _courseIcon = 'assets/icons/graduation.svg';
-  static const String _emcIcon = 'assets/icons/EMC.svg';
   static const String _eventIcon = 'assets/icons/events.svg';
   static const String _globeIcon = 'assets/icons/globe.svg';
-  static const String _heartIcon = 'assets/icons/heart.svg';
   static const String _newsIcon = 'assets/icons/newspaper.svg';
   static const String _paymentIcon = 'assets/icons/creditcard.svg';
   static const String _calendarIcon = 'assets/icons/calendar.svg';
+  static const String _eyeglassesIcon = 'assets/icons/eyeglasses.svg';
   static const String _buildingIcon = 'assets/icons/building.svg';
   static const String _walletIcon = 'assets/icons/wallet.svg';
   static const String _peopleIcon = 'assets/icons/people.svg';
@@ -49,6 +50,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   List<String> _aiKeyPoints = [];
   String? _aiDisclaimer;
   String? _aiSummaryError;
+  Set<int> _savedContentIds = {};
+  List<ContentItem> _recommendations = [];
 
   @override
   void initState() {
@@ -71,10 +74,15 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
       final detail = await detailFuture;
       final savedIds = await savedIdsFuture;
 
+      final item = ContentItem.fromJson(detail);
+      final recommendations = await _loadRecommendationsFor(item);
+
       if (!mounted) return;
       setState(() {
-        _item = ContentItem.fromJson(detail);
+        _item = item;
         _isSaved = savedIds.contains(widget.contentItemId);
+        _savedContentIds = savedIds;
+        _recommendations = recommendations;
         _isLoading = false;
       });
     } catch (e) {
@@ -83,6 +91,22 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         _isLoading = false;
         _errorMessage = 'Nu am putut incarca detaliile.';
       });
+    }
+  }
+
+  Future<List<ContentItem>> _loadRecommendationsFor(ContentItem item) async {
+    try {
+      final items = switch (item.contentType) {
+        'course' => await _apiService.getCourses(limit: 8),
+        'event' => await _apiService.getEvents(limit: 8),
+        'publication' => await _apiService.getPublications(limit: 8),
+        'news' => await _apiService.getNews(limit: 8),
+        _ => await _apiService.getNews(limit: 8),
+      };
+      return items.where((candidate) => candidate.id != item.id).toList();
+    } catch (e) {
+      debugPrint('Error fetching recommendations: $e');
+      return const [];
     }
   }
 
@@ -126,6 +150,40 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           _isSaving = false;
         });
       }
+    }
+  }
+
+  Future<void> _toggleRecommendationSaved(int contentItemId) async {
+    final wasSaved = _savedContentIds.contains(contentItemId);
+    setState(() {
+      if (wasSaved) {
+        _savedContentIds.remove(contentItemId);
+      } else {
+        _savedContentIds.add(contentItemId);
+      }
+    });
+
+    try {
+      if (wasSaved) {
+        await _apiService.unsaveContent(contentItemId);
+      } else {
+        await _apiService.saveContent(contentItemId);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        if (wasSaved) {
+          _savedContentIds.add(contentItemId);
+        } else {
+          _savedContentIds.remove(contentItemId);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nu am putut actualiza salvarea'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -195,18 +253,18 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   String? _formatDate(DateTime? date) {
     if (date == null) return null;
     const months = [
-      'ian',
-      'feb',
-      'mar',
-      'apr',
+      'ianuarie',
+      'februarie',
+      'martie',
+      'aprilie',
       'mai',
-      'iun',
-      'iul',
-      'aug',
-      'sep',
-      'oct',
-      'nov',
-      'dec',
+      'iunie',
+      'iulie',
+      'august',
+      'septembrie',
+      'octombrie',
+      'noiembrie',
+      'decembrie',
     ];
     return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
@@ -229,7 +287,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
       case 'course':
         return 'Curs';
       case 'news':
-        return 'Știre';
+        return 'Știri';
       default:
         return item.tag ?? 'Detalii';
     }
@@ -267,7 +325,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
       case 'event':
         return PulseTheme.eventContent;
       case 'course':
-        return const Color(0xFF2563EB);
+        return PulseTheme.courseContent;
       case 'news':
       default:
         return const Color(0xFF0E7490);
@@ -281,6 +339,14 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         .where((word) => word.trim().isNotEmpty)
         .length;
     return (words / 220).ceil().clamp(1, 99);
+  }
+
+  String _newsAuthorBadgeLabel(ContentItem item) {
+    final author = item.authorName?.trim();
+    final name = author != null && author.isNotEmpty
+        ? author
+        : 'Redacția PULSE';
+    return name;
   }
 
   String? _formatTime(DateTime? date) {
@@ -347,29 +413,66 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     return 'Program anunțat curând';
   }
 
-  Future<void> _openContentUrl(ContentItem item) async {
-    final rawUrl = item.contentUrl?.trim();
-    if (rawUrl == null || rawUrl.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Linkul nu este disponibil momentan.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
+  String _courseMonthYear(DateTime date) {
+    const months = [
+      'ianuarie',
+      'februarie',
+      'martie',
+      'aprilie',
+      'mai',
+      'iunie',
+      'iulie',
+      'august',
+      'septembrie',
+      'octombrie',
+      'noiembrie',
+      'decembrie',
+    ];
+    return '${months[date.month - 1]} ${date.year}';
+  }
 
-    final uri = Uri.tryParse(rawUrl);
-    if (uri == null) return;
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nu am putut deschide linkul.'),
-          behavior: SnackBarBehavior.floating,
-        ),
+  String _courseDayMonth(DateTime date) {
+    const months = [
+      'ianuarie',
+      'februarie',
+      'martie',
+      'aprilie',
+      'mai',
+      'iunie',
+      'iulie',
+      'august',
+      'septembrie',
+      'octombrie',
+      'noiembrie',
+      'decembrie',
+    ];
+    return '${date.day} ${months[date.month - 1]}';
+  }
+
+  ({String title, String? subtitle})? _courseAvailability(ContentItem item) {
+    final validFrom = item.validFrom;
+    final validUntil = item.validUntil;
+
+    if (validFrom != null && validUntil != null) {
+      return (
+        title: 'Disponibil din ${_courseMonthYear(validFrom)}',
+        subtitle:
+            'Din ${_courseDayMonth(validFrom)} până la ${_courseDayMonth(validUntil)}',
       );
     }
+    if (validFrom != null) {
+      return (
+        title: 'Disponibil din ${_courseMonthYear(validFrom)}',
+        subtitle: null,
+      );
+    }
+    if (validUntil != null) {
+      return (
+        title: 'Disponibil până în ${_courseMonthYear(validUntil)}',
+        subtitle: 'Până la ${_courseDayMonth(validUntil)}',
+      );
+    }
+    return null;
   }
 
   Widget _buildHeroImage(ContentItem item) {
@@ -442,6 +545,14 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
 
   Widget _buildHero(ContentItem item, double height) {
     final topInset = MediaQuery.of(context).padding.top;
+    final isNews = item.contentType == 'news';
+    final isCourse = item.contentType == 'course';
+    final courseProvider = item.provider?.trim();
+    final courseSpecialization = item.specializationName?.trim();
+    final hasCourseBadges =
+        isCourse &&
+        ((courseProvider?.isNotEmpty == true) ||
+            (courseSpecialization?.isNotEmpty == true));
     return SizedBox(
       height: height,
       width: double.infinity,
@@ -458,20 +569,23 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
             _buildHeroImage(item),
             if (item.contentType == 'event')
               Container(color: Colors.black.withValues(alpha: 0.4)),
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.06),
-                    Colors.black.withValues(alpha: 0.18),
-                    Colors.black.withValues(alpha: 0.74),
-                  ],
-                  stops: const [0.18, 0.52, 1],
+            if (isNews)
+              Container(color: Colors.black.withValues(alpha: 0.38))
+            else
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.06),
+                      Colors.black.withValues(alpha: 0.18),
+                      Colors.black.withValues(alpha: 0.74),
+                    ],
+                    stops: const [0.18, 0.52, 1],
+                  ),
                 ),
               ),
-            ),
             Positioned(
               top: topInset + 12,
               left: 18,
@@ -481,7 +595,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                 onTap: () => Navigator.of(context).maybePop(),
               ),
             ),
-            if (item.contentType == 'event' &&
+            if ((item.contentType == 'event' || isCourse) &&
                 item.emcCredits != null &&
                 item.emcCredits! > 0)
               Positioned(
@@ -516,6 +630,13 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                         ),
                       ),
                     )
+                  else if (item.contentType == 'news')
+                    _buildMainPageBadge(
+                      _contentLabel(item),
+                      PulseTheme.newsContent,
+                    )
+                  else if (isCourse)
+                    _buildMainPageBadge('Curs', PulseTheme.courseContent)
                   else
                     _buildHeroBadge(_contentLabel(item)),
                   const SizedBox(height: 12),
@@ -530,6 +651,34 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
+                  if (item.contentType == 'news') ...[
+                    const SizedBox(height: 12),
+                    _buildMainPageBadge(
+                      _newsAuthorBadgeLabel(item),
+                      PulseTheme.newsContent,
+                    ),
+                  ],
+                  if (hasCourseBadges) ...[
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (courseProvider?.isNotEmpty == true)
+                          _buildMainPageBadge(
+                            courseProvider!,
+                            PulseTheme.courseContent,
+                            iconAsset: _buildingIcon,
+                          ),
+                        if (courseSpecialization?.isNotEmpty == true)
+                          _buildMainPageBadge(
+                            courseSpecialization!,
+                            PulseTheme.courseContent,
+                            iconAsset: _courseIcon,
+                          ),
+                      ],
+                    ),
+                  ],
                   if (item.contentType == 'event') ...[
                     const SizedBox(height: 12),
                     Wrap(
@@ -605,6 +754,10 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     );
   }
 
+  Widget _buildMainPageBadge(String label, Color color, {String? iconAsset}) {
+    return ContentTypeBadge(label: label, color: color, iconAsset: iconAsset);
+  }
+
   Widget _buildHeroSecondaryBadge(String iconAsset, String text) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -632,74 +785,16 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   }
 
   Widget _buildFavoriteButton() {
-    return Material(
-      color: Colors.white,
-      shape: const CircleBorder(),
-      elevation: 10,
-      shadowColor: const Color(0xFF0E7490).withValues(alpha: 0.12),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: _isSaving ? null : _toggleSaved,
-        child: SizedBox(
-          width: 62,
-          height: 62,
-          child: Center(
-            child: _buildAssetIcon(
-              _heartIcon,
-              color: _isSaved
-                  ? const Color(0xFFEF4444)
-                  : PulseTheme.textPrimary,
-              size: 28,
-            ),
-          ),
-        ),
-      ),
+    return FavoriteButton(
+      isSaved: _isSaved,
+      onTap: _isSaving ? null : _toggleSaved,
     );
   }
 
   Widget _buildAiSummaryButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: _isAiSummaryLoading ? null : _generateAiSummary,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFEFF8F7),
-          foregroundColor: const Color(0xFF0E7490),
-          disabledBackgroundColor: const Color(0xFFEFF8F7),
-          disabledForegroundColor: const Color(0xFF0E7490),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          elevation: 0,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _isAiSummaryLoading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFF0E7490),
-                    ),
-                  )
-                : _buildAssetIcon(
-                    _aiIcon,
-                    color: const Color(0xFF0E7490),
-                    size: 18,
-                  ),
-            const SizedBox(width: 8),
-            Text(
-              _isAiSummaryLoading
-                  ? 'Se generează rezumatul...'
-                  : 'Generează rezumat AI',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ],
-        ),
-      ),
+    return AiSummaryButton(
+      isLoading: _isAiSummaryLoading,
+      onGenerate: _generateAiSummary,
     );
   }
 
@@ -746,7 +841,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     );
   }
 
-  Widget _buildAuthorRow(ContentItem item) {
+  Widget _buildNewsMetaRow(ContentItem item) {
     final date = _formatDate(item.publishedAt);
     return Container(
       padding: const EdgeInsets.all(14),
@@ -757,131 +852,21 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: const Color(0xFFE6F6F4),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Center(
-              child: _buildAssetIcon(
-                _peopleIcon,
-                color: const Color(0xFF0E7490),
-                size: 21,
-              ),
-            ),
+          _buildAssetIcon(
+            _eyeglassesIcon,
+            color: PulseTheme.newsContent,
+            size: 20,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.authorName?.trim().isNotEmpty == true
-                      ? item.authorName!
-                      : 'Redacția PULSE',
-                  style: const TextStyle(
-                    color: PulseTheme.textPrimary,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  [
-                    if (date != null) date,
-                    '${_readingMinutes(item)} min citire',
-                  ].join(' • '),
-                  style: const TextStyle(
-                    color: PulseTheme.textSecondary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoGrid(List<_DetailInfo> items) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: items.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 1.42,
-      ),
-      itemBuilder: (context, index) => _buildInfoCard(items[index]),
-    );
-  }
-
-  Widget _buildInfoCard(_DetailInfo info) {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFEAF0F4)),
-        boxShadow: [
-          BoxShadow(
-            color: info.accent.withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: info.accent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Center(
-              child: _buildAssetIcon(
-                info.iconAsset,
-                color: info.accent,
-                size: 18,
+            child: Text(
+              [?date, '${_readingMinutes(item)} min citire'].join(' • '),
+              style: const TextStyle(
+                color: PulseTheme.textSecondary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                info.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: PulseTheme.textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                info.value,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: PulseTheme.textPrimary,
-                  fontSize: 15,
-                  height: 1.16,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -919,28 +904,6 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
             ),
           )
           .toList(),
-    );
-  }
-
-  Widget _buildPrimaryButton(ContentItem item, String label) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: () => _openContentUrl(item),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF0E7490),
-          foregroundColor: Colors.white,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 17),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
-          ),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
-        ),
-      ),
     );
   }
 
@@ -996,8 +959,10 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildAuthorRow(item),
+        _buildNewsMetaRow(item),
         const SizedBox(height: 24),
+        _buildPanelSectionTitle('Descriere'),
+        const SizedBox(height: 14),
         _buildDescription(description),
         const SizedBox(height: 20),
         _buildAiSummaryButton(),
@@ -1157,31 +1122,17 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
 
   Widget _buildCourseContent(ContentItem item) {
     final accent = _accentFor(item);
-    final validUntil = _formatDate(item.validUntil) ?? 'Disponibil acum';
+    final availability = _courseAvailability(item);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildInfoGrid([
-          _DetailInfo(
-            _courseIcon,
-            'Provider',
-            item.provider?.trim().isNotEmpty == true ? item.provider! : 'PULSE',
-            accent,
+        if (availability != null)
+          _buildEventInfoRow(
+            iconAsset: _calendarIcon,
+            accent: accent,
+            title: availability.title,
+            subtitle: availability.subtitle,
           ),
-          _DetailInfo(
-            _emcIcon,
-            'EMC',
-            item.emcCredits != null ? '${item.emcCredits} puncte' : 'În curs',
-            accent,
-          ),
-          _DetailInfo(_eventIcon, 'Disponibil până la', validUntil, accent),
-          _DetailInfo(
-            _checkIcon,
-            'Status',
-            _humanizeValue(item.courseStatus ?? 'published'),
-            accent,
-          ),
-        ]),
         if (item.progressPercent != null) ...[
           const SizedBox(height: 20),
           _buildProgress(item.progressPercent!),
@@ -1194,13 +1145,6 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           const SizedBox(height: 18),
           _buildArticleBody(_cleanBody(item.body)),
         ],
-        const SizedBox(height: 28),
-        _buildPrimaryButton(
-          item,
-          item.progressPercent != null && item.progressPercent! > 0
-              ? 'Continuă cursul'
-              : 'Începe cursul',
-        ),
       ],
     );
   }
@@ -1210,131 +1154,46 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
       return const SizedBox.shrink();
     }
 
-    final hasSummary = _aiSummary != null && _aiSummary!.trim().isNotEmpty;
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(top: 14),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: hasSummary
-            ? PulseTheme.primary.withValues(alpha: 0.07)
-            : PulseTheme.newsContent.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: hasSummary
-              ? PulseTheme.primary.withValues(alpha: 0.14)
-              : PulseTheme.newsContent.withValues(alpha: 0.18),
-        ),
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: AiSummaryInlineSection(
+        summary: _aiSummary,
+        keyPoints: _aiKeyPoints,
+        disclaimer: _aiDisclaimer,
+        error: _aiSummaryError,
       ),
-      child: hasSummary
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    _buildAssetIcon(
-                      _aiIcon,
-                      color: PulseTheme.primary,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Rezumat AI',
-                      style: TextStyle(
-                        color: PulseTheme.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _aiSummary!,
-                  style: const TextStyle(
-                    color: PulseTheme.textPrimary,
-                    fontSize: 15,
-                    height: 1.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (_aiKeyPoints.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  const Text(
-                    'Idei cheie',
-                    style: TextStyle(
-                      color: PulseTheme.textPrimary,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ..._aiKeyPoints.map(
-                    (point) => Padding(
-                      padding: const EdgeInsets.only(bottom: 7),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            margin: const EdgeInsets.only(top: 8, right: 9),
-                            decoration: const BoxDecoration(
-                              color: PulseTheme.primary,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              point,
-                              style: const TextStyle(
-                                color: PulseTheme.textSecondary,
-                                height: 1.42,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-                if (_aiDisclaimer != null && _aiDisclaimer!.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    _aiDisclaimer!,
-                    style: const TextStyle(
-                      color: PulseTheme.textTertiary,
-                      fontSize: 12,
-                      height: 1.35,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ],
-            )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildAssetIcon(
-                  _aiIcon,
-                  color: PulseTheme.newsContent,
-                  size: 20,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    _aiSummaryError ??
-                        'Serviciul AI nu este disponibil momentan.',
-                    style: const TextStyle(
-                      color: PulseTheme.textSecondary,
-                      fontWeight: FontWeight.w600,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+    );
+  }
+
+  Widget _buildMoreLikeThisSection() {
+    if (_recommendations.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 30),
+        _buildPanelSectionTitle('Vezi mai mult'),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 300,
+          child: ListView.builder(
+            clipBehavior: Clip.none,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.only(right: 8),
+            itemCount: _recommendations.length,
+            itemBuilder: (context, index) {
+              final item = _recommendations[index];
+              return ContentCard.fromModel(
+                item,
+                isSaved: _savedContentIds.contains(item.id),
+                onSaveToggle: _toggleRecommendationSaved,
+                cardWidth: 240,
+                margin: const EdgeInsets.only(right: 16),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -1369,11 +1228,18 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                         topRight: Radius.circular(36),
                       ),
                     ),
-                    child: item.contentType == 'event'
-                        ? _buildEventContent(item)
-                        : item.contentType == 'course'
-                        ? _buildCourseContent(item)
-                        : _buildNewsContent(item),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (item.contentType == 'event')
+                          _buildEventContent(item)
+                        else if (item.contentType == 'course')
+                          _buildCourseContent(item)
+                        else
+                          _buildNewsContent(item),
+                        _buildMoreLikeThisSection(),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -1391,9 +1257,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: PremiumLoadingIndicator(text: 'Se incarca articolul...'),
-      );
+      return const SkeletonLoading.detail();
     }
 
     if (_errorMessage != null) {
