@@ -867,7 +867,7 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                             padding: const EdgeInsets.fromLTRB(22, 8, 22, 16),
                             child: Center(
                               child: Text(
-                                'Abonamentul pe întregul an 2026 asigură un total de ${_emcCreditsText!.toLowerCase()}.',
+                                'Abonamentul pe întregul an ${DateTime.now().year} asigură un total de ${_emcCreditsText!.toLowerCase()}.',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: PulseTheme.textSecondary,
