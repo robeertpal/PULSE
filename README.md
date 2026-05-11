@@ -2,7 +2,7 @@
   <img src="https://storageforpulse.blob.core.windows.net/content-images/images/2026/05/Screenshot%202026-05-11%20at%2005.02.31.png" alt="PULSE / MedicHub preview" width="100%">
 </p>
 
-<h1 align="center">PULSE / MedicHub</h1>
+<h1 align="center">PULSE</h1>
 
 <p align="center">
   Platformă medicală digitală pentru conținut editorial, reviste, știri, evenimente, cursuri și experiențe administrative integrate.
