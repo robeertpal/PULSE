@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Autori - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="header-actions">
+                <h2>Autori</h2>
+                <button type="button" class="btn btn-primary" onclick="newAuthor()">Adaugă autor</button>
+            </div>
+
+            <div id="alert-msg" class="alert"></div>
+
+            <div class="form-card" id="author-form-card" style="display:none; margin-bottom:24px;">
+                <form id="author-form">
+                    <input type="hidden" id="author_id">
+                    <div class="form-grid two-columns">
+                        <div class="form-group">
+                            <label>Prenume *</label>
+                            <input type="text" id="author_first_name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Nume *</label>
+                            <input type="text" id="author_last_name" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Titlu</label>
+                        <input type="text" id="author_title" placeholder="Dr., Prof. univ., Editor">
+                    </div>
+                    <div class="form-group">
+                        <label>Bio</label>
+                        <textarea id="author_bio" rows="4"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>URL fotografie</label>
+                        <input type="url" id="author_photo_url">
+                        <div class="upload-row">
+                            <input type="file" id="author_photo_file" accept="image/jpeg,image/png,image/webp">
+                            <button type="button" class="btn" onclick="uploadAuthorPhoto()">Încarcă fotografie</button>
+                        </div>
+                        <div id="author_photo_url_upload_status" class="upload-status"></div>
+                        <div id="author_photo_url_preview" class="media-preview"></div>
+                    </div>
+                    <div class="header-actions" style="margin-bottom:0;">
+                        <button type="button" class="btn" onclick="cancelAuthorEdit()">Anulează</button>
+                        <button type="button" class="btn btn-primary" onclick="saveAuthor()">Salvează</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="filters-row">
+                <input type="search" id="author_search" placeholder="Caută după nume sau prenume">
+            </div>
+
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Autor</th>
+                            <th>Fotografie</th>
+                            <th>Titlu</th>
+                            <th>Creat la</th>
+                            <th>Acțiuni</th>
+                        </tr>
+                    </thead>
+                    <tbody id="authors-table-body"><tr><td colspan="5">Se încarcă...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/authors.js"></script>
+</body>
+</html>

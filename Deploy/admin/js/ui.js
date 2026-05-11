@@ -34,6 +34,8 @@ const UI = {
                     <li><a href="news.html" class="${activePage === 'news' ? 'active' : ''}">Știri</a></li>
                     <li><a href="courses.html" class="${activePage === 'courses' ? 'active' : ''}">Cursuri</a></li>
                     <li><a href="events.html" class="${activePage === 'events' ? 'active' : ''}">Evenimente</a></li>
+                    <li><a href="partners.html" class="${activePage === 'partners' ? 'active' : ''}">Parteneri</a></li>
+                    <li><a href="authors.html" class="${activePage === 'authors' ? 'active' : ''}">Autori</a></li>
                     <li><a href="publications.html" class="${activePage === 'publications' ? 'active' : ''}">Publicații</a></li>
                     <li><a href="ads.html" class="${activePage === 'ads' ? 'active' : ''}">Reclame</a></li>
                     <li><a href="users.html" class="${activePage === 'users' ? 'active' : ''}">Utilizatori</a></li>

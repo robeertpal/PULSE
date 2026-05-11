@@ -381,6 +381,42 @@ class Event(Base):
 
     content_item = relationship("ContentItem", back_populates="event")
     city = relationship("City")
+    partner_links = relationship(
+        "EventPartnerLink",
+        back_populates="event",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class EventPartner(Base):
+    __tablename__ = "event_partners"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    logo_url = Column(Text)
+    website_url = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    event_links = relationship(
+        "EventPartnerLink",
+        back_populates="partner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class EventPartnerLink(Base):
+    __tablename__ = "event_partner_links"
+
+    event_id = Column(Integer, ForeignKey("events.id", ondelete="CASCADE"), primary_key=True)
+    partner_id = Column(Integer, ForeignKey("event_partners.id", ondelete="CASCADE"), primary_key=True)
+    display_order = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    event = relationship("Event", back_populates="partner_links")
+    partner = relationship("EventPartner", back_populates="event_links")
 
 
 class EventSession(Base):
@@ -453,6 +489,45 @@ class Publication(Base):
     subscription_url = Column(Text)
 
     content_item = relationship("ContentItem", back_populates="publication")
+    author_links = relationship(
+        "PublicationAuthor",
+        back_populates="publication",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class Author(Base):
+    __tablename__ = "authors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    first_name = Column(String(255), nullable=False)
+    last_name = Column(String(255), nullable=False)
+    title = Column(String(255))
+    bio = Column(Text)
+    photo_url = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    publication_links = relationship(
+        "PublicationAuthor",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class PublicationAuthor(Base):
+    __tablename__ = "publication_authors"
+
+    publication_id = Column(Integer, ForeignKey("publications.id", ondelete="CASCADE"), primary_key=True)
+    author_id = Column(Integer, ForeignKey("authors.id", ondelete="CASCADE"), primary_key=True)
+    role = Column(String(100))
+    display_order = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    publication = relationship("Publication", back_populates="author_links")
+    author = relationship("Author", back_populates="publication_links")
 
 
 class PublicationIssue(Base):

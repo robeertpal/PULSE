@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../models/content_item.dart';
 import '../models/publication_issue.dart';
 import '../services/api_service.dart';
 import '../theme/pulse_theme.dart';
@@ -11,13 +13,15 @@ import '../widgets/emc_badge.dart';
 const Color _editorialNavy = Color(0xFF102A43);
 const Color _medicalTeal = Color(0xFF0F766E);
 const Color _softGold = Color(0xFFC8A14A);
-const Color _warmCanvas = Color(0xFFF7F5F0);
-const Color _warmSurface = Color(0xFFFFFEFC);
+const Color _warmCanvas = PulseTheme.background;
+const Color _warmSurface = Colors.white;
 const String _bookPagesIconAsset = 'assets/icons/book.pages.svg';
 const String _globeIconAsset = 'assets/icons/globe.svg';
 const String _checkmarkIconAsset = 'assets/icons/checkmark.svg';
 const String _arrowRightIconAsset = 'assets/icons/arrow.right.svg';
 const String _arrowBackwardIconAsset = 'assets/icons/arrow.backward.svg';
+const String _calendarIconAsset = 'assets/icons/calendar.svg';
+const String _heartIconAsset = 'assets/icons/heart.svg';
 const String _pdfOpenErrorMessage =
     'Documentul nu a putut fi deschis. Verifică fișierul PDF sau încearcă din nou.';
 
@@ -36,6 +40,7 @@ class PublicationIssuesScreen extends StatefulWidget {
   final String? creditationText;
   final String? indexingText;
   final String? subscriptionUrl;
+  final List<PublicationAuthor> authors;
 
   const PublicationIssuesScreen({
     super.key,
@@ -53,6 +58,7 @@ class PublicationIssuesScreen extends StatefulWidget {
     this.creditationText,
     this.indexingText,
     this.subscriptionUrl,
+    this.authors = const [],
   });
 
   @override
@@ -66,6 +72,8 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   int? _selectedYear;
+  bool _isSaved = false;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -217,6 +225,11 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
         _clean(_latestIssue?.publicationSubscriptionUrl);
   }
 
+  List<PublicationAuthor> get _publicationAuthors {
+    return [...widget.authors]
+      ..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+  }
+
   Future<void> _openUrl(String url, String errorMessage) async {
     final uri = Uri.tryParse(url);
     if (uri == null) {
@@ -351,205 +364,276 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
     );
   }
 
-  Widget _buildHero() {
-    final description = _publicationDescription;
-    final subscriptionUrl = _subscriptionUrl;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 22),
-      child: Container(
-        decoration: BoxDecoration(
-          color: _warmSurface,
-          borderRadius: BorderRadius.circular(32),
-          border: Border.all(color: _medicalTeal.withValues(alpha: 0.10)),
-          boxShadow: [
-            BoxShadow(
-              color: _editorialNavy.withValues(alpha: 0.10),
-              blurRadius: 30,
-              offset: const Offset(0, 18),
-              spreadRadius: -18,
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(32),
+  Widget _buildGlassButton({
+    required String tooltip,
+    required String iconAsset,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
           child: SizedBox(
-            height: 390,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                _heroBackground(_publicationBackgroundUrl),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.08),
-                        Colors.black.withValues(alpha: 0.34),
-                        Colors.black.withValues(alpha: 0.78),
-                      ],
-                      stops: const [0.0, 0.48, 1.0],
-                    ),
-                  ),
+            width: 46,
+            height: 46,
+            child: Center(
+              child: SvgPicture.asset(
+                iconAsset,
+                width: 20,
+                height: 20,
+                colorFilter: const ColorFilter.mode(
+                  Colors.white,
+                  BlendMode.srcIn,
                 ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.58),
-                        Colors.black.withValues(alpha: 0.18),
-                        Colors.black.withValues(alpha: 0.30),
-                      ],
-                      stops: const [0.0, 0.55, 1.0],
-                    ),
-                  ),
-                ),
-                if (_emcCreditsText != null)
-                  Positioned(
-                    left: 18,
-                    top: 18,
-                    child: EmcBadge(points: _emcCreditsText!),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.all(22),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Spacer(),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _publicationName,
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 29,
-                                    fontWeight: FontWeight.w900,
-                                    height: 1.06,
-                                  ),
-                                ),
-                                if (description != null) ...[
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    description,
-                                    maxLines: 4,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.86,
-                                      ),
-                                      fontSize: 15,
-                                      height: 1.45,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          _HeroLogo(
-                            logoUrl: _publicationLogoUrl,
-                            imageBuilder: (url) => _remoteOrAssetImage(
-                              url,
-                              fit: BoxFit.contain,
-                              accent: _medicalTeal,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          if (widget.contentPublishedAt != null)
-                            _PremiumPill(
-                              label:
-                                  'Publicat ${_formatDate(widget.contentPublishedAt)!}',
-                              icon: Icons.event_available_outlined,
-                              color: Colors.white,
-                              backgroundColor: Colors.white.withValues(
-                                alpha: 0.14,
-                              ),
-                              borderColor: Colors.white.withValues(alpha: 0.20),
-                            ),
-                          _PremiumPill(
-                            label: _issueCountLabel,
-                            svgAsset: _bookPagesIconAsset,
-                            color: Colors.white,
-                            backgroundColor: Colors.white.withValues(
-                              alpha: 0.14,
-                            ),
-                            borderColor: Colors.white.withValues(alpha: 0.20),
-                          ),
-                          if (_creditationText != null)
-                            _PremiumPill(
-                              label: _creditationText!,
-                              svgAsset: _checkmarkIconAsset,
-                              color: Colors.white,
-                              backgroundColor: Colors.white.withValues(
-                                alpha: 0.14,
-                              ),
-                              borderColor: Colors.white.withValues(alpha: 0.20),
-                            ),
-                          if (_indexingText != null)
-                            _PremiumPill(
-                              label: _indexingText!,
-                              svgAsset: _globeIconAsset,
-                              color: Colors.white,
-                              backgroundColor: Colors.white.withValues(
-                                alpha: 0.14,
-                              ),
-                              borderColor: Colors.white.withValues(alpha: 0.20),
-                            ),
-                        ],
-                      ),
-                      if (subscriptionUrl != null) ...[
-                        const SizedBox(height: 18),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: () => _openUrl(
-                              subscriptionUrl,
-                              'Nu am putut deschide pagina revistei.',
-                            ),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: _editorialNavy,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(vertical: 15),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                            ),
-                            icon: const Icon(
-                              Icons.open_in_new_rounded,
-                              size: 19,
-                            ),
-                            label: const Text(
-                              'Accesează revista',
-                              style: TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleSaved() async {
+    if (_isSaving) return;
+    setState(() {
+      _isSaving = true;
+    });
+
+    // Simulate API delay
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    if (!mounted) return;
+    setState(() {
+      _isSaved = !_isSaved;
+      _isSaving = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _isSaved ? 'Adăugat la favorite' : 'Eliminat din favorite',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Widget _buildFavoriteButton() {
+    return Material(
+      color: Colors.white,
+      shape: const CircleBorder(),
+      elevation: 10,
+      shadowColor: const Color(0xFF0E7490).withValues(alpha: 0.12),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: _isSaving ? null : _toggleSaved,
+        child: SizedBox(
+          width: 62,
+          height: 62,
+          child: Center(
+            child: SvgPicture.asset(
+              _heartIconAsset,
+              width: 28,
+              height: 28,
+              colorFilter: ColorFilter.mode(
+                _isSaved ? const Color(0xFFEF4444) : PulseTheme.textPrimary,
+                BlendMode.srcIn,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHero() {
+    final topInset = MediaQuery.of(context).padding.top;
+    final subscriptionUrl = _subscriptionUrl;
+
+    return SizedBox(
+      width: double.infinity,
+      height: 410,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(32),
+          topRight: Radius.circular(32),
+          bottomLeft: Radius.circular(26),
+          bottomRight: Radius.circular(26),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _heroBackground(_publicationBackgroundUrl),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.08),
+                    Colors.black.withValues(alpha: 0.34),
+                    Colors.black.withValues(alpha: 0.78),
+                  ],
+                  stops: const [0.0, 0.48, 1.0],
+                ),
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.58),
+                    Colors.black.withValues(alpha: 0.18),
+                    Colors.black.withValues(alpha: 0.30),
+                  ],
+                  stops: const [0.0, 0.55, 1.0],
+                ),
+              ),
+            ),
+            Positioned(
+              top: topInset + 12,
+              left: 18,
+              child: _buildGlassButton(
+                tooltip: 'Înapoi',
+                iconAsset: _arrowBackwardIconAsset,
+                onTap: () => Navigator.of(context).maybePop(),
+              ),
+            ),
+            if (_emcCreditsText != null)
+              Positioned(
+                right: 18,
+                top: topInset + 12,
+                child: EmcBadge(points: _emcCreditsText!),
+              ),
+            Positioned(
+              left: 22,
+              right: 22,
+              bottom: 72,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: PulseTheme.magazineContent.withValues(
+                                  alpha: 0.1,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'REVISTĂ',
+                                style: TextStyle(
+                                  color: PulseTheme.magazineContent,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              _publicationName,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 29,
+                                fontWeight: FontWeight.w900,
+                                height: 1.06,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      _HeroLogo(
+                        logoUrl: _publicationLogoUrl,
+                        imageBuilder: (url) => _remoteOrAssetImage(
+                          url,
+                          fit: BoxFit.contain,
+                          accent: _medicalTeal,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (widget.contentPublishedAt != null)
+                        _PremiumPill(
+                          label:
+                              'Publicat ${_formatDate(widget.contentPublishedAt)!}',
+                          svgAsset: _calendarIconAsset,
+                          color: PulseTheme.magazineContent,
+                        ),
+                      _PremiumPill(
+                        label: _issueCountLabel,
+                        svgAsset: _bookPagesIconAsset,
+                        color: PulseTheme.magazineContent,
+                      ),
+                      if (_creditationText != null)
+                        _PremiumPill(
+                          label: _creditationText!,
+                          svgAsset: _checkmarkIconAsset,
+                          color: PulseTheme.magazineContent,
+                        ),
+                      if (_indexingText != null)
+                        _PremiumPill(
+                          label: _indexingText!,
+                          svgAsset: _globeIconAsset,
+                          color: PulseTheme.magazineContent,
+                        ),
+                    ],
+                  ),
+                  if (subscriptionUrl != null) ...[
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => _openUrl(
+                          subscriptionUrl,
+                          'Nu am putut deschide pagina revistei.',
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: _editorialNavy,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                        ),
+                        icon: const Icon(Icons.open_in_new_rounded, size: 19),
+                        label: const Text(
+                          'Accesează revista',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -713,34 +797,454 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
     if (_issues.isEmpty) return _buildEmpty();
 
     return RefreshIndicator(
-      color: _medicalTeal,
+      color: PulseTheme.primary,
       onRefresh: _loadIssues,
-      child: ListView(
+      child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
-        padding: const EdgeInsets.only(bottom: 8),
-        children: [
-          _buildHero(),
-          _buildYearFilter(),
-          _buildLatestSection(),
-          _buildArchiveSection(),
-        ],
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+                  child: _buildHero(),
+                ),
+                Transform.translate(
+                  offset: const Offset(0, -34),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(0, 34, 0, 34),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(36),
+                        topRight: Radius.circular(36),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_publicationDescription != null &&
+                            _publicationDescription!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(22, 0, 22, 24),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Descriere',
+                                  style: TextStyle(
+                                    color: _editorialNavy,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w900,
+                                    height: 1.15,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _publicationDescription!,
+                                  style: const TextStyle(
+                                    color: Color(0xFF334155),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        _PublicationAuthorsCarousel(
+                          authors: _publicationAuthors,
+                        ),
+                        _buildYearFilter(),
+                        _buildLatestSection(),
+                        _buildArchiveSection(),
+                        if (_emcCreditsText != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(22, 8, 22, 16),
+                            child: Center(
+                              child: Text(
+                                'Abonamentul pe întregul an ${DateTime.now().year} asigură un total de ${_emcCreditsText!.toLowerCase()}.',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: PulseTheme.textSecondary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Positioned(top: 410 - 57, right: 26, child: _buildFavoriteButton()),
+          ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _warmCanvas,
-      appBar: AppBar(
-        title: const Text('Publicație'),
-        backgroundColor: _warmCanvas,
-        elevation: 0,
-        leading: _BackButton(onPressed: () => Navigator.of(context).maybePop()),
+    return Scaffold(backgroundColor: PulseTheme.background, body: _buildBody());
+  }
+}
+
+class _PublicationAuthorsCarousel extends StatefulWidget {
+  final List<PublicationAuthor> authors;
+
+  const _PublicationAuthorsCarousel({required this.authors});
+
+  @override
+  State<_PublicationAuthorsCarousel> createState() =>
+      _PublicationAuthorsCarouselState();
+}
+
+class _PublicationAuthorsCarouselState
+    extends State<_PublicationAuthorsCarousel> {
+  late final PageController _controller;
+  late Timer _autoAdvanceTimer;
+  int _currentPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController(viewportFraction: 0.86);
+    _startAutoAdvance();
+  }
+
+  void _startAutoAdvance() {
+    if (widget.authors.length <= 1) return;
+    _autoAdvanceTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) {
+        if (!_controller.hasClients) return;
+        final nextPage = (_currentPage + 1) % widget.authors.length;
+        _controller.animateToPage(
+          nextPage,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOutCubic,
+        );
+      },
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _PublicationAuthorsCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.authors.length != widget.authors.length) {
+      _currentPage = 0;
+      if (_controller.hasClients) {
+        _controller.jumpToPage(0);
+      }
+      _autoAdvanceTimer.cancel();
+      _startAutoAdvance();
+    }
+  }
+
+  @override
+  void dispose() {
+    _autoAdvanceTimer.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _goToPage(int page) {
+    if (!_controller.hasClients || widget.authors.isEmpty) return;
+    final nextPage = page.clamp(0, widget.authors.length - 1);
+    _controller.animateToPage(
+      nextPage,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.authors.isEmpty) return const SizedBox.shrink();
+
+    final isWide = MediaQuery.sizeOf(context).width >= 720;
+    final showControls = widget.authors.length > 1 && isWide;
+    final carouselHeight = isWide ? 176.0 : 188.0;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 22),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Autori',
+                    style: TextStyle(
+                      color: _editorialNavy,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      height: 1.15,
+                    ),
+                  ),
+                ),
+                if (showControls) ...[
+                  _AuthorCarouselButton(
+                    icon: Icons.chevron_left_rounded,
+                    onTap: _currentPage > 0
+                        ? () => _goToPage(_currentPage - 1)
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  _AuthorCarouselButton(
+                    icon: Icons.chevron_right_rounded,
+                    onTap: _currentPage < widget.authors.length - 1
+                        ? () => _goToPage(_currentPage + 1)
+                        : null,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (widget.authors.length == 1)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              child: _PublicationAuthorCard(author: widget.authors.first),
+            )
+          else
+            SizedBox(
+              height: carouselHeight,
+              child: PageView.builder(
+                controller: _controller,
+                physics: const BouncingScrollPhysics(),
+                itemCount: widget.authors.length,
+                onPageChanged: (index) {
+                  setState(() {
+                    _currentPage = index;
+                  });
+                },
+                itemBuilder: (context, index) {
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      left: index == 0 ? 22 : 6,
+                      right: index == widget.authors.length - 1 ? 22 : 6,
+                    ),
+                    child: _PublicationAuthorCard(
+                      author: widget.authors[index],
+                    ),
+                  );
+                },
+              ),
+            ),
+          if (widget.authors.length > 1 && !isWide) ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                widget.authors.length,
+                (index) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 240),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: _currentPage == index ? 18 : 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: _currentPage == index
+                        ? PulseTheme.magazineContent
+                        : const Color(0xFFD7DEE8),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
-      body: SafeArea(child: _buildBody()),
+    );
+  }
+}
+
+class _AuthorCarouselButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _AuthorCarouselButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: onTap == null
+          ? const Color(0xFFE2E8F0)
+          : _medicalTeal.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: SizedBox(
+          width: 38,
+          height: 38,
+          child: Icon(
+            icon,
+            color: onTap == null ? const Color(0xFF94A3B8) : _medicalTeal,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PublicationAuthorCard extends StatelessWidget {
+  final PublicationAuthor author;
+
+  const _PublicationAuthorCard({required this.author});
+
+  @override
+  Widget build(BuildContext context) {
+    final role = author.role?.trim();
+    final bio = author.bio?.trim();
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFBFC),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _AuthorAvatar(author: author),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  author.displayName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _editorialNavy,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    height: 1.18,
+                  ),
+                ),
+                if (role != null && role.isNotEmpty) ...[
+                  const SizedBox(height: 7),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: PulseTheme.magazineContent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      role.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: PulseTheme.magazineContent,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                ],
+                if (bio != null && bio.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: Text(
+                      bio,
+                      overflow: TextOverflow.fade,
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1.42,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuthorAvatar extends StatelessWidget {
+  final PublicationAuthor author;
+
+  const _AuthorAvatar({required this.author});
+
+  @override
+  Widget build(BuildContext context) {
+    final photoUrl = author.photoUrl?.trim();
+    return ClipOval(
+      child: SizedBox(
+        width: 62,
+        height: 62,
+        child: photoUrl != null && photoUrl.isNotEmpty
+            ? Image.network(
+                photoUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    _AuthorInitials(author: author),
+              )
+            : _AuthorInitials(author: author),
+      ),
+    );
+  }
+}
+
+class _AuthorInitials extends StatelessWidget {
+  final PublicationAuthor author;
+
+  const _AuthorInitials({required this.author});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _medicalTeal.withValues(alpha: 0.18),
+            _softGold.withValues(alpha: 0.18),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Text(
+          author.initials,
+          style: const TextStyle(
+            color: _editorialNavy,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -948,158 +1452,208 @@ class _PublicationIssueDetailScreenState
     );
   }
 
+  Widget _buildGlassButton({
+    required String tooltip,
+    required String iconAsset,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: SizedBox(
+            width: 46,
+            height: 46,
+            child: Center(
+              child: SvgPicture.asset(
+                iconAsset,
+                width: 20,
+                height: 20,
+                colorFilter: const ColorFilter.mode(
+                  Colors.white,
+                  BlendMode.srcIn,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildHero(PublicationIssue issue, String? dateLabel) {
     final publicationName = issue.publicationName?.trim();
     final description = issue.description?.trim();
     final hasPdf = issue.pdfUrl?.trim().isNotEmpty == true;
+    final emcCreditsText = issue.publicationEmcCreditsText?.trim();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      child: Container(
-        decoration: BoxDecoration(
-          color: _warmSurface,
-          borderRadius: BorderRadius.circular(34),
-          border: Border.all(color: _medicalTeal.withValues(alpha: 0.08)),
-          boxShadow: [
-            BoxShadow(
-              color: _editorialNavy.withValues(alpha: 0.10),
-              blurRadius: 30,
-              offset: const Offset(0, 18),
-              spreadRadius: -18,
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(34),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Colors.black, Color(0xFF1E1E1E)],
-                  ),
+      child: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: _warmSurface,
+              borderRadius: BorderRadius.circular(34),
+              border: Border.all(color: _medicalTeal.withValues(alpha: 0.08)),
+              boxShadow: [
+                BoxShadow(
+                  color: _editorialNavy.withValues(alpha: 0.10),
+                  blurRadius: 30,
+                  offset: const Offset(0, 18),
+                  spreadRadius: -18,
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    _EditorialCover(
-                      image: _IssueImage(
-                        url: issue.coverImageUrl,
-                        fit: BoxFit.cover,
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(34),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Colors.black, Color(0xFF1E1E1E)],
                       ),
-                      width: 132,
-                      height: 184,
-                      radius: 18,
                     ),
-                    const SizedBox(width: 18),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (publicationName != null &&
-                              publicationName.isNotEmpty) ...[
-                            _PremiumPill(
-                              label: publicationName,
-                              svgAsset: _bookPagesIconAsset,
-                              color: Colors.white,
-                              backgroundColor: Colors.white.withValues(
-                                alpha: 0.13,
-                              ),
-                              borderColor: Colors.white.withValues(alpha: 0.20),
-                            ),
-                            const SizedBox(height: 14),
-                          ],
-                          Text(
-                            issue.displayLabel,
-                            maxLines: 4,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 27,
-                              fontWeight: FontWeight.w900,
-                              height: 1.08,
-                            ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        _EditorialCover(
+                          image: _IssueImage(
+                            url: issue.coverImageUrl,
+                            fit: BoxFit.cover,
                           ),
-                          const SizedBox(height: 12),
+                          width: 132,
+                          height: 184,
+                          radius: 18,
+                        ),
+                        const SizedBox(width: 18),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (publicationName != null &&
+                                  publicationName.isNotEmpty) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  decoration: BoxDecoration(
+                                    color: PulseTheme.magazineContent
+                                        .withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    publicationName.toUpperCase(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: PulseTheme.magazineContent,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.8,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              Text(
+                                issue.displayLabel,
+                                maxLines: 4,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 27,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1.08,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                dateLabel == null
+                                    ? 'An ${issue.year}, Nr. ${issue.issueNumber}'
+                                    : 'An ${issue.year}, Nr. ${issue.issueNumber}, $dateLabel',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.78),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (description != null && description.isNotEmpty) ...[
+                          const SizedBox(height: 18),
+                          const _SectionTitle(
+                            title: 'Descriere editorială',
+                          ),
+                          const SizedBox(height: 10),
                           Text(
-                            dateLabel == null
-                                ? 'An ${issue.year} • Nr. ${issue.issueNumber}'
-                                : 'An ${issue.year} • Nr. ${issue.issueNumber} • $dateLabel',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.78),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              height: 1.35,
+                            description,
+                            style: const TextStyle(
+                              color: PulseTheme.textPrimary,
+                              fontSize: 16,
+                              height: 1.58,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (dateLabel != null)
-                      _PremiumPill(
-                        label: dateLabel,
-                        icon: Icons.event_available_outlined,
-                        color: _medicalTeal,
-                      ),
-                    if (description != null && description.isNotEmpty) ...[
-                      const SizedBox(height: 18),
-                      const _SectionTitle(
-                        title: 'Descriere editorială',
-                        subtitle: 'Contextul acestui număr',
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        description,
-                        style: const TextStyle(
-                          color: PulseTheme.textPrimary,
-                          fontSize: 16,
-                          height: 1.58,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                    if (hasPdf) ...[
-                      SizedBox(
-                        height: description != null && description.isNotEmpty
-                            ? 18
-                            : dateLabel != null
-                            ? 16
-                            : 0,
-                      ),
-                      AiSummaryButton(
-                        isLoading: _isAiSummaryLoading,
-                        onGenerate: _generateAiSummary,
-                      ),
-                      if (_aiSummary?.trim().isNotEmpty == true ||
-                          _aiSummaryError?.trim().isNotEmpty == true) ...[
-                        const SizedBox(height: 14),
-                        AiSummaryInlineSection(
-                          summary: _aiSummary,
-                          keyPoints: _aiKeyPoints,
-                          disclaimer: _aiDisclaimer,
-                          error: _aiSummaryError,
-                        ),
+                        if (hasPdf) ...[
+                          SizedBox(
+                            height: description != null && description.isNotEmpty
+                                ? 18
+                                : dateLabel != null
+                                ? 16
+                                : 0,
+                          ),
+                          AiSummaryButton(
+                            isLoading: _isAiSummaryLoading,
+                            onGenerate: _generateAiSummary,
+                          ),
+                          if (_aiSummary?.trim().isNotEmpty == true ||
+                              _aiSummaryError?.trim().isNotEmpty == true) ...[
+                            const SizedBox(height: 14),
+                            AiSummaryInlineSection(
+                              summary: _aiSummary,
+                              keyPoints: _aiKeyPoints,
+                              disclaimer: _aiDisclaimer,
+                              error: _aiSummaryError,
+                            ),
+                          ],
+                        ],
                       ],
-                    ],
-                  ],
-                ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+          if (emcCreditsText != null)
+            Positioned(
+              right: 18,
+              top: 18,
+              child: EmcBadge(points: emcCreditsText),
+            ),
+        ],
       ),
     );
   }
@@ -1117,7 +1671,7 @@ class _PublicationIssueDetailScreenState
 
     return ListView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.only(bottom: 34),
+      padding: const EdgeInsets.only(top: 50, bottom: 34),
       children: [
         _buildHero(issue, dateLabel),
         Padding(
@@ -1138,13 +1692,22 @@ class _PublicationIssueDetailScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _warmCanvas,
-      appBar: AppBar(
-        title: const Text('Detalii ediție'),
-        backgroundColor: _warmCanvas,
-        elevation: 0,
-        leading: _BackButton(onPressed: () => Navigator.of(context).maybePop()),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            _buildBody(),
+            Positioned(
+              top: 12,
+              left: 18,
+              child: _buildGlassButton(
+                tooltip: 'Înapoi',
+                iconAsset: _arrowBackwardIconAsset,
+                onTap: () => Navigator.of(context).maybePop(),
+              ),
+            ),
+          ],
+        ),
       ),
-      body: SafeArea(child: _buildBody()),
     );
   }
 }
@@ -1787,9 +2350,7 @@ class _FeaturedIssueCard extends StatelessWidget {
                 children: [
                   const _PremiumPill(
                     label: 'Cea mai recentă',
-                    color: _medicalTeal,
-                    backgroundColor: Color(0x180F766E),
-                    borderColor: Color(0x330F766E),
+                    color: PulseTheme.magazineContent,
                   ),
                   const SizedBox(height: 14),
                   Text(
@@ -1804,8 +2365,8 @@ class _FeaturedIssueCard extends StatelessWidget {
                   const SizedBox(height: 10),
                   Text(
                     dateLabel == null
-                        ? 'An ${issue.year} • Nr. ${issue.issueNumber}'
-                        : 'An ${issue.year} • Nr. ${issue.issueNumber} • $dateLabel',
+                        ? 'An ${issue.year}, Nr. ${issue.issueNumber}'
+                        : 'An ${issue.year}, Nr. ${issue.issueNumber}, $dateLabel',
                     style: const TextStyle(
                       color: PulseTheme.textSecondary,
                       fontSize: 12,
@@ -1828,20 +2389,33 @@ class _FeaturedIssueCard extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Text(
-                        'Vezi numărul',
-                        style: TextStyle(
-                          color: PulseTheme.textPrimary,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: PulseTheme.magazineContent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Text(
+                          'Vezi numărul',
+                          style: TextStyle(
+                            color: PulseTheme.magazineContent,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
-                      ),
-                      SizedBox(width: 6),
-                      _ArrowRightIcon(color: PulseTheme.textPrimary, size: 18),
-                    ],
+                        SizedBox(width: 6),
+                        _ArrowRightIcon(
+                          color: PulseTheme.magazineContent,
+                          size: 18,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -1916,8 +2490,8 @@ class _ArchiveIssueCard extends StatelessWidget {
                   const SizedBox(height: 7),
                   Text(
                     dateLabel == null
-                        ? 'An ${issue.year} • Nr. ${issue.issueNumber}'
-                        : 'An ${issue.year} • Nr. ${issue.issueNumber} • $dateLabel',
+                        ? 'An ${issue.year}, Nr. ${issue.issueNumber}'
+                        : 'An ${issue.year}, Nr. ${issue.issueNumber}, $dateLabel',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -1941,19 +2515,36 @@ class _ArchiveIssueCard extends StatelessWidget {
                       ),
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: PulseTheme.magazineContent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Text(
+                          'Vezi numărul',
+                          style: TextStyle(
+                            color: PulseTheme.magazineContent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        SizedBox(width: 6),
+                        _ArrowRightIcon(
+                          color: PulseTheme.magazineContent,
+                          size: 14,
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: PulseTheme.textPrimary.withValues(alpha: 0.07),
-                shape: BoxShape.circle,
-              ),
-              child: const Center(
-                child: _ArrowRightIcon(color: PulseTheme.textPrimary, size: 18),
               ),
             ),
           ],
@@ -2202,11 +2793,10 @@ class _PremiumPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: backgroundColor ?? color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: borderColor ?? color.withValues(alpha: 0.16)),
+        color: backgroundColor ?? color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -2214,25 +2804,25 @@ class _PremiumPill extends StatelessWidget {
           if (svgAsset != null) ...[
             SvgPicture.asset(
               svgAsset!,
-              width: 15,
-              height: 15,
+              width: 12,
+              height: 12,
               colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
           ] else if (icon != null) ...[
-            Icon(icon, size: 15, color: color),
-            const SizedBox(width: 6),
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
           ],
           Flexible(
             child: Text(
-              label,
+              label.toUpperCase(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-                height: 1.1,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
               ),
             ),
           ),
@@ -2244,9 +2834,9 @@ class _PremiumPill extends StatelessWidget {
 
 class _SectionTitle extends StatelessWidget {
   final String title;
-  final String subtitle;
+  final String? subtitle;
 
-  const _SectionTitle({required this.title, required this.subtitle});
+  const _SectionTitle({required this.title, this.subtitle});
 
   @override
   Widget build(BuildContext context) {
@@ -2262,16 +2852,18 @@ class _SectionTitle extends StatelessWidget {
             height: 1.15,
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: const TextStyle(
-            color: PulseTheme.textSecondary,
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            height: 1.35,
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle!,
+            style: const TextStyle(
+              color: PulseTheme.textSecondary,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              height: 1.35,
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
