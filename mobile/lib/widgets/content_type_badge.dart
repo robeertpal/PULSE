@@ -13,7 +13,10 @@ class ContentTypeBadge extends StatelessWidget {
     required this.color,
     this.iconAsset,
     this.iconOnly = false,
-  });
+  }) : assert(
+          !iconOnly || iconAsset != null,
+          'iconAsset must be provided when iconOnly is true',
+        );
 
   @override
   Widget build(BuildContext context) {
