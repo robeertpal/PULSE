@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from pypdf import PdfReader
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
@@ -186,11 +186,14 @@ def serialize_model(obj, include_relationships: bool = False):
             data["city"] = city_data
             data["city_name"] = city_data.get("name")
         if hasattr(obj, "event") and getattr(obj, "event", None):
-            data["event"] = serialize_model(obj.event, include_relationships=True)
+            event_data = serialize_model(obj.event, include_relationships=True)
+            event_data["partners"] = serialize_event_partner_links(getattr(obj.event, "partner_links", []))
+            data["event"] = event_data
         if hasattr(obj, "course") and getattr(obj, "course", None):
             data["course"] = serialize_model(obj.course)
         if hasattr(obj, "publication") and getattr(obj, "publication", None):
             publication_data = serialize_model(obj.publication)
+            publication_data["authors"] = serialize_publication_author_links(getattr(obj.publication, "author_links", []))
             if hasattr(obj.publication, "issues") and getattr(obj.publication, "issues", None):
                 publication_data["issues"] = [serialize_model(issue) for issue in obj.publication.issues]
             data["publication"] = publication_data
@@ -270,8 +273,13 @@ def visible_content_card_query(db: Session):
         joinedload(models.ContentItem.category),
         joinedload(models.ContentItem.specialization),
         joinedload(models.ContentItem.event).joinedload(models.Event.city),
+        joinedload(models.ContentItem.event)
+        .joinedload(models.Event.partner_links)
+        .joinedload(models.EventPartnerLink.partner),
         joinedload(models.ContentItem.course),
-        joinedload(models.ContentItem.publication),
+        joinedload(models.ContentItem.publication)
+        .joinedload(models.Publication.author_links)
+        .joinedload(models.PublicationAuthor.author),
     )
 
 
@@ -385,6 +393,12 @@ def validate_admin_token(token: str) -> bool:
         admin_sessions.pop(token_hash, None)
         return False
     return True
+
+
+def require_admin_authorization(authorization: Optional[str]):
+    parts = (authorization or "").split()
+    if len(parts) != 2 or parts[0].lower() != "bearer" or not validate_admin_token(parts[1].strip()):
+        raise HTTPException(status_code=401, detail="Admin authentication required")
 
 
 def verify_admin_credentials(email: str, password: str) -> bool:
@@ -859,6 +873,7 @@ def serialize_content_card(item):
     }
 
     if item.event:
+        partners = serialize_event_partner_links(item.event.partner_links)
         data["event"] = {
             "start_date": serialize_value(item.event.start_date),
             "city_name": item.event.city.name if item.event.city else None,
@@ -866,7 +881,9 @@ def serialize_content_card(item):
             "emc_credits": item.event.emc_credits,
             "event_page_url": item.event.event_page_url,
             "registration_url": item.event.registration_url,
+            "partners": partners,
         }
+        data["partners"] = partners
         data.update(
             {
                 "start_date": data["event"]["start_date"],
@@ -892,6 +909,7 @@ def serialize_content_card(item):
         )
 
     if item.publication:
+        authors = serialize_publication_author_links(getattr(item.publication, "author_links", []))
         data["publication"] = {
             "id": item.publication.id,
             "publication_id": item.publication.id,
@@ -902,7 +920,9 @@ def serialize_content_card(item):
             "creditation_text": item.publication.creditation_text,
             "indexing_text": item.publication.indexing_text,
             "subscription_url": item.publication.subscription_url,
+            "authors": authors,
         }
+        data["authors"] = authors
         data.update(
             {
                 "publication_id": item.publication.id,
@@ -914,10 +934,94 @@ def serialize_content_card(item):
                 "creditation_text": item.publication.creditation_text,
                 "indexing_text": item.publication.indexing_text,
                 "subscription_url": item.publication.subscription_url,
+                "authors": authors,
             }
         )
 
     return data
+
+
+def serialize_event_partner(partner: models.EventPartner):
+    return {
+        "id": partner.id,
+        "name": partner.name,
+        "logo_url": partner.logo_url,
+        "website_url": partner.website_url,
+        "created_at": serialize_value(partner.created_at),
+        "updated_at": serialize_value(partner.updated_at),
+    }
+
+
+def serialize_event_partner_link(link: models.EventPartnerLink):
+    partner_data = serialize_event_partner(link.partner) if link.partner else None
+    data = {
+        "event_id": link.event_id,
+        "partner_id": link.partner_id,
+        "display_order": link.display_order,
+        "created_at": serialize_value(link.created_at),
+    }
+    if partner_data:
+        data.update(partner_data)
+        data["partner"] = partner_data
+    return data
+
+
+def serialize_event_partner_links(links):
+    return [
+        serialize_event_partner_link(link)
+        for link in sorted(
+            links or [],
+            key=lambda item: (
+                item.display_order if item.display_order is not None else 0,
+                item.partner.name.lower() if item.partner and item.partner.name else "",
+            ),
+        )
+        if link.partner is not None
+    ]
+
+
+def serialize_author(author: models.Author):
+    return {
+        "id": author.id,
+        "first_name": author.first_name,
+        "last_name": author.last_name,
+        "full_name": f"{author.first_name} {author.last_name}".strip(),
+        "title": author.title,
+        "bio": author.bio,
+        "photo_url": author.photo_url,
+        "created_at": serialize_value(author.created_at),
+        "updated_at": serialize_value(author.updated_at),
+    }
+
+
+def serialize_publication_author_link(link: models.PublicationAuthor):
+    author_data = serialize_author(link.author) if link.author else None
+    data = {
+        "publication_id": link.publication_id,
+        "author_id": link.author_id,
+        "role": link.role,
+        "display_order": link.display_order,
+        "created_at": serialize_value(link.created_at),
+    }
+    if author_data:
+        data.update(author_data)
+        data["author"] = author_data
+    return data
+
+
+def serialize_publication_author_links(links):
+    return [
+        serialize_publication_author_link(link)
+        for link in sorted(
+            links or [],
+            key=lambda item: (
+                item.display_order if item.display_order is not None else 1,
+                item.author.last_name.lower() if item.author and item.author.last_name else "",
+                item.author.first_name.lower() if item.author and item.author.first_name else "",
+            ),
+        )
+        if link.author is not None
+    ]
 
 
 def serialize_publication_issue(issue: models.PublicationIssue, include_publication: bool = True):
@@ -948,7 +1052,10 @@ def public_publication_query(db: Session):
     return (
         db.query(models.Publication)
         .join(models.ContentItem, models.ContentItem.id == models.Publication.content_item_id)
-        .options(joinedload(models.Publication.content_item))
+        .options(
+            joinedload(models.Publication.content_item),
+            joinedload(models.Publication.author_links).joinedload(models.PublicationAuthor.author),
+        )
         .filter(models.ContentItem.is_active == True)
         .filter(models.ContentItem.deleted_at.is_(None))
         .filter(models.ContentItem.status == models.ContentStatus.published)
@@ -992,7 +1099,233 @@ def get_public_publication_issue_or_404(db: Session, issue_id: int):
 
 
 def serialize_mapping(row):
-    return {key: serialize_value(value) for key, value in dict(row).items()}
+    mapping = row._mapping if hasattr(row, "_mapping") else row
+    return {key: serialize_value(value) for key, value in dict(mapping).items()}
+
+
+def current_price_payload(row_or_mapping):
+    if row_or_mapping is None:
+        return {
+            "type": None,
+            "amount": None,
+            "currency": None,
+            "effective_from": None,
+        }
+    mapping = row_or_mapping._mapping if hasattr(row_or_mapping, "_mapping") else row_or_mapping
+    return {
+        "type": serialize_value(mapping.get("current_price_type")),
+        "amount": serialize_value(mapping.get("current_price_amount")),
+        "currency": serialize_value(mapping.get("current_price_currency")),
+        "effective_from": serialize_value(mapping.get("current_price_effective_from")),
+    }
+
+
+def format_price_change_datetime(value):
+    if value is None:
+        return ""
+    months = [
+        "ianuarie",
+        "februarie",
+        "martie",
+        "aprilie",
+        "mai",
+        "iunie",
+        "iulie",
+        "august",
+        "septembrie",
+        "octombrie",
+        "noiembrie",
+        "decembrie",
+    ]
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return value
+    if isinstance(value, datetime):
+        return f"{value.day} {months[value.month - 1]} {value.year}"
+    return str(value)
+
+
+def format_price_amount(value, currency: Optional[str]):
+    if value is None:
+        return ""
+    if isinstance(value, Decimal):
+        value = float(value)
+    amount = f"{value:g}" if isinstance(value, float) else str(value)
+    return f"{amount} {currency or 'RON'}"
+
+
+def build_next_price_change_message(change: dict, current_price: Optional[dict] = None):
+    effective_from = format_price_change_datetime(change.get("effective_from"))
+    price_type = change.get("price_type")
+    currency = change.get("currency") or "RON"
+
+    if price_type == "free":
+        return f"Evenimentul devine gratuit la data de {effective_from}."
+    if price_type == "subscription":
+        return f"Accesul trece pe bază de abonament la data de {effective_from}."
+
+    target = format_price_amount(change.get("price_amount"), currency)
+    prefix = "Prețul se schimbă"
+
+    if current_price and current_price.get("type") == price_type == "paid":
+        current_amount = current_price.get("amount")
+        future_amount = change.get("price_amount")
+        if current_amount is not None and future_amount is not None:
+            if isinstance(current_amount, Decimal):
+                current_amount = float(current_amount)
+            if isinstance(future_amount, Decimal):
+                future_amount = float(future_amount)
+            if future_amount > current_amount:
+                prefix = "Prețul crește"
+            elif future_amount < current_amount:
+                prefix = "Prețul scade"
+
+    return f"{prefix} la data de {effective_from} la {target}."
+
+
+def get_next_price_change_by_event_id(db: Session, event_id: int, current_price: Optional[dict] = None):
+    row = db.execute(
+        text(
+            """
+            SELECT
+                id,
+                event_id,
+                price_type,
+                price_amount,
+                currency,
+                effective_from
+            FROM event_price_schedule
+            WHERE event_id = :event_id
+              AND effective_from > CURRENT_TIMESTAMP
+            ORDER BY effective_from ASC
+            LIMIT 1
+            """
+        ),
+        {"event_id": event_id},
+    ).mappings().first()
+    if row is None:
+        return None
+
+    data = serialize_mapping(row)
+    data["message"] = build_next_price_change_message(data, current_price)
+    return data
+
+
+def apply_current_price_to_payload(data: dict, price_data):
+    if not price_data:
+        return data
+
+    if hasattr(price_data, "_mapping"):
+        price_data = price_data._mapping
+
+    data["current_price_type"] = serialize_value(price_data.get("current_price_type"))
+    data["current_price_amount"] = serialize_value(price_data.get("current_price_amount"))
+    data["current_price_currency"] = serialize_value(price_data.get("current_price_currency"))
+    data["current_price_effective_from"] = serialize_value(price_data.get("current_price_effective_from"))
+    data["price"] = current_price_payload(price_data)
+
+    event_data = data.get("event")
+    if isinstance(event_data, dict):
+        event_data["current_price_type"] = data["current_price_type"]
+        event_data["current_price_amount"] = data["current_price_amount"]
+        event_data["current_price_currency"] = data["current_price_currency"]
+        event_data["current_price_effective_from"] = data["current_price_effective_from"]
+        event_data["price"] = data["price"]
+        event_data["price_type"] = data["current_price_type"]
+        event_data["price_amount"] = data["current_price_amount"]
+
+    data["price_type"] = data["current_price_type"]
+    data["price_amount"] = data["current_price_amount"]
+    return data
+
+
+def apply_next_price_change_to_payload(data: dict, next_change):
+    data["next_price_change"] = next_change
+    event_data = data.get("event")
+    if isinstance(event_data, dict):
+        event_data["next_price_change"] = next_change
+    return data
+
+
+def get_current_price_by_event_id(db: Session, event_id: int, active_only: bool = False):
+    view_name = "v_active_events_with_current_price" if active_only else "v_events_with_current_price"
+    row = db.execute(
+        text(
+            f"""
+            SELECT
+                event_id,
+                content_item_id,
+                current_price_type,
+                current_price_amount,
+                current_price_currency,
+                current_price_effective_from
+            FROM {view_name}
+            WHERE event_id = :event_id
+            """
+        ),
+        {"event_id": event_id},
+    ).mappings().first()
+    return row
+
+
+def get_current_prices_by_content_item_ids(db: Session, content_item_ids: list[int]):
+    if not content_item_ids:
+        return {}
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                event_id,
+                content_item_id,
+                current_price_type,
+                current_price_amount,
+                current_price_currency,
+                current_price_effective_from
+            FROM v_events_with_current_price
+            WHERE content_item_id IN :content_item_ids
+            """
+        ).bindparams(bindparam("content_item_ids", expanding=True)),
+        {"content_item_ids": content_item_ids},
+    ).mappings().all()
+    return {row["content_item_id"]: row for row in rows}
+
+
+def get_event_partners_by_event_id(db: Session, event_id: int):
+    links = (
+        db.query(models.EventPartnerLink)
+        .options(joinedload(models.EventPartnerLink.partner))
+        .filter(models.EventPartnerLink.event_id == event_id)
+        .order_by(models.EventPartnerLink.display_order.asc(), models.EventPartnerLink.partner_id.asc())
+        .all()
+    )
+    return serialize_event_partner_links(links)
+
+
+def serialize_event_view_row(row, partners=None):
+    data = serialize_mapping(row)
+    data["id"] = data.get("content_item_id")
+    data["content_type"] = "event"
+    data["partners"] = partners or []
+    data["event"] = {
+        "id": data.get("event_id"),
+        "content_item_id": data.get("content_item_id"),
+        "start_date": data.get("start_date"),
+        "end_date": data.get("end_date"),
+        "venue_name": data.get("venue_name"),
+        "attendance_mode": data.get("attendance_mode"),
+        "emc_credits": data.get("emc_credits"),
+        "accreditation_status": data.get("accreditation_status"),
+        "event_page_url": data.get("event_page_url"),
+        "registration_url": data.get("registration_url"),
+        "city_name": data.get("city_name"),
+        "partners": data["partners"],
+    }
+    apply_current_price_to_payload(data, data)
+    data["next_price_change"] = None
+    data["event"]["next_price_change"] = None
+    return data
 
 
 def raise_safe_error(exc: Exception, detail: str = "Request failed", status_code: int = 500):
@@ -1059,6 +1392,13 @@ def get_content_item_detail(
     for key, value in card_data.items():
         if data.get(key) is None:
             data[key] = value
+    if item.event:
+        price_data = get_current_price_by_event_id(db, item.event.id)
+        apply_current_price_to_payload(data, price_data)
+        apply_next_price_change_to_payload(
+            data,
+            get_next_price_change_by_event_id(db, item.event.id, data.get("price")),
+        )
     return data
 
 
@@ -1205,8 +1545,81 @@ def get_events(
             .limit(limit)
             .all()
         )
-        return [serialize_content_card(item) for item in items]
+        price_by_content_item_id = get_current_prices_by_content_item_ids(db, [item.id for item in items])
+        return [
+            apply_current_price_to_payload(
+                serialize_content_card(item),
+                price_by_content_item_id.get(item.id),
+            )
+            for item in items
+        ]
     except Exception as e:
+        raise_safe_error(e)
+
+
+@app.get("/events/{event_id}")
+def get_event_detail(
+    event_id: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        row = db.execute(
+            text(
+                """
+                SELECT
+                    v.event_id,
+                    v.content_item_id,
+                    ci.title,
+                    ci.slug,
+                    ci.short_description,
+                    ci.body,
+                    ci.thumbnail_url,
+                    ci.hero_image_url,
+                    ci.category_id,
+                    cc.name AS category_name,
+                    ci.specialization_id,
+                    s.name AS specialization_name,
+                    ci.published_at,
+                    ci.created_at,
+                    ci.is_featured,
+                    ci.source_url,
+                    ci.author_name,
+                    e.start_date,
+                    e.end_date,
+                    c.name AS city_name,
+                    e.venue_name,
+                    e.attendance_mode,
+                    e.emc_credits,
+                    e.accreditation_status,
+                    e.event_page_url,
+                    e.registration_url,
+                    v.current_price_type,
+                    v.current_price_amount,
+                    v.current_price_currency,
+                    v.current_price_effective_from
+                FROM v_events_with_current_price v
+                JOIN events e ON e.id = v.event_id
+                JOIN content_items ci ON ci.id = v.content_item_id
+                LEFT JOIN cities c ON c.id = e.city_id
+                LEFT JOIN content_categories cc ON cc.id = ci.category_id
+                LEFT JOIN specializations s ON s.id = ci.specialization_id
+                WHERE v.event_id = :event_id
+                """
+            ),
+            {"event_id": event_id},
+        ).mappings().first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Evenimentul nu a fost găsit")
+
+        data = serialize_event_view_row(row, partners=get_event_partners_by_event_id(db, event_id))
+        apply_next_price_change_to_payload(
+            data,
+            get_next_price_change_by_event_id(db, event_id, data.get("price")),
+        )
+        return data
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise_safe_error(e)
 
 
@@ -2325,6 +2738,32 @@ class EventDetailsPayload(BaseModel):
     registration_url: Optional[str] = None
 
 
+class EventPartnerPayload(BaseModel):
+    partner_id: int
+    display_order: int = 0
+
+
+class EventPartnersPayload(BaseModel):
+    partners: List[EventPartnerPayload] = Field(default_factory=list)
+
+
+class EventPriceScheduleCreate(BaseModel):
+    price_type: str
+    price_amount: Optional[float] = None
+    currency: Optional[str] = "RON"
+    effective_from: datetime
+
+
+class PublicationAuthorPayload(BaseModel):
+    author_id: int
+    role: Optional[str] = None
+    display_order: int = 1
+
+
+class PublicationAuthorsPayload(BaseModel):
+    authors: List[PublicationAuthorPayload] = Field(default_factory=list)
+
+
 class PublicationDetailsPayload(BaseModel):
     name: Optional[str] = None
     logo_url: Optional[str] = None
@@ -2361,10 +2800,12 @@ class CourseAdminPayload(ContentItemBase):
 
 class EventAdminPayload(ContentItemBase):
     event: EventDetailsPayload = Field(default_factory=EventDetailsPayload)
+    partners: List[EventPartnerPayload] = Field(default_factory=list)
 
 
 class PublicationAdminPayload(ContentItemBase):
     publication: PublicationDetailsPayload = Field(default_factory=PublicationDetailsPayload)
+    authors: List[PublicationAuthorPayload] = Field(default_factory=list)
 
 
 class AdDesignTemplateRead(BaseModel):
@@ -3046,7 +3487,14 @@ def admin_create_content_item(item: ContentItemCreate, db: Session = Depends(get
 def admin_get_content_item(id: int, db: Session = Depends(get_db)):
     try:
         item = get_content_item_or_404(db, id)
-        return serialize_content_item(item)
+        data = serialize_content_item(item)
+        if item.event:
+            apply_current_price_to_payload(data, get_current_price_by_event_id(db, item.event.id))
+            apply_next_price_change_to_payload(
+                data,
+                get_next_price_change_by_event_id(db, item.event.id, data.get("price")),
+            )
+        return data
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
@@ -3185,6 +3633,102 @@ def update_event_details(db_event: models.Event, details: EventDetailsPayload, r
         setattr(db_event, key, value)
 
 
+def get_admin_event_by_content_item_or_404(db: Session, content_item_id: int):
+    db_item = get_content_item_or_404(db, content_item_id)
+    ensure_content_type(db_item, "event")
+    db_event = (
+        db.query(models.Event)
+        .options(
+            joinedload(models.Event.partner_links).joinedload(models.EventPartnerLink.partner),
+        )
+        .filter(models.Event.content_item_id == content_item_id)
+        .first()
+    )
+    if not db_event:
+        raise HTTPException(status_code=404, detail="Event details not found for this content item")
+    return db_event
+
+
+def validate_partner_links_payload(db: Session, partners: List[EventPartnerPayload]):
+    seen = set()
+    partner_ids = []
+    for link in partners:
+        if link.partner_id in seen:
+            raise HTTPException(status_code=400, detail="Lista de parteneri conține duplicate")
+        seen.add(link.partner_id)
+        partner_ids.append(link.partner_id)
+
+    if not partner_ids:
+        return
+
+    existing_ids = {
+        partner.id
+        for partner in db.query(models.EventPartner.id)
+        .filter(models.EventPartner.id.in_(partner_ids))
+        .all()
+    }
+    missing_ids = sorted(set(partner_ids) - existing_ids)
+    if missing_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Partenerii nu există: {', '.join(str(item) for item in missing_ids)}",
+        )
+
+
+def save_event_partner_links(db: Session, event_id: int, partners: List[EventPartnerPayload]):
+    validate_partner_links_payload(db, partners)
+    db.query(models.EventPartnerLink).filter(models.EventPartnerLink.event_id == event_id).delete()
+    for link in partners:
+        db.add(
+            models.EventPartnerLink(
+                event_id=event_id,
+                partner_id=link.partner_id,
+                display_order=link.display_order,
+            )
+        )
+
+
+def validate_event_price_schedule_payload(
+    db: Session,
+    event_id: int,
+    item: EventPriceScheduleCreate,
+):
+    allowed_price_types = {"free", "paid", "subscription"}
+    if item.price_type not in allowed_price_types:
+        allowed = ", ".join(sorted(allowed_price_types))
+        raise HTTPException(status_code=400, detail=f"price_type invalid. Valori acceptate: {allowed}")
+
+    if item.price_type == "free" and item.price_amount is not None:
+        raise HTTPException(status_code=400, detail="Pentru price_type='free', price_amount trebuie să fie NULL")
+
+    if item.price_type in {"paid", "subscription"}:
+        if item.price_amount is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Pentru price_type='paid' sau 'subscription', price_amount este obligatoriu",
+            )
+        if item.price_amount < 0:
+            raise HTTPException(status_code=400, detail="price_amount trebuie să fie >= 0")
+
+    duplicate = db.execute(
+        text(
+            """
+            SELECT id
+            FROM event_price_schedule
+            WHERE event_id = :event_id
+              AND effective_from = :effective_from
+            LIMIT 1
+            """
+        ),
+        {"event_id": event_id, "effective_from": item.effective_from},
+    ).first()
+    if duplicate:
+        raise HTTPException(
+            status_code=409,
+            detail="Există deja un preț programat pentru acest eveniment la același effective_from",
+        )
+
+
 def update_publication_details(db_publication: models.Publication, details: PublicationDetailsPayload, fallback_title: str):
     data = child_update_data(
         details,
@@ -3213,13 +3757,105 @@ def update_publication_details(db_publication: models.Publication, details: Publ
 def get_admin_publication_or_404(db: Session, publication_id: int):
     publication = (
         db.query(models.Publication)
-        .options(joinedload(models.Publication.content_item))
+        .options(
+            joinedload(models.Publication.content_item),
+            joinedload(models.Publication.author_links).joinedload(models.PublicationAuthor.author),
+        )
         .filter(models.Publication.id == publication_id)
         .first()
     )
     if publication is None:
         raise HTTPException(status_code=404, detail="Publicația nu a fost găsită")
     return publication
+
+
+def get_admin_publication_by_content_item_or_404(db: Session, content_item_id: int):
+    db_item = get_content_item_or_404(db, content_item_id)
+    ensure_content_type(db_item, "publication")
+    publication = (
+        db.query(models.Publication)
+        .options(joinedload(models.Publication.author_links).joinedload(models.PublicationAuthor.author))
+        .filter(models.Publication.content_item_id == content_item_id)
+        .first()
+    )
+    if publication is None:
+        raise HTTPException(status_code=404, detail="Publication details not found for this content item")
+    return publication
+
+
+def validate_publication_authors_payload(db: Session, authors: List[PublicationAuthorPayload]):
+    seen = set()
+    author_ids = []
+    for link in authors:
+        if link.author_id in seen:
+            raise HTTPException(status_code=400, detail="Lista de autori conține duplicate")
+        seen.add(link.author_id)
+        author_ids.append(link.author_id)
+        if link.display_order is not None and link.display_order < 1:
+            raise HTTPException(status_code=400, detail="display_order trebuie să fie >= 1")
+        if link.role is not None and len(link.role.strip()) > 100:
+            raise HTTPException(status_code=400, detail="Rolul autorului poate avea maximum 100 de caractere")
+
+    if not author_ids:
+        return
+
+    existing_ids = {
+        author.id
+        for author in db.query(models.Author.id)
+        .filter(models.Author.id.in_(author_ids))
+        .all()
+    }
+    missing_ids = sorted(set(author_ids) - existing_ids)
+    if missing_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Autorii nu există: {', '.join(str(item) for item in missing_ids)}",
+        )
+
+
+def save_publication_author_links(db: Session, publication_id: int, authors: List[PublicationAuthorPayload]):
+    validate_publication_authors_payload(db, authors)
+    existing_links = {
+        link.author_id: link
+        for link in db.query(models.PublicationAuthor)
+        .filter(models.PublicationAuthor.publication_id == publication_id)
+        .all()
+    }
+    incoming_author_ids = {link.author_id for link in authors}
+
+    for author_id, link in existing_links.items():
+        if author_id not in incoming_author_ids:
+            db.delete(link)
+
+    for index, link in enumerate(authors, start=1):
+        role = link.role.strip() if isinstance(link.role, str) and link.role.strip() else None
+        existing_link = existing_links.get(link.author_id)
+        if existing_link:
+            existing_link.role = role
+            existing_link.display_order = index
+        else:
+            db.add(
+                models.PublicationAuthor(
+                    publication_id=publication_id,
+                    author_id=link.author_id,
+                    role=role,
+                    display_order=index,
+                )
+            )
+
+
+def get_publication_authors_by_publication_id(db: Session, publication_id: int):
+    links = (
+        db.query(models.PublicationAuthor)
+        .options(joinedload(models.PublicationAuthor.author))
+        .filter(models.PublicationAuthor.publication_id == publication_id)
+        .order_by(
+            models.PublicationAuthor.display_order.asc(),
+            models.PublicationAuthor.author_id.asc(),
+        )
+        .all()
+    )
+    return serialize_publication_author_links(links)
 
 
 def get_admin_publication_issue_or_404(db: Session, issue_id: int):
@@ -3293,6 +3929,411 @@ def publication_issue_data(payload: BaseModel, exclude_unset: bool = False):
     return result
 
 
+class EventPartnerBase(BaseModel):
+    name: Optional[str] = None
+    logo_url: Optional[str] = None
+    website_url: Optional[str] = None
+
+
+class EventPartnerCreate(EventPartnerBase):
+    name: str
+
+
+class EventPartnerUpdate(EventPartnerBase):
+    pass
+
+
+class AuthorBase(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    title: Optional[str] = None
+    bio: Optional[str] = None
+    photo_url: Optional[str] = None
+
+
+class AuthorCreate(AuthorBase):
+    first_name: str
+    last_name: str
+
+
+class AuthorUpdate(AuthorBase):
+    pass
+
+
+def author_data(payload: BaseModel, exclude_unset: bool = False):
+    data = pydantic_dump(payload, exclude_unset=exclude_unset)
+    result = {
+        key: (value.strip() or None if isinstance(value, str) else value)
+        for key, value in data.items()
+        if key in {"first_name", "last_name", "title", "bio", "photo_url"}
+    }
+    if "first_name" in result and not result["first_name"]:
+        raise HTTPException(status_code=400, detail="Prenumele autorului este obligatoriu")
+    if "last_name" in result and not result["last_name"]:
+        raise HTTPException(status_code=400, detail="Numele autorului este obligatoriu")
+    return result
+
+
+def get_author_or_404(db: Session, author_id: int):
+    author = db.query(models.Author).filter(models.Author.id == author_id).first()
+    if author is None:
+        raise HTTPException(status_code=404, detail="Autorul nu a fost găsit")
+    return author
+
+
+def event_partner_data(payload: BaseModel, exclude_unset: bool = False):
+    data = pydantic_dump(payload, exclude_unset=exclude_unset)
+    result = {
+        key: (value.strip() or None if isinstance(value, str) else value)
+        for key, value in data.items()
+        if key in {"name", "logo_url", "website_url"}
+    }
+    if "name" in result and not result["name"]:
+        raise HTTPException(status_code=400, detail="Numele partenerului este obligatoriu")
+    return result
+
+
+def get_event_partner_or_404(db: Session, partner_id: int):
+    partner = db.query(models.EventPartner).filter(models.EventPartner.id == partner_id).first()
+    if not partner:
+        raise HTTPException(status_code=404, detail="Partenerul nu a fost găsit")
+    return partner
+
+
+@app.get("/authors")
+def get_authors(
+    q: Optional[str] = Query(default=None),
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    require_admin_authorization(authorization)
+    try:
+        query = db.query(models.Author)
+        search = q.strip() if isinstance(q, str) else None
+        if search:
+            pattern = f"%{search}%"
+            query = query.filter(
+                models.Author.first_name.ilike(pattern)
+                | models.Author.last_name.ilike(pattern)
+                | models.Author.title.ilike(pattern)
+            )
+        authors = query.order_by(models.Author.last_name.asc(), models.Author.first_name.asc(), models.Author.id.asc()).all()
+        return [serialize_author(author) for author in authors]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/authors/{author_id}")
+def get_author(
+    author_id: int,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    require_admin_authorization(authorization)
+    try:
+        return serialize_author(get_author_or_404(db, author_id))
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.post("/authors")
+def create_author(
+    item: AuthorCreate,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    require_admin_authorization(authorization)
+    try:
+        author = models.Author(**author_data(item))
+        db.add(author)
+        db.commit()
+        db.refresh(author)
+        return serialize_author(author)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.put("/authors/{author_id}")
+def update_author(
+    author_id: int,
+    item: AuthorUpdate,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    require_admin_authorization(authorization)
+    try:
+        author = get_author_or_404(db, author_id)
+        data = author_data(item, exclude_unset=True)
+        for key, value in data.items():
+            setattr(author, key, value)
+        db.commit()
+        db.refresh(author)
+        return serialize_author(author)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.patch("/authors/{author_id}")
+def patch_author(
+    author_id: int,
+    item: AuthorUpdate,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    return update_author(author_id, item, authorization, db)
+
+
+@app.delete("/authors/{author_id}")
+def delete_author(
+    author_id: int,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    require_admin_authorization(authorization)
+    try:
+        author = get_author_or_404(db, author_id)
+        db.delete(author)
+        db.commit()
+        return {"success": True, "message": "Autorul a fost șters"}
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/publications/{publication_id}/authors")
+def get_publication_authors(
+    publication_id: int,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    require_admin_authorization(authorization)
+    try:
+        get_admin_publication_or_404(db, publication_id)
+        return get_publication_authors_by_publication_id(db, publication_id)
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.put("/publications/{publication_id}/authors")
+def update_publication_authors(
+    publication_id: int,
+    items: List[PublicationAuthorPayload],
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    require_admin_authorization(authorization)
+    try:
+        get_admin_publication_or_404(db, publication_id)
+        save_publication_author_links(db, publication_id, items)
+        db.commit()
+        return get_publication_authors_by_publication_id(db, publication_id)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/admin/event-partners")
+def admin_get_event_partners(db: Session = Depends(get_db)):
+    try:
+        partners = (
+            db.query(models.EventPartner)
+            .order_by(models.EventPartner.name.asc(), models.EventPartner.id.asc())
+            .all()
+        )
+        return [serialize_event_partner(partner) for partner in partners]
+    except Exception as e:
+        raise_safe_error(e, status_code=400)
+
+
+@app.post("/admin/event-partners")
+def admin_create_event_partner(item: EventPartnerCreate, db: Session = Depends(get_db)):
+    try:
+        partner = models.EventPartner(**event_partner_data(item))
+        db.add(partner)
+        db.commit()
+        db.refresh(partner)
+        return serialize_event_partner(partner)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.put("/admin/event-partners/{partner_id}")
+def admin_update_event_partner(partner_id: int, item: EventPartnerUpdate, db: Session = Depends(get_db)):
+    try:
+        partner = get_event_partner_or_404(db, partner_id)
+        data = event_partner_data(item, exclude_unset=True)
+        log_admin_action("PUT", f"/admin/event-partners/{partner_id}", partner_id, pydantic_dump(item, exclude_unset=True), data)
+        for key, value in data.items():
+            setattr(partner, key, value)
+        db.commit()
+        db.refresh(partner)
+        return serialize_event_partner(partner)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.delete("/admin/event-partners/{partner_id}")
+def admin_delete_event_partner(partner_id: int, db: Session = Depends(get_db)):
+    try:
+        partner = get_event_partner_or_404(db, partner_id)
+        log_admin_action("DELETE", f"/admin/event-partners/{partner_id}", partner_id, payload=None, update_data={"delete": "event_partner"})
+        db.delete(partner)
+        db.commit()
+        return {"success": True, "message": "Partenerul a fost șters"}
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/admin/events/{content_item_id}/partners")
+def admin_get_event_partners_for_event(content_item_id: int, db: Session = Depends(get_db)):
+    try:
+        db_event = get_admin_event_by_content_item_or_404(db, content_item_id)
+        return serialize_event_partner_links(db_event.partner_links)
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.put("/admin/events/{content_item_id}/partners")
+def admin_save_event_partners_for_event(
+    content_item_id: int,
+    item: EventPartnersPayload,
+    db: Session = Depends(get_db),
+):
+    try:
+        db_event = get_admin_event_by_content_item_or_404(db, content_item_id)
+        save_event_partner_links(db, db_event.id, item.partners)
+        db.commit()
+        db_event = get_admin_event_by_content_item_or_404(db, content_item_id)
+        return serialize_event_partner_links(db_event.partner_links)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/events/{event_id}/prices")
+def get_event_price_schedule(
+    event_id: int,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    require_admin_authorization(authorization)
+    try:
+        event_exists = db.query(models.Event.id).filter(models.Event.id == event_id).first()
+        if not event_exists:
+            raise HTTPException(status_code=404, detail="Evenimentul nu a fost găsit")
+
+        rows = db.execute(
+            text(
+                """
+                SELECT
+                    id,
+                    event_id,
+                    price_type,
+                    price_amount,
+                    currency,
+                    effective_from,
+                    created_at
+                FROM event_price_schedule
+                WHERE event_id = :event_id
+                ORDER BY effective_from ASC
+                """
+            ),
+            {"event_id": event_id},
+        ).all()
+        return [serialize_mapping(row) for row in rows]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.post("/events/{event_id}/prices")
+def create_event_price_schedule(
+    event_id: int,
+    item: EventPriceScheduleCreate,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    require_admin_authorization(authorization)
+    try:
+        event_exists = db.query(models.Event.id).filter(models.Event.id == event_id).first()
+        if not event_exists:
+            raise HTTPException(status_code=404, detail="Evenimentul nu a fost găsit")
+
+        validate_event_price_schedule_payload(db, event_id, item)
+        row = db.execute(
+            text(
+                """
+                INSERT INTO event_price_schedule (
+                    event_id,
+                    price_type,
+                    price_amount,
+                    currency,
+                    effective_from
+                )
+                VALUES (
+                    :event_id,
+                    :price_type,
+                    :price_amount,
+                    COALESCE(:currency, 'RON'),
+                    :effective_from
+                )
+                RETURNING
+                    id,
+                    event_id,
+                    price_type,
+                    price_amount,
+                    currency,
+                    effective_from,
+                    created_at
+                """
+            ),
+            {
+                "event_id": event_id,
+                "price_type": item.price_type,
+                "price_amount": None if item.price_type == "free" else item.price_amount,
+                "currency": item.currency or "RON",
+                "effective_from": item.effective_from,
+            },
+        ).first()
+        db.commit()
+        return serialize_mapping(row)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
 @app.get("/admin/events")
 def admin_get_events(db: Session = Depends(get_db)):
     try:
@@ -3302,6 +4343,9 @@ def admin_get_events(db: Session = Depends(get_db)):
                 joinedload(models.ContentItem.category),
                 joinedload(models.ContentItem.specialization),
                 joinedload(models.ContentItem.event).joinedload(models.Event.city),
+                joinedload(models.ContentItem.event)
+                .joinedload(models.Event.partner_links)
+                .joinedload(models.EventPartnerLink.partner),
             )
             .filter(models.ContentItem.content_type == models.ContentItemType.event)
             .filter(models.ContentItem.deleted_at.is_(None))
@@ -3312,7 +4356,14 @@ def admin_get_events(db: Session = Depends(get_db)):
             )
             .all()
         )
-        return [serialize_admin_specialized_content_item(item, "event") for item in items]
+        price_by_content_item_id = get_current_prices_by_content_item_ids(db, [item.id for item in items])
+        return [
+            apply_current_price_to_payload(
+                serialize_admin_specialized_content_item(item, "event"),
+                price_by_content_item_id.get(item.id),
+            )
+            for item in items
+        ]
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
@@ -3326,9 +4377,11 @@ def admin_create_event(item: EventAdminPayload, db: Session = Depends(get_db)):
         db_event = models.Event(content_item_id=db_item.id)
         update_event_details(db_event, item.event, require_dates=True)
         db.add(db_event)
+        db.flush()
+        save_event_partner_links(db, db_event.id, item.partners)
         db.commit()
         db.refresh(db_item)
-        return serialize_content_item(db_item)
+        return serialize_admin_specialized_content_item(db_item, "event")
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):
@@ -3348,13 +4401,12 @@ def admin_update_event(content_item_id: int, item: EventAdminPayload, db: Sessio
             pydantic_dump(item, exclude_unset=True),
         )
         update_content_item(db_item, item, "event")
-        db_event = db.query(models.Event).filter(models.Event.content_item_id == content_item_id).first()
-        if not db_event:
-            raise HTTPException(status_code=404, detail="Event details not found for this content item")
+        db_event = get_admin_event_by_content_item_or_404(db, content_item_id)
         update_event_details(db_event, item.event, require_dates=False)
+        save_event_partner_links(db, db_event.id, item.partners)
         db.commit()
         db.refresh(db_item)
-        return serialize_content_item(db_item)
+        return serialize_admin_specialized_content_item(db_item, "event")
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):
@@ -3439,7 +4491,9 @@ def admin_get_publications(db: Session = Depends(get_db)):
             .options(
                 joinedload(models.ContentItem.category),
                 joinedload(models.ContentItem.specialization),
-                joinedload(models.ContentItem.publication),
+                joinedload(models.ContentItem.publication)
+                .joinedload(models.Publication.author_links)
+                .joinedload(models.PublicationAuthor.author),
             )
             .filter(models.ContentItem.content_type == models.ContentItemType.publication)
             .filter(models.ContentItem.deleted_at.is_(None))
@@ -3510,9 +4564,11 @@ def admin_create_publication(item: PublicationAdminPayload, db: Session = Depend
         db_publication = models.Publication(content_item_id=db_item.id)
         update_publication_details(db_publication, item.publication, db_item.title)
         db.add(db_publication)
+        db.flush()
+        save_publication_author_links(db, db_publication.id, item.authors)
         db.commit()
         db.refresh(db_item)
-        return serialize_content_item(db_item)
+        return serialize_admin_specialized_content_item(db_item, "publication")
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):
@@ -3577,13 +4633,12 @@ def admin_update_publication(content_item_id: int, item: PublicationAdminPayload
             pydantic_dump(item, exclude_unset=True),
         )
         update_content_item(db_item, item, "publication")
-        db_publication = db.query(models.Publication).filter(models.Publication.content_item_id == content_item_id).first()
-        if not db_publication:
-            raise HTTPException(status_code=404, detail="Publication details not found for this content item")
+        db_publication = get_admin_publication_by_content_item_or_404(db, content_item_id)
         update_publication_details(db_publication, item.publication, db_item.title)
+        save_publication_author_links(db, db_publication.id, item.authors)
         db.commit()
         db.refresh(db_item)
-        return serialize_content_item(db_item)
+        return serialize_admin_specialized_content_item(db_item, "publication")
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):

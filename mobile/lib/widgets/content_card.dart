@@ -32,6 +32,7 @@ class ContentCard extends StatefulWidget {
   final String? publicationCreditationText;
   final String? publicationIndexingText;
   final String? publicationSubscriptionUrl;
+  final List<PublicationAuthor> publicationAuthors;
   final int? id; // For debug logging
   final bool isSaved;
   final ValueChanged<int>? onSaveToggle;
@@ -67,6 +68,7 @@ class ContentCard extends StatefulWidget {
     this.publicationCreditationText,
     this.publicationIndexingText,
     this.publicationSubscriptionUrl,
+    this.publicationAuthors = const [],
     this.isSaved = false,
     this.onSaveToggle,
     this.onDetailClosed,
@@ -187,6 +189,7 @@ class ContentCard extends StatefulWidget {
       publicationIndexingText: model.publicationIndexingText,
       publicationSubscriptionUrl:
           model.publicationSubscriptionUrl ?? model.contentUrl,
+      publicationAuthors: model.publicationAuthors,
       isSaved: isSaved,
       onSaveToggle: onSaveToggle,
       onDetailClosed: onDetailClosed,
@@ -541,6 +544,7 @@ class _ContentCardState extends State<ContentCard>
             creditationText: widget.publicationCreditationText,
             indexingText: widget.publicationIndexingText,
             subscriptionUrl: widget.publicationSubscriptionUrl,
+            authors: widget.publicationAuthors,
           ),
         ),
       );

@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/content_item.dart';
 import '../services/api_service.dart';
 import '../theme/pulse_theme.dart';
+import '../widgets/emc_badge.dart';
 import '../widgets/premium_loading_indicator.dart';
 
 class ContentDetailScreen extends StatefulWidget {
@@ -19,6 +23,21 @@ class ContentDetailScreen extends StatefulWidget {
 }
 
 class _ContentDetailScreenState extends State<ContentDetailScreen> {
+  static const String _aiIcon = 'assets/icons/AI.svg';
+  static const String _backIcon = 'assets/icons/arrow.backward.svg';
+  static const String _checkIcon = 'assets/icons/checkmark.svg';
+  static const String _courseIcon = 'assets/icons/graduation.svg';
+  static const String _emcIcon = 'assets/icons/EMC.svg';
+  static const String _eventIcon = 'assets/icons/events.svg';
+  static const String _globeIcon = 'assets/icons/globe.svg';
+  static const String _heartIcon = 'assets/icons/heart.svg';
+  static const String _newsIcon = 'assets/icons/newspaper.svg';
+  static const String _paymentIcon = 'assets/icons/creditcard.svg';
+  static const String _calendarIcon = 'assets/icons/calendar.svg';
+  static const String _buildingIcon = 'assets/icons/building.svg';
+  static const String _walletIcon = 'assets/icons/wallet.svg';
+  static const String _peopleIcon = 'assets/icons/people.svg';
+
   final ApiService _apiService = ApiService();
   ContentItem? _item;
   bool _isLoading = true;
@@ -203,28 +222,176 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         .trim();
   }
 
-  Widget _buildSaveAction() {
-    const favoriteColor = Color(0xFFFF4B4B);
-    return IconButton(
-      tooltip: _isSaved ? 'Elimina din salvate' : 'Salveaza',
-      onPressed: _isSaving ? null : _toggleSaved,
-      icon: Icon(
-        _isSaved ? Icons.favorite : Icons.favorite_border,
-        color: _isSaved ? favoriteColor : PulseTheme.textSecondary,
-      ),
+  String _contentLabel(ContentItem item) {
+    switch (item.contentType) {
+      case 'event':
+        return 'Eveniment';
+      case 'course':
+        return 'Curs';
+      case 'news':
+        return 'Știre';
+      default:
+        return item.tag ?? 'Detalii';
+    }
+  }
+
+  String _contentIconFor(ContentItem item) {
+    switch (item.contentType) {
+      case 'event':
+        return _eventIcon;
+      case 'course':
+        return _courseIcon;
+      case 'news':
+      default:
+        return _newsIcon;
+    }
+  }
+
+  Widget _buildAssetIcon(
+    String asset, {
+    Key? key,
+    required Color color,
+    double size = 20,
+  }) {
+    return SvgPicture.asset(
+      asset,
+      key: key,
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
     );
+  }
+
+  Color _accentFor(ContentItem item) {
+    switch (item.contentType) {
+      case 'event':
+        return PulseTheme.eventContent;
+      case 'course':
+        return const Color(0xFF2563EB);
+      case 'news':
+      default:
+        return const Color(0xFF0E7490);
+    }
+  }
+
+  int _readingMinutes(ContentItem item) {
+    final text = '${item.shortDescription ?? ''} ${_cleanBody(item.body)}';
+    final words = text
+        .split(RegExp(r'\s+'))
+        .where((word) => word.trim().isNotEmpty)
+        .length;
+    return (words / 220).ceil().clamp(1, 99);
+  }
+
+  String? _formatTime(DateTime? date) {
+    if (date == null) return null;
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  String _humanizeValue(String? value) {
+    final raw = value?.trim();
+    if (raw == null || raw.isEmpty) return 'Nedisponibil';
+    switch (raw) {
+      case 'online':
+        return 'Online';
+      case 'onsite':
+        return 'Fizic';
+      case 'hybrid':
+        return 'Hibrid';
+      case 'free':
+        return 'Gratuit';
+      case 'paid':
+        return 'Plătit';
+      case 'approved':
+      case 'accredited':
+        return 'Acreditat';
+      case 'pending':
+        return 'În acreditare';
+      case 'rejected':
+      case 'not_accredited':
+        return 'Neacreditat';
+      case 'published':
+      case 'active':
+        return 'Disponibil';
+      case 'draft':
+        return 'În pregătire';
+      case 'archived':
+        return 'Arhivat';
+      default:
+        return raw
+            .replaceAll('_', ' ')
+            .split(' ')
+            .map(
+              (part) => part.isEmpty
+                  ? part
+                  : '${part[0].toUpperCase()}${part.substring(1)}',
+            )
+            .join(' ');
+    }
+  }
+
+  String _priceLabel(ContentItem item) {
+    if (item.priceAmount != null) {
+      return '${item.priceAmount} RON';
+    }
+    return _humanizeValue(item.priceType ?? 'free');
+  }
+
+  String _eventTimeRange(ContentItem item) {
+    final start = _formatTime(item.startDate);
+    final end = _formatTime(item.endDate);
+    if (start != null && end != null) return '$start - $end';
+    if (start != null) return 'de la $start';
+    return 'Program anunțat curând';
+  }
+
+  Future<void> _openContentUrl(ContentItem item) async {
+    final rawUrl = item.contentUrl?.trim();
+    if (rawUrl == null || rawUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Linkul nu este disponibil momentan.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null) return;
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nu am putut deschide linkul.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Widget _buildHeroImage(ContentItem item) {
     final imageUrl = _imageUrlFor(item);
     if (imageUrl == null) {
       return Container(
-        height: 190,
-        color: PulseTheme.primary.withValues(alpha: 0.08),
-        child: const Center(
-          child: Icon(
-            Icons.article_outlined,
-            color: PulseTheme.primary,
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              _accentFor(item).withValues(alpha: 0.18),
+              const Color(0xFFE8F6F4),
+            ],
+          ),
+        ),
+        child: Center(
+          child: _buildAssetIcon(
+            _contentIconFor(item),
+            color: PulseTheme.textSecondary,
             size: 42,
           ),
         ),
@@ -234,14 +401,17 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
       return Image.network(
         imageUrl,
-        height: 220,
+        height: double.infinity,
         width: double.infinity,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) => Container(
-          height: 190,
           color: PulseTheme.primary.withValues(alpha: 0.08),
-          child: const Center(
-            child: Icon(Icons.article_outlined, color: PulseTheme.primary),
+          child: Center(
+            child: _buildAssetIcon(
+              _contentIconFor(item),
+              color: PulseTheme.primary,
+              size: 34,
+            ),
           ),
         ),
       );
@@ -254,33 +424,234 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         : 'assets/images/$imageUrl';
     return Image.asset(
       assetPath,
-      height: 220,
+      height: double.infinity,
       width: double.infinity,
       fit: BoxFit.cover,
       errorBuilder: (context, error, stackTrace) => Container(
-        height: 190,
         color: PulseTheme.primary.withValues(alpha: 0.08),
-        child: const Center(
-          child: Icon(Icons.article_outlined, color: PulseTheme.primary),
+        child: Center(
+          child: _buildAssetIcon(
+            _contentIconFor(item),
+            color: PulseTheme.primary,
+            size: 34,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+  Widget _buildHero(ContentItem item, double height) {
+    final topInset = MediaQuery.of(context).padding.top;
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(32),
+          topRight: Radius.circular(32),
+          bottomLeft: Radius.circular(26),
+          bottomRight: Radius.circular(26),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildHeroImage(item),
+            if (item.contentType == 'event')
+              Container(color: Colors.black.withValues(alpha: 0.4)),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.06),
+                    Colors.black.withValues(alpha: 0.18),
+                    Colors.black.withValues(alpha: 0.74),
+                  ],
+                  stops: const [0.18, 0.52, 1],
+                ),
+              ),
+            ),
+            Positioned(
+              top: topInset + 12,
+              left: 18,
+              child: _buildGlassButton(
+                tooltip: 'Înapoi',
+                iconAsset: _backIcon,
+                onTap: () => Navigator.of(context).maybePop(),
+              ),
+            ),
+            if (item.contentType == 'event' &&
+                item.emcCredits != null &&
+                item.emcCredits! > 0)
+              Positioned(
+                top: topInset + 12,
+                right: 18,
+                child: EmcBadge(points: '+${item.emcCredits}'),
+              ),
+            Positioned(
+              left: 22,
+              right: 22,
+              bottom: item.contentType == 'event' ? 82 : 56,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (item.contentType == 'event')
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: PulseTheme.eventContent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _contentLabel(item).toUpperCase(),
+                        style: const TextStyle(
+                          color: PulseTheme.eventContent,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    )
+                  else
+                    _buildHeroBadge(_contentLabel(item)),
+                  const SizedBox(height: 12),
+                  Text(
+                    item.publicationName ?? item.title,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 30,
+                      height: 1.08,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  if (item.contentType == 'event') ...[
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildHeroSecondaryBadge(
+                          _peopleIcon,
+                          item.authorName ?? item.provider ?? 'PULSE',
+                        ),
+                        _buildHeroSecondaryBadge(
+                          _checkIcon,
+                          _humanizeValue(item.accreditationStatus ?? 'pending'),
+                        ),
+                        if (item.specializationName?.trim().isNotEmpty == true)
+                          _buildHeroSecondaryBadge(
+                            _courseIcon,
+                            item.specializationName!,
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlassButton({
+    required String tooltip,
+    required String iconAsset,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.34),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color.withValues(alpha: 0.14)),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: SizedBox(
+            width: 46,
+            height: 46,
+            child: Center(
+              child: _buildAssetIcon(iconAsset, color: Colors.white, size: 20),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroBadge(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
       ),
       child: Text(
         label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w700,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w800,
           fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroSecondaryBadge(String iconAsset, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: PulseTheme.eventContent.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildAssetIcon(iconAsset, color: PulseTheme.eventContent, size: 12),
+          const SizedBox(width: 4),
+          Text(
+            text.toUpperCase(),
+            style: const TextStyle(
+              color: PulseTheme.eventContent,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFavoriteButton() {
+    return Material(
+      color: Colors.white,
+      shape: const CircleBorder(),
+      elevation: 10,
+      shadowColor: const Color(0xFF0E7490).withValues(alpha: 0.12),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: _isSaving ? null : _toggleSaved,
+        child: SizedBox(
+          width: 62,
+          height: 62,
+          child: Center(
+            child: _buildAssetIcon(
+              _heartIcon,
+              color: _isSaved
+                  ? const Color(0xFFEF4444)
+                  : PulseTheme.textPrimary,
+              size: 28,
+            ),
+          ),
         ),
       ),
     );
@@ -289,36 +660,545 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   Widget _buildAiSummaryButton() {
     return SizedBox(
       width: double.infinity,
-      child: ElevatedButton.icon(
+      child: ElevatedButton(
         onPressed: _isAiSummaryLoading ? null : _generateAiSummary,
         style: ElevatedButton.styleFrom(
-          backgroundColor: PulseTheme.primary,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: PulseTheme.primary.withValues(alpha: 0.58),
-          disabledForegroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          backgroundColor: const Color(0xFFEFF8F7),
+          foregroundColor: const Color(0xFF0E7490),
+          disabledBackgroundColor: const Color(0xFFEFF8F7),
+          disabledForegroundColor: const Color(0xFF0E7490),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(20),
           ),
           elevation: 0,
         ),
-        icon: _isAiSummaryLoading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : const Icon(Icons.auto_awesome_outlined),
-        label: Text(
-          _isAiSummaryLoading
-              ? 'Se generează rezumatul...'
-              : 'Generează rezumat AI',
-          style: const TextStyle(fontWeight: FontWeight.w700),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _isAiSummaryLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF0E7490),
+                    ),
+                  )
+                : _buildAssetIcon(
+                    _aiIcon,
+                    color: const Color(0xFF0E7490),
+                    size: 18,
+                  ),
+            const SizedBox(width: 8),
+            Text(
+              _isAiSummaryLoading
+                  ? 'Se generează rezumatul...'
+                  : 'Generează rezumat AI',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPanelSectionTitle(String label) {
+    return Text(
+      label,
+      style: const TextStyle(
+        color: PulseTheme.textPrimary,
+        fontSize: 18,
+        fontWeight: FontWeight.w900,
+        height: 1.2,
+      ),
+    );
+  }
+
+  Widget _buildDescription(String? value) {
+    final text = value?.trim();
+    if (text == null || text.isEmpty) return const SizedBox.shrink();
+    return Text(
+      text,
+      style: const TextStyle(
+        color: Color(0xFF334155),
+        fontSize: 17,
+        height: 1.58,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+
+  Widget _buildArticleBody(String value) {
+    final text = value.trim().isNotEmpty
+        ? value.trim()
+        : 'Conținutul complet nu este disponibil.';
+    return Text(
+      text,
+      style: TextStyle(
+        color: value.trim().isNotEmpty
+            ? const Color(0xFF1F2937)
+            : PulseTheme.textSecondary,
+        fontSize: 17,
+        height: 1.68,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+
+  Widget _buildAuthorRow(ContentItem item) {
+    final date = _formatDate(item.publishedAt);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: PulseTheme.borderLight),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE6F6F4),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Center(
+              child: _buildAssetIcon(
+                _peopleIcon,
+                color: const Color(0xFF0E7490),
+                size: 21,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.authorName?.trim().isNotEmpty == true
+                      ? item.authorName!
+                      : 'Redacția PULSE',
+                  style: const TextStyle(
+                    color: PulseTheme.textPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  [?date, '${_readingMinutes(item)} min citire'].join(' • '),
+                  style: const TextStyle(
+                    color: PulseTheme.textSecondary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoGrid(List<_DetailInfo> items) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: items.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.42,
+      ),
+      itemBuilder: (context, index) => _buildInfoCard(items[index]),
+    );
+  }
+
+  Widget _buildInfoCard(_DetailInfo info) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFEAF0F4)),
+        boxShadow: [
+          BoxShadow(
+            color: info.accent.withValues(alpha: 0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: info.accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Center(
+              child: _buildAssetIcon(
+                info.iconAsset,
+                color: info.accent,
+                size: 18,
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                info.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: PulseTheme.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                info.value,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: PulseTheme.textPrimary,
+                  fontSize: 15,
+                  height: 1.16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailChips(List<_DetailInfo> items) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: items
+          .map(
+            (item) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: item.accent.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: item.accent.withValues(alpha: 0.11)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildAssetIcon(item.iconAsset, color: item.accent, size: 15),
+                  const SizedBox(width: 8),
+                  Text(
+                    item.value,
+                    style: const TextStyle(
+                      color: PulseTheme.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _buildPrimaryButton(ContentItem item, String label) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: () => _openContentUrl(item),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF0E7490),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 17),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+          ),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProgress(int percent) {
+    final clamped = percent.clamp(0, 100);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: PulseTheme.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Progres curs',
+                  style: TextStyle(
+                    color: PulseTheme.textPrimary,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Text(
+                '$clamped%',
+                style: const TextStyle(
+                  color: Color(0xFF0E7490),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              minHeight: 8,
+              value: clamped / 100,
+              backgroundColor: const Color(0xFFE2E8F0),
+              valueColor: const AlwaysStoppedAnimation(Color(0xFF0E7490)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNewsContent(ContentItem item) {
+    final description = item.shortDescription ?? item.publicationDescription;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildAuthorRow(item),
+        const SizedBox(height: 24),
+        _buildDescription(description),
+        const SizedBox(height: 20),
+        _buildAiSummaryButton(),
+        _buildAiSummarySection(),
+        const SizedBox(height: 28),
+        _buildArticleBody(_cleanBody(item.body)),
+      ],
+    );
+  }
+
+  Widget _buildEventInfoRow({
+    required String iconAsset,
+    required Color accent,
+    required String title,
+    String? subtitle,
+    Color? subtitleColor,
+    bool showBadge = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 28,
+            child: Center(
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  SvgPicture.asset(
+                    iconAsset,
+                    width: 22,
+                    height: 22,
+                    colorFilter: ColorFilter.mode(accent, BlendMode.srcIn),
+                  ),
+                  if (showBadge)
+                    Positioned(
+                      top: -1,
+                      right: -1,
+                      child: Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEF4444),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: PulseTheme.background,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: PulseTheme.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    height: 1.3,
+                  ),
+                ),
+                if (subtitle != null && subtitle.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: subtitleColor ?? PulseTheme.textSecondary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventContent(ContentItem item) {
+    final accent = _accentFor(item);
+
+    final date = _formatDate(item.startDate) ?? 'Data anunțată curând';
+    final timeRange = _eventTimeRange(item);
+
+    final primaryLocation = item.venueName?.trim().isNotEmpty == true
+        ? item.venueName!
+        : (item.cityName?.trim().isNotEmpty == true
+              ? item.cityName!
+              : _humanizeValue(item.attendanceMode));
+    final secondaryLocation =
+        item.venueName?.trim().isNotEmpty == true &&
+            item.cityName?.trim().isNotEmpty == true
+        ? item.cityName!
+        : null;
+
+    final price = _priceLabel(item);
+    final nextPriceMessage = item.nextPriceChange?.message?.trim();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildPanelSectionTitle('Detalii'),
+        const SizedBox(height: 16),
+        _buildEventInfoRow(
+          iconAsset: _calendarIcon,
+          accent: accent,
+          title: date,
+          subtitle:
+              timeRange != 'Program anunțat curând' && timeRange.isNotEmpty
+              ? timeRange
+              : null,
+        ),
+        _buildEventInfoRow(
+          iconAsset: _buildingIcon,
+          accent: accent,
+          title: primaryLocation,
+          subtitle: secondaryLocation,
+        ),
+        _buildEventInfoRow(
+          iconAsset: _walletIcon,
+          accent: accent,
+          title: price,
+          subtitle: nextPriceMessage?.isNotEmpty == true
+              ? nextPriceMessage
+              : null,
+          subtitleColor: const Color(0xFFEF4444),
+          showBadge: nextPriceMessage?.isNotEmpty == true,
+        ),
+        if (item.eventPartners.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          _EventPartnerCarousel(partners: item.eventPartners, accent: accent),
+          const SizedBox(height: 24),
+        ] else
+          const SizedBox(height: 12),
+        const SizedBox(height: 22),
+        _buildDescription(item.shortDescription),
+        if (_cleanBody(item.body).isNotEmpty) ...[
+          const SizedBox(height: 18),
+          _buildArticleBody(_cleanBody(item.body)),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCourseContent(ContentItem item) {
+    final accent = _accentFor(item);
+    final validUntil = _formatDate(item.validUntil) ?? 'Disponibil acum';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildInfoGrid([
+          _DetailInfo(
+            _courseIcon,
+            'Provider',
+            item.provider?.trim().isNotEmpty == true ? item.provider! : 'PULSE',
+            accent,
+          ),
+          _DetailInfo(
+            _emcIcon,
+            'EMC',
+            item.emcCredits != null ? '${item.emcCredits} puncte' : 'În curs',
+            accent,
+          ),
+          _DetailInfo(_eventIcon, 'Disponibil până la', validUntil, accent),
+          _DetailInfo(
+            _checkIcon,
+            'Status',
+            _humanizeValue(item.courseStatus ?? 'published'),
+            accent,
+          ),
+        ]),
+        if (item.progressPercent != null) ...[
+          const SizedBox(height: 20),
+          _buildProgress(item.progressPercent!),
+        ],
+        const SizedBox(height: 24),
+        _buildPanelSectionTitle('Despre curs'),
+        const SizedBox(height: 14),
+        _buildDescription(item.shortDescription),
+        if (_cleanBody(item.body).isNotEmpty) ...[
+          const SizedBox(height: 18),
+          _buildArticleBody(_cleanBody(item.body)),
+        ],
+        const SizedBox(height: 28),
+        _buildPrimaryButton(
+          item,
+          item.progressPercent != null && item.progressPercent! > 0
+              ? 'Continuă cursul'
+              : 'Începe cursul',
+        ),
+      ],
     );
   }
 
@@ -348,15 +1228,15 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(
-                      Icons.auto_awesome,
+                    _buildAssetIcon(
+                      _aiIcon,
                       color: PulseTheme.primary,
                       size: 20,
                     ),
-                    SizedBox(width: 8),
-                    Text(
+                    const SizedBox(width: 8),
+                    const Text(
                       'Rezumat AI',
                       style: TextStyle(
                         color: PulseTheme.textPrimary,
@@ -433,8 +1313,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           : Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
-                  Icons.info_outline,
+                _buildAssetIcon(
+                  _aiIcon,
                   color: PulseTheme.newsContent,
                   size: 20,
                 ),
@@ -456,10 +1336,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   }
 
   Widget _buildDetail(ContentItem item) {
-    final title = item.publicationName ?? item.title;
-    final body = _cleanBody(item.body);
-    final description = item.shortDescription ?? item.publicationDescription;
-    final dateLabel = _formatDate(item.publishedAt ?? item.startDate);
+    final heroHeight = MediaQuery.sizeOf(context).height < 720 ? 360.0 : 410.0;
 
     return RefreshIndicator(
       color: PulseTheme.primary,
@@ -468,98 +1345,40 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
+          clipBehavior: Clip.none,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(28),
-              child: _buildHeroImage(item),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (item.categoryName != null &&
-                          item.categoryName!.isNotEmpty)
-                        _buildChip(item.categoryName!, PulseTheme.primary),
-                      if (item.specializationName != null &&
-                          item.specializationName!.isNotEmpty)
-                        _buildChip(
-                          item.specializationName!,
-                          PulseTheme.magazineContent,
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: PulseTheme.textPrimary,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      height: 1.18,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 8,
-                    children: [
-                      if (item.authorName != null &&
-                          item.authorName!.isNotEmpty)
-                        Text(
-                          item.authorName!,
-                          style: const TextStyle(
-                            color: PulseTheme.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      if (dateLabel != null)
-                        Text(
-                          dateLabel,
-                          style: const TextStyle(
-                            color: PulseTheme.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                    ],
-                  ),
-                  if (description != null && description.trim().isNotEmpty) ...[
-                    const SizedBox(height: 18),
-                    Text(
-                      description,
-                      style: const TextStyle(
-                        color: PulseTheme.textSecondary,
-                        fontSize: 16,
-                        height: 1.45,
-                        fontWeight: FontWeight.w600,
+            Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+                  child: _buildHero(item, heroHeight),
+                ),
+                Transform.translate(
+                  offset: const Offset(0, -34),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(22, 42, 22, 34),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFFFEFC),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(36),
+                        topRight: Radius.circular(36),
                       ),
                     ),
-                  ],
-                  const SizedBox(height: 18),
-                  _buildAiSummaryButton(),
-                  _buildAiSummarySection(),
-                  const SizedBox(height: 24),
-                  Text(
-                    body.isNotEmpty
-                        ? body
-                        : 'Continutul complet nu este disponibil.',
-                    style: TextStyle(
-                      color: body.isNotEmpty
-                          ? PulseTheme.textPrimary
-                          : PulseTheme.textSecondary,
-                      fontSize: 16,
-                      height: 1.58,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    child: item.contentType == 'event'
+                        ? _buildEventContent(item)
+                        : item.contentType == 'course'
+                        ? _buildCourseContent(item)
+                        : _buildNewsContent(item),
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
+            Positioned(
+              top: heroHeight - 57,
+              right: 26,
+              child: _buildFavoriteButton(),
             ),
           ],
         ),
@@ -612,13 +1431,185 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: PulseTheme.background,
-      appBar: AppBar(
-        title: const Text('Detalii'),
-        actions: [_buildSaveAction()],
+    return Scaffold(backgroundColor: PulseTheme.background, body: _buildBody());
+  }
+}
+
+class _DetailInfo {
+  final String iconAsset;
+  final String label;
+  final String value;
+  final Color accent;
+
+  const _DetailInfo(this.iconAsset, this.label, this.value, this.accent);
+}
+
+class _EventPartnerCarousel extends StatefulWidget {
+  final List<EventPartner> partners;
+  final Color accent;
+
+  const _EventPartnerCarousel({required this.partners, required this.accent});
+
+  @override
+  State<_EventPartnerCarousel> createState() => _EventPartnerCarouselState();
+}
+
+class _EventPartnerCarouselState extends State<_EventPartnerCarousel> {
+  late final PageController _pageController;
+  int _currentPage = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+    _startTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant _EventPartnerCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.partners.length != widget.partners.length) {
+      _currentPage = 0;
+      _timer?.cancel();
+      _startTimer();
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(0);
+      }
+    }
+  }
+
+  void _startTimer() {
+    if (widget.partners.length < 2) return;
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!_pageController.hasClients || !mounted) return;
+      final nextPage = (_currentPage + 1) % widget.partners.length;
+      _pageController.animateToPage(
+        nextPage,
+        duration: const Duration(milliseconds: 520),
+        curve: Curves.easeInOutCubic,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.partners.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Parteneri',
+          style: TextStyle(
+            color: PulseTheme.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            height: 1.2,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 100,
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: widget.partners.length,
+            onPageChanged: (index) {
+              setState(() {
+                _currentPage = index;
+              });
+            },
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _EventPartnerCard(
+                  partner: widget.partners[index],
+                  accent: widget.accent,
+                ),
+              );
+            },
+          ),
+        ),
+        if (widget.partners.length > 1) ...[
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(
+              widget.partners.length,
+              (index) => AnimatedContainer(
+                duration: const Duration(milliseconds: 260),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: _currentPage == index ? 18 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: _currentPage == index
+                      ? widget.accent.withValues(alpha: 0.72)
+                      : const Color(0xFFD7DEE8),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _EventPartnerCard extends StatelessWidget {
+  final EventPartner partner;
+  final Color accent;
+
+  const _EventPartnerCard({required this.partner, required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    final logoUrl = partner.logoUrl?.trim();
+    return Center(
+      child: logoUrl != null && logoUrl.isNotEmpty
+          ? Image.network(
+              logoUrl,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return _PartnerLogoFallback(name: partner.name, accent: accent);
+              },
+            )
+          : _PartnerLogoFallback(name: partner.name, accent: accent),
+    );
+  }
+}
+
+class _PartnerLogoFallback extends StatelessWidget {
+  final String name;
+  final Color accent;
+
+  const _PartnerLogoFallback({required this.name, required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : 'P';
+    return Container(
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(15),
       ),
-      body: SafeArea(child: _buildBody()),
+      child: Center(
+        child: Text(
+          initial,
+          style: TextStyle(
+            color: accent,
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
     );
   }
 }
