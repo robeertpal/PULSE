@@ -1,4 +1,19 @@
-# PULSE / MedicHub
+<p align="center">
+  <img src="https://storageforpulse.blob.core.windows.net/content-images/images/2026/05/Screenshot%202026-05-11%20at%2005.02.31.png" alt="PULSE / MedicHub preview" width="100%">
+</p>
+
+<h1 align="center">PULSE</h1>
+
+<p align="center">
+  Platformă medicală digitală pentru conținut editorial, reviste, știri, evenimente, cursuri și experiențe administrative integrate.
+</p>
+
+<p align="center">
+  <strong>Live app:</strong>
+  <a href="https://pulse-medichub.web.app">https://pulse-medichub.web.app</a>
+</p>
+
+---
 
 PULSE este o platformă medicală digitală construită pentru ecosistemul MedicHub. Platforma centralizează conținut editorial, reviste, știri, evenimente, cursuri și reclame într-o experiență unitară pentru medici și profesioniști din domeniul sănătății.
 
@@ -537,7 +552,7 @@ ManagementSystem/css/styles.css
 
 ## CORS
 
-Backend-ul permite în prezent request-uri din:
+Backend-ul citește origin-urile permise din variabila `ALLOWED_ORIGINS`, cu valori separate prin virgulă. Pentru local development sunt folosite explicit origin-uri locale, iar în producție nu trebuie folosit `*`.
 
 ```text
 http://localhost:5500
@@ -545,7 +560,7 @@ http://127.0.0.1:5500
 https://pulse-medichub.web.app
 ```
 
-Dacă se adaugă un domeniu nou pentru frontend sau admin, configurația CORS din backend trebuie actualizată înainte de deploy.
+Dacă se adaugă un domeniu nou pentru frontend sau admin, actualizează `ALLOWED_ORIGINS` în `.env` local și în Render înainte de deploy.
 
 ---
 
@@ -556,6 +571,7 @@ Dacă se adaugă un domeniu nou pentru frontend sau admin, configurația CORS di
 - Credentialele Azure Blob Storage aparțin backend-ului.
 - Service account-ul Firebase aparține secretelor GitHub Actions.
 - Variabilele de producție Render trebuie configurate în dashboard-ul Render.
+- Checklist-ul complet de hardening, variabile și setări manuale este în `docs/security-hardening.md`.
 
 ---
 

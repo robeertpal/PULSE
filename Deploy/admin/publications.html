@@ -1,10 +1,133 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-
     <meta charset="UTF-8">
     <title>Publicații - PULSE Management</title>
     <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .issues-panel {
+            display: none;
+            margin-top: 28px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        }
+
+        .issues-panel.active {
+            display: block;
+        }
+
+        .issues-panel-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .issues-panel-header h3 {
+            margin: 0 0 6px;
+        }
+
+        .issue-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+            gap: 24px;
+            align-items: start;
+        }
+
+        .issue-form-card,
+        .issue-list-card {
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 18px;
+            background: #FFFFFF;
+        }
+
+        .issue-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .issue-card {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px;
+            display: grid;
+            grid-template-columns: 74px minmax(0, 1fr);
+            gap: 14px;
+            align-items: start;
+        }
+
+        .issue-cover {
+            width: 74px;
+            height: 96px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--background);
+            object-fit: cover;
+        }
+
+        .issue-cover-placeholder {
+            width: 74px;
+            height: 96px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--background);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            font-size: 12px;
+            text-align: center;
+            padding: 6px;
+            box-sizing: border-box;
+        }
+
+        .issue-card h4 {
+            margin: 0 0 6px;
+        }
+
+        .issue-card p {
+            margin: 0 0 10px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .issue-card-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .issue-card-actions button {
+            background: none;
+            border: none;
+            color: var(--primary);
+            cursor: pointer;
+            font-weight: 700;
+            padding: 0;
+        }
+
+        .issue-card-actions button.delete {
+            color: var(--news);
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        @media (max-width: 980px) {
+            .issue-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="main-content">
@@ -15,32 +138,397 @@
             </div>
             <div id="error-msg" class="alert error"></div>
             <table>
-                <thead><tr><th>Nume Publicație</th><th>Status</th><th>Credite</th><th>Acțiuni</th></tr></thead>
-                <tbody id="table-body"><tr><td colspan="4">Se încarcă...</td></tr></tbody>
+                <thead>
+                    <tr>
+                        <th>Nume Publicație</th>
+                        <th>Status</th>
+                        <th>Credite</th>
+                        <th>Numere</th>
+                        <th>Acțiuni</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body"><tr><td colspan="5">Se încarcă...</td></tr></tbody>
             </table>
+
+            <section id="issues-panel" class="issues-panel">
+                <div class="issues-panel-header">
+                    <div>
+                        <h3 id="issues-title">Numere / Ediții</h3>
+                        <p id="issues-subtitle" class="muted"></p>
+                    </div>
+                    <button type="button" class="btn" onclick="closeIssuePanel()">Închide</button>
+                </div>
+                <div id="issues-alert" class="alert error"></div>
+                <div class="issue-layout">
+                    <div class="issue-list-card">
+                        <h3>Numere existente</h3>
+                        <div id="issues-list" class="issue-list">
+                            <p class="muted">Alege o publicație pentru a vedea edițiile.</p>
+                        </div>
+                    </div>
+                    <div class="issue-form-card">
+                        <h3 id="issue-form-title">Adaugă ediție</h3>
+                        <input type="hidden" id="issue_id">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="issue_year">An</label>
+                                <input type="number" id="issue_year" min="1900" max="2100" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="issue_number">Număr ediție</label>
+                                <input type="number" id="issue_number" min="1" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="issue_label">Etichetă ediție</label>
+                            <input type="text" id="issue_label" placeholder="Ex: Nr. 1 / 2026">
+                        </div>
+                        <div class="form-group">
+                            <label for="issue_cover_image_url">Copertă ediție URL</label>
+                            <input type="url" id="issue_cover_image_url">
+                            <div class="upload-row">
+                                <input type="file" id="issue_cover_file" accept="image/jpeg,image/png,image/webp">
+                                <button type="button" class="btn" onclick="uploadIssueCover()">Încarcă copertă ediție</button>
+                            </div>
+                            <div id="issue_cover_image_url_upload_status" class="upload-status"></div>
+                            <div id="issue_cover_image_url_preview" class="media-preview"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="issue_url">URL ediție / PDF</label>
+                            <input type="url" id="issue_url" placeholder="https://...">
+                            <div class="upload-row">
+                                <input type="file" id="issue_pdf_file" accept="application/pdf">
+                                <button type="button" class="btn" onclick="uploadIssuePdf()">Încarcă PDF</button>
+                            </div>
+                            <div id="issue_url_upload_status" class="upload-status"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="issue_description">Descriere ediție</label>
+                            <textarea id="issue_description" rows="4"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="issue_published_at">Publicat la</label>
+                            <input type="datetime-local" id="issue_published_at">
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-primary" onclick="saveIssue()">Salvează ediția</button>
+                            <button type="button" class="btn" onclick="resetIssueForm()">Adaugă ediție nouă</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </div>
     </div>
     <script src="js/config.js"></script><script src="js/api.js"></script><script src="js/auth.js"></script><script src="js/ui.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', async () => {
-            UI.init('publications', 'Publicații');
+        let publicationsById = {};
+        let selectedPublicationId = null;
+        let currentIssues = [];
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        function valueOrNull(id) {
+            const value = document.getElementById(id).value.trim();
+            return value === '' ? null : value;
+        }
+
+        function intOrNull(id) {
+            const value = valueOrNull(id);
+            return value === null ? null : Number.parseInt(value, 10);
+        }
+
+        function toDateTimeLocal(value) {
+            if (!value) return '';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '';
+            return date.toISOString().slice(0, 16);
+        }
+
+        function dateTimeOrNull(id) {
+            const value = valueOrNull(id);
+            return value === null ? null : new Date(value).toISOString();
+        }
+
+        function formatDate(value) {
+            if (!value) return '-';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '-';
+            return date.toLocaleDateString('ro-RO');
+        }
+
+        function updateIssueCoverPreview() {
+            const url = valueOrNull('issue_cover_image_url');
+            const preview = document.getElementById('issue_cover_image_url_preview');
+            preview.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="Preview copertă ediție">` : '';
+        }
+
+        function setIssueUploadStatus(message, type = '') {
+            const status = document.getElementById('issue_cover_image_url_upload_status');
+            status.textContent = message;
+            status.className = `upload-status ${type}`.trim();
+        }
+
+        function setIssuePdfUploadStatus(message, type = '') {
+            const status = document.getElementById('issue_url_upload_status');
+            status.textContent = message;
+            status.className = `upload-status ${type}`.trim();
+        }
+
+        async function uploadIssueCover() {
+            const file = document.getElementById('issue_cover_file').files[0];
+            if (!file) {
+                setIssueUploadStatus('Alegeți un fișier înainte de upload.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            setIssueUploadStatus('Se încarcă...');
+
+            try {
+                const headers = {};
+                const token = localStorage.getItem('pulse_admin_token');
+                if (token) headers.Authorization = `Bearer ${token}`;
+
+                const response = await fetch(`${CONFIG.API_BASE_URL}/admin/uploads/image`, {
+                    method: 'POST',
+                    headers,
+                    body: formData,
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.detail || data.error || data.message || `Upload eșuat: ${response.status}`);
+                }
+
+                document.getElementById('issue_cover_image_url').value = data.url;
+                updateIssueCoverPreview();
+                setIssueUploadStatus('Upload finalizat.', 'success');
+            } catch (err) {
+                setIssueUploadStatus(err.message, 'error');
+            }
+        }
+
+        async function uploadIssuePdf() {
+            const file = document.getElementById('issue_pdf_file').files[0];
+            if (!file) {
+                setIssuePdfUploadStatus('Alegeți un fișier PDF înainte de upload.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            setIssuePdfUploadStatus('Se încarcă...');
+
+            try {
+                const headers = {};
+                const token = localStorage.getItem('pulse_admin_token');
+                if (token) headers.Authorization = `Bearer ${token}`;
+
+                const response = await fetch(`${CONFIG.API_BASE_URL}/admin/uploads/pdf`, {
+                    method: 'POST',
+                    headers,
+                    body: formData,
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.detail || data.error || data.message || `Upload eșuat: ${response.status}`);
+                }
+
+                document.getElementById('issue_url').value = data.url;
+                setIssuePdfUploadStatus('Upload finalizat.', 'success');
+            } catch (err) {
+                setIssuePdfUploadStatus(err.message, 'error');
+            }
+        }
+
+        function renderPublications(data) {
             const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+            publicationsById = {};
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5">Nu există publicații.</td></tr>';
+                return;
+            }
+
+            data.forEach(item => {
+                const pubData = item.publication || {};
+                if (pubData.id) publicationsById[pubData.id] = { ...pubData, title: item.title };
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${escapeHtml(pubData.name || item.title)}</strong></td>
+                    <td><span class="badge ${escapeHtml(item.status)}">${escapeHtml(item.status)}</span></td>
+                    <td>${escapeHtml(pubData.emc_credits_text || '-')}</td>
+                    <td>${pubData.id ? `<button type="button" class="btn" onclick="openIssuePanel(${pubData.id})">Numere / Ediții</button>` : '-'}</td>
+                    <td class="table-actions"><button onclick="window.location.href='content-form.html?id=${item.id}'">Edit</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function loadPublications() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '<tr><td colspan="5">Se încarcă...</td></tr>';
             try {
                 const data = await API.get('/admin/publications');
-                tbody.innerHTML = '';
-                if(data.length === 0) { tbody.innerHTML = '<tr><td colspan="4">Nu există publicații.</td></tr>'; return; }
-                data.forEach(item => {
-                    const tr = document.createElement('tr');
-                    const pubData = item.publication || {};
-                    tr.innerHTML = `
-                        <td><strong>${item.title}</strong></td>
-                        <td><span class="badge ${item.status}">${item.status}</span></td>
-                        <td>${pubData.emc_credits_text || '-'}</td>
-                        <td class="table-actions"><button onclick="window.location.href='content-form.html?id=${item.id}'">Edit</button></td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-            } catch(e) { document.getElementById('error-msg').textContent = e.message; document.getElementById('error-msg').style.display='block'; }
+                renderPublications(data);
+            } catch(e) {
+                UI.showError('error-msg', e.message);
+            }
+        }
+
+        async function openIssuePanel(publicationId) {
+            selectedPublicationId = publicationId;
+            const publication = publicationsById[publicationId] || {};
+            document.getElementById('issues-title').textContent = 'Numere / Ediții';
+            document.getElementById('issues-subtitle').textContent = publication.name || publication.title || '';
+            document.getElementById('issues-panel').classList.add('active');
+            resetIssueForm();
+            await loadIssues();
+            document.getElementById('issues-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function closeIssuePanel() {
+            selectedPublicationId = null;
+            currentIssues = [];
+            document.getElementById('issues-panel').classList.remove('active');
+            UI.hideAlert('issues-alert');
+        }
+
+        async function loadIssues() {
+            if (!selectedPublicationId) return;
+            const list = document.getElementById('issues-list');
+            list.innerHTML = '<p class="muted">Se încarcă edițiile...</p>';
+            try {
+                currentIssues = await API.get(`/admin/publications/${selectedPublicationId}/issues`);
+                renderIssues();
+            } catch (err) {
+                UI.showError('issues-alert', err.message);
+            }
+        }
+
+        function renderIssues() {
+            const list = document.getElementById('issues-list');
+            if (currentIssues.length === 0) {
+                list.innerHTML = '<p class="muted">Nu există numere publicate pentru această revistă.</p>';
+                return;
+            }
+
+            list.innerHTML = currentIssues.map(issue => {
+                const label = issue.issue_label || `Nr. ${issue.issue_number} / ${issue.year}`;
+                const cover = issue.cover_image_url
+                    ? `<img class="issue-cover" src="${escapeHtml(issue.cover_image_url)}" alt="Copertă ${escapeHtml(label)}">`
+                    : '<div class="issue-cover-placeholder">Fără copertă</div>';
+                return `
+                    <article class="issue-card">
+                        ${cover}
+                        <div>
+                            <h4>${escapeHtml(label)}</h4>
+                            <p>An ${escapeHtml(issue.year)} · Număr ediție ${escapeHtml(issue.issue_number)} · Publicat la ${escapeHtml(formatDate(issue.published_at))}</p>
+                            <p>${escapeHtml(issue.description || 'Fără descriere.')}</p>
+                            <div class="issue-card-actions">
+                                <button type="button" onclick="editIssue(${issue.id})">Editează ediție</button>
+                                <button type="button" class="delete" onclick="deleteIssue(${issue.id})">Șterge ediția</button>
+                            </div>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        function resetIssueForm() {
+            document.getElementById('issue_id').value = '';
+            document.getElementById('issue_year').value = new Date().getFullYear();
+            document.getElementById('issue_number').value = '';
+            document.getElementById('issue_label').value = '';
+            document.getElementById('issue_cover_image_url').value = '';
+            document.getElementById('issue_url').value = '';
+            document.getElementById('issue_cover_file').value = '';
+            document.getElementById('issue_pdf_file').value = '';
+            document.getElementById('issue_description').value = '';
+            document.getElementById('issue_published_at').value = '';
+            document.getElementById('issue-form-title').textContent = 'Adaugă ediție';
+            setIssueUploadStatus('');
+            setIssuePdfUploadStatus('');
+            updateIssueCoverPreview();
+        }
+
+        function editIssue(issueId) {
+            const issue = currentIssues.find(item => item.id === issueId);
+            if (!issue) return;
+            document.getElementById('issue_id').value = issue.id;
+            document.getElementById('issue_year').value = issue.year;
+            document.getElementById('issue_number').value = issue.issue_number;
+            document.getElementById('issue_label').value = issue.issue_label || '';
+            document.getElementById('issue_cover_image_url').value = issue.cover_image_url || '';
+            document.getElementById('issue_url').value = issue.issue_url || '';
+            document.getElementById('issue_description').value = issue.description || '';
+            document.getElementById('issue_published_at').value = toDateTimeLocal(issue.published_at);
+            document.getElementById('issue-form-title').textContent = 'Editează ediție';
+            setIssueUploadStatus('');
+            setIssuePdfUploadStatus('');
+            updateIssueCoverPreview();
+        }
+
+        function buildIssuePayload() {
+            const payload = {
+                year: intOrNull('issue_year'),
+                issue_number: intOrNull('issue_number'),
+                issue_label: valueOrNull('issue_label'),
+                cover_image_url: valueOrNull('issue_cover_image_url'),
+                issue_url: valueOrNull('issue_url'),
+                description: valueOrNull('issue_description'),
+                published_at: dateTimeOrNull('issue_published_at'),
+            };
+            if (!payload.year || !payload.issue_number) {
+                throw new Error('Completați anul și numărul ediției.');
+            }
+            if (payload.issue_url && !payload.issue_url.startsWith('http://') && !payload.issue_url.startsWith('https://')) {
+                throw new Error('URL ediție / PDF trebuie să înceapă cu http:// sau https://.');
+            }
+            return payload;
+        }
+
+        async function saveIssue() {
+            if (!selectedPublicationId) return;
+            try {
+                const payload = buildIssuePayload();
+                const issueId = valueOrNull('issue_id');
+                if (issueId) {
+                    await API.put(`/admin/publication-issues/${issueId}`, payload);
+                    UI.showAlert('issues-alert', 'Ediția a fost actualizată.', 'success');
+                } else {
+                    await API.post(`/admin/publications/${selectedPublicationId}/issues`, payload);
+                    UI.showAlert('issues-alert', 'Ediția a fost creată.', 'success');
+                }
+                resetIssueForm();
+                await loadIssues();
+            } catch (err) {
+                UI.showError('issues-alert', err.message);
+            }
+        }
+
+        async function deleteIssue(issueId) {
+            if (!confirm('Sigur ștergeți această ediție?')) return;
+            try {
+                await API.delete(`/admin/publication-issues/${issueId}`);
+                UI.showAlert('issues-alert', 'Ediția a fost ștearsă.', 'success');
+                await loadIssues();
+            } catch (err) {
+                UI.showError('issues-alert', err.message);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            UI.init('publications', 'Publicații');
+            document.getElementById('issue_cover_image_url').addEventListener('input', updateIssueCoverPreview);
+            await loadPublications();
         });
     </script>
 </body>

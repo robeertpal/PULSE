@@ -1,15 +1,24 @@
 let currentContentType = null;
+let currentEventId = null;
+let allEventPartners = [];
+let selectedEventPartnerIds = [];
+let draggedEventPartnerId = null;
+let allAuthors = [];
+let selectedPublicationAuthors = [];
+let draggedPublicationAuthorId = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     UI.init('content', 'Adaugă / Editează Conținut');
 
     const contentType = document.getElementById('content_type');
     contentType.addEventListener('change', toggleDetailsSections);
+    document.getElementById('event_future_price_type').addEventListener('change', syncFuturePriceAmountState);
     ['hero_image_url', 'thumbnail_url', 'publication_logo_url'].forEach(inputId => {
         document.getElementById(inputId).addEventListener('input', () => updateImagePreview(inputId));
     });
 
     await loadReferenceData();
+    renderEventCurrentPriceInfo({});
 
     const urlParams = new URLSearchParams(window.location.search);
     const id = urlParams.get('id');
@@ -20,6 +29,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     toggleDetailsSections();
+    loadEventPriceSchedule();
 
     if (id) {
         document.getElementById('content-id').value = id;
@@ -68,15 +78,21 @@ function generateSlug() {
 }
 
 async function loadReferenceData() {
-    const [categories, specializations, cities] = await Promise.all([
+    const [categories, specializations, cities, partners, authors] = await Promise.all([
         API.get('/admin/categories'),
         API.get('/admin/specializations'),
         API.get('/admin/cities'),
+        API.get('/admin/event-partners'),
+        API.get('/authors'),
     ]);
 
     fillSelect('category_id', categories, 'Fără categorie');
     fillSelect('specialization_id', specializations, 'Fără specializare');
     fillSelect('event_city_id', cities, 'Fără oraș');
+    allEventPartners = partners || [];
+    allAuthors = authors || [];
+    renderEventPartners([]);
+    renderPublicationAuthors([]);
 }
 
 function fillSelect(id, items, emptyLabel) {
@@ -139,6 +155,7 @@ function fillCourseFields(course) {
 }
 
 function fillEventFields(event) {
+    currentEventId = event.id || null;
     document.getElementById('event_city_id').value = event.city_id || '';
     document.getElementById('event_venue_name').value = event.venue_name || '';
     document.getElementById('event_attendance_mode').value = event.attendance_mode || 'onsite';
@@ -150,6 +167,374 @@ function fillEventFields(event) {
     document.getElementById('event_accreditation_status').value = event.accreditation_status || '';
     document.getElementById('event_page_url').value = event.event_page_url || '';
     document.getElementById('event_registration_url').value = event.registration_url || '';
+    renderEventCurrentPriceInfo(event);
+    renderEventPartners(event.partners || []);
+    loadEventPriceSchedule();
+}
+
+function formatCurrentPrice(event) {
+    const price = event.price || {};
+    const type = price.type || event.current_price_type || event.price_type;
+    const amount = price.amount ?? event.current_price_amount ?? event.price_amount;
+    const currency = price.currency || event.current_price_currency || 'RON';
+
+    if (type === 'free') return 'Gratuit';
+    if (type === 'subscription') return amount === null || amount === undefined ? 'Abonament' : `${amount} ${currency}`;
+    if (amount === null || amount === undefined || amount === '') return '-';
+    return `${amount} ${currency}`;
+}
+
+function renderEventCurrentPriceInfo(event) {
+    const container = document.getElementById('event_current_price_info');
+    if (!container) return;
+
+    const nextChange = event.next_price_change || null;
+    container.className = 'price-info-card';
+    container.innerHTML = `
+        <div><strong>Preț curent:</strong> ${escapeHTML(formatCurrentPrice(event))}</div>
+        ${nextChange?.message ? `<div class="price-change-message">${escapeHTML(nextChange.message)}</div>` : '<div class="muted">Nu există o schimbare viitoare de preț programată.</div>'}
+    `;
+}
+
+function formatDateTime(value) {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString('ro-RO', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function escapeHTML(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function formatScheduledPrice(item) {
+    if (item.price_type === 'free') return 'Gratuit';
+    const amount = item.price_amount ?? '-';
+    return `${amount} ${item.currency || 'RON'}`;
+}
+
+function setEventPriceStatus(message, type = '') {
+    const status = document.getElementById('event_price_schedule_status');
+    if (!status) return;
+    status.textContent = message;
+    status.className = `upload-status ${type}`.trim();
+}
+
+async function loadEventPriceSchedule() {
+    const list = document.getElementById('event_price_schedule_list');
+    const button = document.getElementById('add_event_price_btn');
+    if (!list || !button) return;
+
+    hideEventPriceForm();
+    setEventPriceStatus('');
+
+    if (!currentEventId) {
+        button.disabled = true;
+        list.className = 'schedule-list muted';
+        list.textContent = 'Salvați evenimentul înainte de a programa prețuri.';
+        return;
+    }
+
+    button.disabled = false;
+    list.className = 'schedule-list muted';
+    list.textContent = 'Se încarcă prețurile programate...';
+
+    try {
+        const prices = await API.get(`/events/${currentEventId}/prices`);
+        renderEventPriceSchedule(prices || []);
+    } catch (err) {
+        list.textContent = 'Nu am putut încărca prețurile programate.';
+        setEventPriceStatus(err.message, 'error');
+    }
+}
+
+function renderEventPriceSchedule(prices) {
+    const list = document.getElementById('event_price_schedule_list');
+    if (!list) return;
+
+    if (!prices.length) {
+        list.className = 'schedule-list muted';
+        list.textContent = 'Nu există prețuri programate pentru acest eveniment.';
+        return;
+    }
+
+    list.className = 'schedule-list';
+    list.innerHTML = `
+        <table class="compact-table">
+            <thead>
+                <tr>
+                    <th>Tip</th>
+                    <th>Preț</th>
+                    <th>Monedă</th>
+                    <th>Activ de la</th>
+                    <th>Creat la</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${prices.map(item => `
+                    <tr>
+                        <td>${escapeHTML(item.price_type || '-')}</td>
+                        <td>${escapeHTML(formatScheduledPrice(item))}</td>
+                        <td>${escapeHTML(item.currency || 'RON')}</td>
+                        <td>${escapeHTML(formatDateTime(item.effective_from))}</td>
+                        <td>${escapeHTML(formatDateTime(item.created_at))}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function showEventPriceForm() {
+    if (!currentEventId) {
+        setEventPriceStatus('Salvați evenimentul înainte de a programa prețuri.', 'error');
+        return;
+    }
+
+    document.getElementById('event_future_price_type').value = 'paid';
+    document.getElementById('event_future_price_amount').value = '';
+    document.getElementById('event_future_price_currency').value = 'RON';
+    document.getElementById('event_future_price_effective_from').value = '';
+    syncFuturePriceAmountState();
+    setEventPriceStatus('');
+    document.getElementById('event_price_form').style.display = 'block';
+}
+
+function hideEventPriceForm() {
+    const form = document.getElementById('event_price_form');
+    if (form) form.style.display = 'none';
+}
+
+function syncFuturePriceAmountState() {
+    const type = document.getElementById('event_future_price_type').value;
+    const amountInput = document.getElementById('event_future_price_amount');
+    if (type === 'free') {
+        amountInput.value = '';
+        amountInput.disabled = true;
+        amountInput.required = false;
+    } else {
+        amountInput.disabled = false;
+        amountInput.required = true;
+    }
+}
+
+function buildFuturePricePayload() {
+    const priceType = document.getElementById('event_future_price_type').value;
+    const amount = floatOrNull('event_future_price_amount');
+    const effectiveFrom = dateTimeOrNull('event_future_price_effective_from');
+
+    if (!effectiveFrom) {
+        throw new Error('Completați data și ora de la care prețul devine activ.');
+    }
+    if (priceType === 'free' && amount !== null) {
+        throw new Error('Pentru gratuit, valoarea trebuie să fie goală.');
+    }
+    if (priceType !== 'free' && (amount === null || amount < 0)) {
+        throw new Error('Pentru preț plătit sau abonament, valoarea trebuie completată și să fie >= 0.');
+    }
+
+    return {
+        price_type: priceType,
+        price_amount: priceType === 'free' ? null : amount,
+        currency: valueOrNull('event_future_price_currency') || 'RON',
+        effective_from: effectiveFrom,
+    };
+}
+
+async function saveEventFuturePrice() {
+    if (!currentEventId) {
+        setEventPriceStatus('Salvați evenimentul înainte de a programa prețuri.', 'error');
+        return;
+    }
+
+    try {
+        const payload = buildFuturePricePayload();
+        await API.post(`/events/${currentEventId}/prices`, payload);
+        hideEventPriceForm();
+        await loadEventPriceSchedule();
+        setEventPriceStatus('Preț viitor programat cu succes.', 'success');
+    } catch (err) {
+        setEventPriceStatus(err.message, 'error');
+        showAlert('Eroare la programarea prețului: ' + err.message, 'error');
+    }
+}
+
+function renderEventPartners(selectedPartners) {
+    const container = document.getElementById('event_partners_list');
+    if (!container) return;
+
+    selectedEventPartnerIds = (selectedPartners || [])
+        .slice()
+        .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+        .map(item => Number(item.partner_id || item.id))
+        .filter(partnerId => allEventPartners.some(partner => Number(partner.id) === partnerId));
+
+    if (!allEventPartners.length) {
+        container.className = 'partner-selector empty muted';
+        container.textContent = 'Nu există parteneri definiți încă.';
+        return;
+    }
+
+    container.className = 'partner-selector';
+    container.innerHTML = '';
+
+    const picker = document.createElement('div');
+    picker.className = 'partner-picker';
+
+    allEventPartners.forEach(partner => {
+        const row = document.createElement('div');
+        row.className = 'partner-option';
+
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'event-partner-checkbox';
+        checkbox.value = partner.id;
+        checkbox.checked = selectedEventPartnerIds.includes(Number(partner.id));
+
+        const name = document.createElement('span');
+        name.className = 'partner-name';
+        name.textContent = partner.name;
+        label.append(checkbox, name);
+
+        checkbox.addEventListener('change', () => {
+            const partnerId = Number(partner.id);
+            if (checkbox.checked && !selectedEventPartnerIds.includes(partnerId)) {
+                selectedEventPartnerIds.push(partnerId);
+            }
+            if (!checkbox.checked) {
+                selectedEventPartnerIds = selectedEventPartnerIds.filter(id => id !== partnerId);
+            }
+            renderSelectedEventPartners();
+        });
+
+        row.append(label);
+        picker.appendChild(row);
+    });
+
+    const selectedTitle = document.createElement('div');
+    selectedTitle.className = 'selected-partners-title';
+    selectedTitle.textContent = 'Parteneri selectați';
+
+    const selectedList = document.createElement('div');
+    selectedList.id = 'selected_event_partners';
+    selectedList.className = 'selected-partner-list';
+    selectedList.addEventListener('dragover', handleSelectedPartnerDragOver);
+    selectedList.addEventListener('drop', handleSelectedPartnerDrop);
+
+    container.append(picker, selectedTitle, selectedList);
+    renderSelectedEventPartners();
+}
+
+function renderSelectedEventPartners() {
+    const list = document.getElementById('selected_event_partners');
+    if (!list) return;
+
+    list.innerHTML = '';
+    const selectedPartners = selectedEventPartnerIds
+        .map(id => allEventPartners.find(partner => Number(partner.id) === id))
+        .filter(Boolean);
+
+    if (!selectedPartners.length) {
+        list.classList.add('empty');
+        list.textContent = 'Niciun partener selectat.';
+        return;
+    }
+
+    list.classList.remove('empty');
+    selectedPartners.forEach((partner, index) => {
+        const item = document.createElement('div');
+        item.className = 'selected-partner-item';
+        item.draggable = true;
+        item.dataset.partnerId = partner.id;
+
+        const handle = document.createElement('span');
+        handle.className = 'drag-handle';
+        handle.textContent = '⋮⋮';
+        handle.setAttribute('aria-hidden', 'true');
+
+        const order = document.createElement('span');
+        order.className = 'partner-order-index';
+        order.textContent = String(index + 1);
+
+        const name = document.createElement('span');
+        name.className = 'partner-name';
+        name.textContent = partner.name;
+
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'partner-remove-btn';
+        removeButton.textContent = 'Elimină';
+        removeButton.addEventListener('click', () => removeSelectedEventPartner(Number(partner.id)));
+
+        item.addEventListener('dragstart', handleSelectedPartnerDragStart);
+        item.addEventListener('dragend', handleSelectedPartnerDragEnd);
+        item.append(handle, order, name, removeButton);
+        list.appendChild(item);
+    });
+}
+
+function removeSelectedEventPartner(partnerId) {
+    selectedEventPartnerIds = selectedEventPartnerIds.filter(id => id !== partnerId);
+    const checkbox = document.querySelector(`.event-partner-checkbox[value="${partnerId}"]`);
+    if (checkbox) checkbox.checked = false;
+    renderSelectedEventPartners();
+}
+
+function handleSelectedPartnerDragStart(event) {
+    draggedEventPartnerId = Number(event.currentTarget.dataset.partnerId);
+    event.currentTarget.classList.add('dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(draggedEventPartnerId));
+}
+
+function handleSelectedPartnerDragEnd(event) {
+    event.currentTarget.classList.remove('dragging');
+    draggedEventPartnerId = null;
+}
+
+function handleSelectedPartnerDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+}
+
+function handleSelectedPartnerDrop(event) {
+    event.preventDefault();
+    const sourceId = draggedEventPartnerId || Number(event.dataTransfer.getData('text/plain'));
+    if (!sourceId) return;
+
+    const targetItem = event.target.closest('.selected-partner-item');
+    const targetId = targetItem ? Number(targetItem.dataset.partnerId) : null;
+    if (sourceId === targetId) return;
+
+    selectedEventPartnerIds = selectedEventPartnerIds.filter(id => id !== sourceId);
+    if (targetId) {
+        const targetIndex = selectedEventPartnerIds.indexOf(targetId);
+        const rect = targetItem.getBoundingClientRect();
+        const insertAfterTarget = event.clientY > rect.top + rect.height / 2;
+        selectedEventPartnerIds.splice(targetIndex + (insertAfterTarget ? 1 : 0), 0, sourceId);
+    } else {
+        selectedEventPartnerIds.push(sourceId);
+    }
+    renderSelectedEventPartners();
+}
+
+function getSelectedEventPartners() {
+    return selectedEventPartnerIds.map((partnerId, index) => ({
+        partner_id: partnerId,
+        display_order: index,
+    }));
 }
 
 function fillPublicationFields(publication) {
@@ -160,7 +545,199 @@ function fillPublicationFields(publication) {
     document.getElementById('publication_creditation_text').value = publication.creditation_text || '';
     document.getElementById('publication_indexing_text').value = publication.indexing_text || '';
     document.getElementById('publication_subscription_url').value = publication.subscription_url || '';
+    renderPublicationAuthors(publication.authors || []);
     updateImagePreview('publication_logo_url');
+}
+
+function authorFullName(author) {
+    return `${author.first_name || ''} ${author.last_name || ''}`.trim();
+}
+
+function renderPublicationAuthors(selectedAuthors) {
+    const container = document.getElementById('publication_authors_list');
+    if (!container) return;
+
+    selectedPublicationAuthors = (selectedAuthors || [])
+        .slice()
+        .sort((a, b) => (a.display_order ?? 1) - (b.display_order ?? 1))
+        .map(item => ({
+            author_id: Number(item.author_id || item.id),
+            role: item.role || 'author',
+        }))
+        .filter(item => allAuthors.some(author => Number(author.id) === item.author_id));
+
+    if (!allAuthors.length) {
+        container.className = 'partner-selector empty muted';
+        container.textContent = 'Nu există autori definiți încă.';
+        return;
+    }
+
+    container.className = 'partner-selector';
+    container.innerHTML = '';
+
+    const picker = document.createElement('div');
+    picker.className = 'partner-picker';
+
+    allAuthors.forEach(author => {
+        const row = document.createElement('div');
+        row.className = 'partner-option';
+
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'publication-author-checkbox';
+        checkbox.value = author.id;
+        checkbox.checked = selectedPublicationAuthors.some(item => item.author_id === Number(author.id));
+
+        const name = document.createElement('span');
+        name.className = 'partner-name';
+        name.textContent = authorFullName(author);
+        label.append(checkbox, name);
+
+        checkbox.addEventListener('change', () => {
+            const authorId = Number(author.id);
+            if (checkbox.checked && !selectedPublicationAuthors.some(item => item.author_id === authorId)) {
+                selectedPublicationAuthors.push({ author_id: authorId, role: 'author' });
+            }
+            if (!checkbox.checked) {
+                selectedPublicationAuthors = selectedPublicationAuthors.filter(item => item.author_id !== authorId);
+            }
+            renderSelectedPublicationAuthors();
+        });
+
+        row.append(label);
+        picker.appendChild(row);
+    });
+
+    const selectedTitle = document.createElement('div');
+    selectedTitle.className = 'selected-partners-title';
+    selectedTitle.textContent = 'Autori selectați';
+
+    const selectedList = document.createElement('div');
+    selectedList.id = 'selected_publication_authors';
+    selectedList.className = 'selected-partner-list';
+    selectedList.addEventListener('dragover', handleSelectedAuthorDragOver);
+    selectedList.addEventListener('drop', handleSelectedAuthorDrop);
+
+    container.append(picker, selectedTitle, selectedList);
+    renderSelectedPublicationAuthors();
+}
+
+function renderSelectedPublicationAuthors() {
+    const list = document.getElementById('selected_publication_authors');
+    if (!list) return;
+
+    list.innerHTML = '';
+    const selectedAuthors = selectedPublicationAuthors
+        .map(link => ({
+            ...link,
+            author: allAuthors.find(author => Number(author.id) === link.author_id),
+        }))
+        .filter(item => item.author);
+
+    if (!selectedAuthors.length) {
+        list.classList.add('empty');
+        list.textContent = 'Niciun autor selectat.';
+        return;
+    }
+
+    list.classList.remove('empty');
+    selectedAuthors.forEach((link, index) => {
+        const item = document.createElement('div');
+        item.className = 'selected-partner-item selected-author-item';
+        item.draggable = true;
+        item.dataset.authorId = link.author_id;
+
+        const handle = document.createElement('span');
+        handle.className = 'drag-handle';
+        handle.textContent = '⋮⋮';
+        handle.setAttribute('aria-hidden', 'true');
+
+        const order = document.createElement('span');
+        order.className = 'partner-order-index';
+        order.textContent = String(index + 1);
+
+        const name = document.createElement('span');
+        name.className = 'partner-name';
+        name.textContent = authorFullName(link.author);
+
+        const roleInput = document.createElement('input');
+        roleInput.className = 'author-role-input';
+        roleInput.setAttribute('list', 'author_role_options');
+        roleInput.placeholder = 'Rol';
+        roleInput.value = link.role || '';
+        roleInput.addEventListener('input', () => {
+            const current = selectedPublicationAuthors.find(item => item.author_id === link.author_id);
+            if (current) current.role = roleInput.value;
+        });
+
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'partner-remove-btn';
+        removeButton.textContent = 'Elimină';
+        removeButton.addEventListener('click', () => removeSelectedPublicationAuthor(link.author_id));
+
+        item.addEventListener('dragstart', handleSelectedAuthorDragStart);
+        item.addEventListener('dragend', handleSelectedAuthorDragEnd);
+        item.append(handle, order, name, roleInput, removeButton);
+        list.appendChild(item);
+    });
+}
+
+function removeSelectedPublicationAuthor(authorId) {
+    selectedPublicationAuthors = selectedPublicationAuthors.filter(item => item.author_id !== authorId);
+    const checkbox = document.querySelector(`.publication-author-checkbox[value="${authorId}"]`);
+    if (checkbox) checkbox.checked = false;
+    renderSelectedPublicationAuthors();
+}
+
+function handleSelectedAuthorDragStart(event) {
+    draggedPublicationAuthorId = Number(event.currentTarget.dataset.authorId);
+    event.currentTarget.classList.add('dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(draggedPublicationAuthorId));
+}
+
+function handleSelectedAuthorDragEnd(event) {
+    event.currentTarget.classList.remove('dragging');
+    draggedPublicationAuthorId = null;
+}
+
+function handleSelectedAuthorDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+}
+
+function handleSelectedAuthorDrop(event) {
+    event.preventDefault();
+    const sourceId = draggedPublicationAuthorId || Number(event.dataTransfer.getData('text/plain'));
+    if (!sourceId) return;
+
+    const targetItem = event.target.closest('.selected-author-item');
+    const targetId = targetItem ? Number(targetItem.dataset.authorId) : null;
+    if (sourceId === targetId) return;
+
+    const source = selectedPublicationAuthors.find(item => item.author_id === sourceId);
+    if (!source) return;
+
+    selectedPublicationAuthors = selectedPublicationAuthors.filter(item => item.author_id !== sourceId);
+    if (targetId) {
+        const targetIndex = selectedPublicationAuthors.findIndex(item => item.author_id === targetId);
+        const rect = targetItem.getBoundingClientRect();
+        const insertAfterTarget = event.clientY > rect.top + rect.height / 2;
+        selectedPublicationAuthors.splice(targetIndex + (insertAfterTarget ? 1 : 0), 0, source);
+    } else {
+        selectedPublicationAuthors.push(source);
+    }
+    renderSelectedPublicationAuthors();
+}
+
+function getSelectedPublicationAuthors() {
+    return selectedPublicationAuthors.map((link, index) => ({
+        author_id: link.author_id,
+        role: link.role?.trim() || null,
+        display_order: index + 1,
+    }));
 }
 
 function setUploadStatus(targetInputId, message, type = '') {
@@ -300,6 +877,7 @@ function buildPayload() {
             event_page_url: valueOrNull('event_page_url'),
             registration_url: valueOrNull('event_registration_url'),
         };
+        payload.partners = getSelectedEventPartners();
     }
 
     if (payload.content_type === 'publication') {
@@ -312,6 +890,7 @@ function buildPayload() {
             indexing_text: valueOrNull('publication_indexing_text'),
             subscription_url: valueOrNull('publication_subscription_url'),
         };
+        payload.authors = getSelectedPublicationAuthors();
     }
 
     removeImmutableIds(payload);
@@ -375,9 +954,5 @@ async function saveContent() {
 }
 
 function showAlert(msg, type) {
-    const alertBox = document.getElementById('alert-msg');
-    alertBox.textContent = msg;
-    alertBox.className = `alert ${type}`;
-    alertBox.style.display = 'block';
-    setTimeout(() => { alertBox.style.display = 'none'; }, 5000);
+    UI.showAlert('alert-msg', msg, type);
 }

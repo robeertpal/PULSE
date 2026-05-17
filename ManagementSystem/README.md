@@ -28,7 +28,7 @@ Platforma este construită folosind tehnologii web standard (HTML, CSS, JavaScri
 3.  **Accesează aplicația**:
     Deschide browserul și accesează: `http://localhost:5500`
 
-    *Pentru MVP: Folosește credențialele de test: `pulse@admin` / `pulse@admin`.*
+    Autentificarea se face prin backend la `/admin/auth/login`. Configurează `ADMIN_USERNAME` și `ADMIN_PASSWORD_HASH` în `backend/.env`.
 
 ## Configurare pentru Producție
 
@@ -60,4 +60,4 @@ Firebase va servi automat interfața de admin pentru oricine accesează URL-ul `
 
 *   **Fără framework-uri (React/Vue)**: Pentru simplitate maximă și compatibilitate directă cu Firebase Hosting MVP.
 *   **CSS**: Construit pentru a respecta estetica premium (`pulse_theme.dart`) din aplicația mobilă (culori specifice pe categorii, shadows, etc.).
-*   **Auth (MVP)**: Momentan simulată în `auth.js` folosind `localStorage`. API-ul FastAPI poate fi extins ulterior pentru a valida token-urile JWT. Toate request-urile din frontend deja atașează `Authorization: Bearer <token>` automat.
+*   **Auth**: Login-ul admin este validat de backend, iar request-urile atașează `Authorization: Bearer <token>` automat.

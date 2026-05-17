@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Parteneri - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="header-actions">
+                <h2>Parteneri</h2>
+                <button type="button" class="btn btn-primary" onclick="newPartner()">Adaugă partener</button>
+            </div>
+
+            <div id="alert-msg" class="alert"></div>
+
+            <div class="form-card" id="partner-form-card" style="display:none; margin-bottom:24px;">
+                <form id="partner-form">
+                    <input type="hidden" id="partner_id">
+                    <div class="form-group">
+                        <label>Nume *</label>
+                        <input type="text" id="partner_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>URL logo</label>
+                        <input type="url" id="partner_logo_url">
+                        <div class="upload-row">
+                            <input type="file" id="partner_logo_file" accept="image/jpeg,image/png,image/webp">
+                            <button type="button" class="btn" onclick="uploadPartnerLogo()">Încarcă logo</button>
+                        </div>
+                        <div id="partner_logo_url_upload_status" class="upload-status"></div>
+                        <div id="partner_logo_url_preview" class="media-preview"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>URL website</label>
+                        <input type="url" id="partner_website_url">
+                    </div>
+                    <div class="header-actions" style="margin-bottom:0;">
+                        <button type="button" class="btn" onclick="cancelPartnerEdit()">Anulează</button>
+                        <button type="button" class="btn btn-primary" onclick="savePartner()">Salvează</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nume</th>
+                            <th>Logo</th>
+                            <th>Website</th>
+                            <th>Acțiuni</th>
+                        </tr>
+                    </thead>
+                    <tbody id="partners-table-body"><tr><td colspan="4">Se încarcă...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/partners.js"></script>
+</body>
+</html>

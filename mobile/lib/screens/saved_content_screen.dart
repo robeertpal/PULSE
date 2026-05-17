@@ -4,7 +4,7 @@ import '../services/api_service.dart';
 import '../theme/pulse_theme.dart';
 import '../widgets/content_card.dart';
 import '../widgets/empty_state_card.dart';
-import '../widgets/premium_loading_indicator.dart';
+import '../widgets/skeleton_loading.dart';
 
 class SavedContentScreen extends StatefulWidget {
   const SavedContentScreen({super.key});
@@ -81,9 +81,7 @@ class _SavedContentScreenState extends State<SavedContentScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: PremiumLoadingIndicator(text: 'Se incarca salvarile...'),
-      );
+      return const SkeletonLoading.list();
     }
 
     if (_errorMessage != null) {

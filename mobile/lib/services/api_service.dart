@@ -1,25 +1,20 @@
 import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-
 import '../models/ad_item.dart';
 import '../models/content_item.dart';
 import '../models/filter_option.dart';
+import '../models/publication_issue.dart';
 import 'auth_storage.dart';
 
 class ApiService {
-  static const String _defaultBaseUrl =
-      'https://pulse-backend-5f9b.onrender.com';
-
-  // Use --dart-define=PULSE_API_BASE_URL=... for local development.
-  static String get baseUrl {
-    const envBaseUrl = String.fromEnvironment('PULSE_API_BASE_URL');
-    if (envBaseUrl.isNotEmpty) {
-      return envBaseUrl;
-    }
-    return _defaultBaseUrl;
-  }
+  // Pentru local development:
+  // - iOS Simulator / Web: http://127.0.0.1:8000
+  // - Android Emulator: http://10.0.2.2:8000
+  static const String _configuredBaseUrl = String.fromEnvironment(
+    'PULSE_API_BASE_URL',
+  );
+  static String get baseUrl => _baseUrl;
 
   final AuthStorage _authStorage = AuthStorage();
 
@@ -28,31 +23,23 @@ class ApiService {
     if (sessionToken == null || sessionToken.isEmpty) {
       throw Exception('No active session token');
     }
-    return {
-      'Authorization': 'Bearer $sessionToken',
-    };
+    return {'Authorization': 'Bearer $sessionToken'};
   }
 
-  Future<Map<String, dynamic>> getMyProfile() async {
-    try {
-      final headers = await _buildAuthHeaders();
-      final response = await http
-          .get(Uri.parse('$baseUrl/api/me/profile'), headers: headers)
-          .timeout(const Duration(seconds: 15));
-
-      if (response.statusCode != 200) {
-        throw Exception('Failed to load profile: ${response.statusCode}');
-      }
-
-      final decoded = json.decode(response.body);
-      if (decoded is! Map<String, dynamic>) {
-        throw Exception('Unexpected profile response format');
-      }
-      return decoded;
-    } catch (e) {
-      debugPrint('Error fetching profile: $e');
-      rethrow;
+  static String get _baseUrl {
+    final configured = _configuredBaseUrl.trim();
+    if (configured.isNotEmpty) {
+      return configured.replaceAll(RegExp(r'/+$'), '');
     }
+
+    if (kDebugMode) {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        return 'http://10.0.2.2:8000';
+      }
+      return 'http://127.0.0.1:8000';
+    }
+
+    return 'https://pulse-backend-5f9b.onrender.com';
   }
 
   String _buildRepeatedQueryString(Map<String, List<String>> queryParams) {
@@ -67,6 +54,119 @@ class ApiService {
     });
 
     return parts.join('&');
+  }
+
+  String _responseErrorMessage(http.Response response, String fallback) {
+    try {
+      final decoded = json.decode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        final detail = decoded['detail'];
+        if (detail is String && detail.isNotEmpty) return detail;
+        final message = decoded['message'];
+        if (message is String && message.isNotEmpty) return message;
+        final error = decoded['error'];
+        if (error is String && error.isNotEmpty) return error;
+      }
+    } catch (_) {
+      // Keep the caller's friendly fallback when the backend body is not JSON.
+    }
+    return fallback;
+  }
+
+  Future<void> _handleAuthFailure(http.Response response) async {
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      await _authStorage.clearSession();
+      throw Exception(
+        'Sesiunea a expirat. Te rugăm să te autentifici din nou.',
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'email': email, 'password': password}),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_responseErrorMessage(response, 'Autentificare eșuată'));
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Răspuns de autentificare neașteptat.');
+    }
+    return decoded;
+  }
+
+  Future<Map<String, dynamic>> register(Map<String, dynamic> payload) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/register'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_responseErrorMessage(response, 'Înregistrare eșuată'));
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Răspuns de înregistrare neașteptat.');
+    }
+    return decoded;
+  }
+
+  Future<void> logout() async {
+    final sessionToken = await _authStorage.getSessionToken();
+    if (sessionToken == null || sessionToken.isEmpty) {
+      return;
+    }
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/logout'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'session_token': sessionToken}),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200 && response.statusCode != 404) {
+      throw Exception(_responseErrorMessage(response, 'Logout eșuat'));
+    }
+  }
+
+  Future<Map<String, dynamic>> getMyProfile() async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/me/profile'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut încărca profilul.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Răspuns profil neașteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching profile: $e');
+      rethrow;
+    }
   }
 
   Future<List<ContentItem>> _getContentList(
@@ -91,7 +191,7 @@ class ApiService {
       }
 
       final uri = Uri.parse(
-        '$baseUrl/$path',
+        '$_baseUrl/$path',
       ).replace(query: _buildRepeatedQueryString(queryParams));
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
 
@@ -120,7 +220,7 @@ class ApiService {
   Future<bool> checkHealth() async {
     try {
       final response = await http
-          .get(Uri.parse('$baseUrl/health'))
+          .get(Uri.parse('$_baseUrl/health'))
           .timeout(const Duration(seconds: 10));
       return response.statusCode == 200;
     } catch (e) {
@@ -181,6 +281,118 @@ class ApiService {
     );
   }
 
+  Future<List<PublicationIssue>> getPublicationIssues(int publicationId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/publications/$publicationId/issues'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Failed to load publication issues: ${response.statusCode}',
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Unexpected publication issues response format');
+      }
+
+      final issues = decoded
+          .whereType<Map<String, dynamic>>()
+          .map((json) => PublicationIssue.fromJson(json))
+          .toList();
+      if (kDebugMode) {
+        for (final issue in issues) {
+          debugPrint(
+            'Publication issue PDF [list]: '
+            'id=${issue.id}, issue.pdfUrl=${issue.pdfUrl}',
+          );
+        }
+      }
+      return issues;
+    } catch (e) {
+      debugPrint('Error fetching publication issues: $e');
+      rethrow;
+    }
+  }
+
+  Future<PublicationIssue> getPublicationIssueDetail(int issueId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/publication-issues/$issueId'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 404) {
+        throw Exception('Publication issue not found');
+      }
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Failed to load publication issue: ${response.statusCode}',
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Unexpected publication issue response format');
+      }
+
+      final issue = PublicationIssue.fromJson(decoded);
+      _logPublicationIssuePdf('detail', issue, decoded);
+      return issue;
+    } catch (e) {
+      debugPrint('Error fetching publication issue detail: $e');
+      rethrow;
+    }
+  }
+
+  String getPublicationIssuePdfUrl(int issueId) {
+    return '$_baseUrl/publication-issues/$issueId/pdf';
+  }
+
+  void _logPublicationIssuePdf(
+    String source,
+    PublicationIssue issue,
+    Map<String, dynamic> json,
+  ) {
+    if (!kDebugMode) return;
+    debugPrint(
+      'Publication issue PDF [$source]: '
+      'id=${issue.id}, '
+      'issue.pdfUrl=${issue.pdfUrl}, '
+      'json.pdf_url=${json['pdf_url']}, '
+      'json.issue_url=${json['issue_url']}, '
+      'json.document_url=${json['document_url']}',
+    );
+  }
+
+  Future<Map<String, String?>> getPublicationIssuePdfDiagnostics(
+    int issueId,
+  ) async {
+    final url = getPublicationIssuePdfUrl(issueId);
+    try {
+      final response = await http
+          .head(Uri.parse(url))
+          .timeout(const Duration(seconds: 12));
+      final diagnostics = {
+        'url': url,
+        'statusCode': response.statusCode.toString(),
+        'contentType': response.headers['content-type'],
+        'contentLength': response.headers['content-length'],
+        'acceptRanges': response.headers['accept-ranges'],
+      };
+      if (kDebugMode) {
+        debugPrint('Publication issue PDF diagnostics: $diagnostics');
+      }
+      return diagnostics;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Publication issue PDF diagnostics failed: url=$url, $e');
+      }
+      return {'url': url, 'error': e.toString()};
+    }
+  }
+
   Future<List<ContentItem>> getNews({
     int limit = 10,
     List<int>? categoryIds,
@@ -197,7 +409,7 @@ class ApiService {
   Future<Map<String, dynamic>> getContentItemDetail(int contentItemId) async {
     try {
       final response = await http
-          .get(Uri.parse('$baseUrl/content-items/$contentItemId'))
+          .get(Uri.parse('$_baseUrl/content-items/$contentItemId'))
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 404) {
@@ -222,9 +434,84 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> generateAiSummaryResult(
+    int contentItemId,
+  ) async {
+    try {
+      final response = await http
+          .post(Uri.parse('$_baseUrl/content-items/$contentItemId/ai-summary'))
+          .timeout(const Duration(seconds: 45));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Serviciul AI nu este disponibil momentan.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns AI neasteptat.');
+      }
+
+      final summary = decoded['summary'];
+      if (summary is! String || summary.trim().isEmpty) {
+        throw Exception('Serviciul AI nu este disponibil momentan.');
+      }
+
+      return decoded;
+    } catch (e) {
+      debugPrint('Error generating AI summary: $e');
+      rethrow;
+    }
+  }
+
+  Future<String> generateAiSummary(int contentItemId) async {
+    final result = await generateAiSummaryResult(contentItemId);
+    return result['summary'] as String;
+  }
+
+  Future<Map<String, dynamic>> generatePublicationIssueAiSummaryResult(
+    int issueId,
+  ) async {
+    try {
+      final response = await http
+          .post(Uri.parse('$_baseUrl/publication-issues/$issueId/ai-summary'))
+          .timeout(const Duration(seconds: 60));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Rezumatul nu a putut fi generat. Încearcă din nou.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns AI neasteptat.');
+      }
+
+      final summary = decoded['summary'];
+      if (summary is! String || summary.trim().isEmpty) {
+        throw Exception('Rezumatul nu a putut fi generat. Încearcă din nou.');
+      }
+
+      return decoded;
+    } catch (e) {
+      debugPrint('Error generating publication issue AI summary: $e');
+      rethrow;
+    }
+  }
+
   Future<List<FilterOption>> getCategories() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/content-categories'));
+      final response = await http.get(
+        Uri.parse('$_baseUrl/content-categories'),
+      );
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         return data.map((json) => FilterOption.fromJson(json)).toList();
@@ -239,7 +526,7 @@ class ApiService {
 
   Future<List<FilterOption>> getSpecializations() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/specializations'));
+      final response = await http.get(Uri.parse('$_baseUrl/specializations'));
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         return data.map((json) => FilterOption.fromJson(json)).toList();
@@ -269,11 +556,14 @@ class ApiService {
     try {
       final headers = await _buildAuthHeaders();
       final response = await http
-          .get(Uri.parse('$baseUrl/saved-content/ids'), headers: headers)
+          .get(Uri.parse('$_baseUrl/saved-content/ids'), headers: headers)
           .timeout(const Duration(seconds: 10));
 
+      await _handleAuthFailure(response);
       if (response.statusCode != 200) {
-        throw Exception('Failed to load saved content ids: ${response.statusCode}');
+        throw Exception(
+          'Failed to load saved content ids: ${response.statusCode}',
+        );
       }
 
       final decoded = json.decode(response.body);
@@ -292,9 +582,13 @@ class ApiService {
     try {
       final headers = await _buildAuthHeaders();
       final response = await http
-          .post(Uri.parse('$baseUrl/saved-content/$contentItemId'), headers: headers)
+          .post(
+            Uri.parse('$_baseUrl/saved-content/$contentItemId'),
+            headers: headers,
+          )
           .timeout(const Duration(seconds: 10));
 
+      await _handleAuthFailure(response);
       if (response.statusCode != 200) {
         throw Exception('Failed to save content: ${response.statusCode}');
       }
@@ -308,11 +602,17 @@ class ApiService {
     try {
       final headers = await _buildAuthHeaders();
       final response = await http
-          .delete(Uri.parse('$baseUrl/saved-content/$contentItemId'), headers: headers)
+          .delete(
+            Uri.parse('$_baseUrl/saved-content/$contentItemId'),
+            headers: headers,
+          )
           .timeout(const Duration(seconds: 10));
 
+      await _handleAuthFailure(response);
       if (response.statusCode != 200) {
-        throw Exception('Failed to remove saved content: ${response.statusCode}');
+        throw Exception(
+          'Failed to remove saved content: ${response.statusCode}',
+        );
       }
     } catch (e) {
       debugPrint('Error removing saved content: $e');
@@ -324,9 +624,10 @@ class ApiService {
     try {
       final headers = await _buildAuthHeaders();
       final response = await http
-          .get(Uri.parse('$baseUrl/saved-content'), headers: headers)
+          .get(Uri.parse('$_baseUrl/saved-content'), headers: headers)
           .timeout(const Duration(seconds: 15));
 
+      await _handleAuthFailure(response);
       if (response.statusCode != 200) {
         throw Exception('Failed to load saved content: ${response.statusCode}');
       }
@@ -354,7 +655,7 @@ class ApiService {
       }
 
       final uri = Uri.parse(
-        '$baseUrl/ads',
+        '$_baseUrl/ads',
       ).replace(queryParameters: queryParameters);
       final response = await http.get(uri).timeout(const Duration(seconds: 8));
 

@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -44,21 +42,17 @@ class RegisterPage extends StatefulWidget {
 
 class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
+  final _apiService = ApiService();
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _cnpController = TextEditingController();
   final _phoneController = TextEditingController();
-  String _phonePrefix = '+40';
-
-  final _manualCountyController = TextEditingController();
-  final _manualCityController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
-  bool _showPassword = false;
-
+  final _cityIdController = TextEditingController();
+  final _occupationIdController = TextEditingController(text: '1');
+  final _specializationIdController = TextEditingController();
   final _cuimController = TextEditingController();
   final _codParafaController = TextEditingController();
   final _professionalCodeController = TextEditingController();
@@ -357,13 +351,13 @@ class _RegisterPageState extends State<RegisterPage> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _confirmPasswordController.dispose();
     _firstNameController.dispose();
     _lastNameController.dispose();
     _cnpController.dispose();
     _phoneController.dispose();
-    _manualCountyController.dispose();
-    _manualCityController.dispose();
+    _cityIdController.dispose();
+    _occupationIdController.dispose();
+    _specializationIdController.dispose();
     _cuimController.dispose();
     _codParafaController.dispose();
     _professionalCodeController.dispose();
@@ -524,6 +518,7 @@ class _RegisterPageState extends State<RegisterPage> {
   String? _requiredValidator(String? value, {String label = 'Câmp'}) {
     return validators.requiredValidator(value, label: label);
   }
+
   String? _emailValidator(String? value) {
     return validators.emailValidator(value);
   }
@@ -608,26 +603,20 @@ class _RegisterPageState extends State<RegisterPage> {
       default:
         return false;
     }
-  }
-
-  String _generateFirebaseUid(String email) {
-    final normalizedEmail = email.trim().toLowerCase();
-    return 'local_${normalizedEmail.hashCode.abs()}';
+    return null;
   }
 
   Future<void> _submitRegistration() async {
-    if (!_validateStep(2)) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() {
       _isSubmitting = true;
     });
 
     final email = _emailController.text.trim();
-    final rule = _professionalRule;
-
     final payload = {
       'email': email,
-      'firebase_uid': _generateFirebaseUid(email),
+      'firebase_uid': 'local_${email.toLowerCase().hashCode.abs()}',
       'password': _passwordController.text.trim(),
       'first_name': _firstNameController.text.trim(),
       'last_name': _lastNameController.text.trim(),
@@ -648,35 +637,22 @@ class _RegisterPageState extends State<RegisterPage> {
       'titlu_universitar': rule.requiresTitluUniversitar ? _selectedTitluUniversitar : null,
       'acord_email': _acordEmail,
       'acord_sms': _acordSms,
-      'phone': '$_phonePrefix${_phoneController.text.replaceAll(RegExp(r'\\s+'), '')}',
     };
 
     try {
-      final response = await http.post(
-        Uri.parse(_registerUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(payload),
+      final data = await _apiService.register(payload);
+      await AuthStorage().saveUserName(
+        '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}',
       );
-
       if (!mounted) return;
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final userId = data['user_id'];
-        await AuthStorage().saveUserName('${_firstNameController.text.trim()} ${_lastNameController.text.trim()}');
-        //ScaffoldMessenger.of(context).showSnackBar(
-        //  SnackBar(content: Text('Cont creat cu succes. ID utilizator: $userId')),
-        //);
-        Navigator.of(context).pop();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Înregistrare eșuată: ${response.body}')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cont creat cu succes. ID utilizator: ${data['user_id']}')),
+      );
+      Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Eroare de conexiune: $e')),
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     } finally {
       if (mounted) {
@@ -713,7 +689,6 @@ class _RegisterPageState extends State<RegisterPage> {
     required String label,
     required String? Function(String?) validator,
     TextInputType keyboardType = TextInputType.text,
-    String? hintText,
     bool obscure = false,
     bool isPasswordField = false,
     List<TextInputFormatter>? inputFormatters,
@@ -823,15 +798,6 @@ class _RegisterPageState extends State<RegisterPage> {
       child: DropdownButtonFormField<int>(
         initialValue: value,
         decoration: _fieldDecoration(label),
-        items: options
-            .map(
-              (item) => DropdownMenuItem<int>(
-                value: item.id,
-                child: Text(item.name),
-              ),
-            )
-            .toList(),
-        onChanged: onChanged,
       ),
     );
   }
@@ -1097,82 +1063,132 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
     return Scaffold(
       backgroundColor: PulseTheme.background,
-      appBar: AppBar(
-        title: const Text('Înregistrare cont'),
-      ),
+      appBar: AppBar(title: const Text('Înregistrare cont')),
       body: SafeArea(
-        child: _isLoadingOptions
-            ? const Center(child: CircularProgressIndicator())
-            : Form(
-                key: _formKey,
-                child: Stepper(
-                  type: StepperType.vertical,
-                  currentStep: _currentStep,
-                  controlsBuilder: (context, details) {
-                    final isLastStep = _currentStep == 2;
-                    return Row(
-                      children: [
-                        ElevatedButton(
-                          onPressed: _isSubmitting
-                              ? null
-                              : () {
-                                  if (!_validateStep(_currentStep)) {
-                                    return;
-                                  }
-
-                                  if (isLastStep) {
-                                    _submitRegistration();
-                                  } else {
-                                    setState(() {
-                                      _currentStep += 1;
-                                    });
-                                  }
-                                },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: PulseTheme.primary,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                          child: _isSubmitting && isLastStep
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : Text(isLastStep ? 'Finalizează' : 'Continuă'),
-                        ),
-                        const SizedBox(width: 10),
-                        if (_currentStep > 0)
-                          TextButton(
-                            onPressed: _isSubmitting
-                                ? null
-                                : () {
-                                    setState(() {
-                                      _currentStep -= 1;
-                                    });
-                                  },
-                            child: const Text('Înapoi'),
-                          ),
-                      ],
-                    );
-                  },
-                  onStepTapped: (step) {
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _textField(
+                  controller: _emailController,
+                  label: 'Email',
+                  validator: _emailValidator,
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                _textField(
+                  controller: _passwordController,
+                  label: 'Parolă',
+                  validator: _passwordValidator,
+                  obscure: true,
+                ),
+                _textField(
+                  controller: _firstNameController,
+                  label: 'Nume',
+                  validator: (value) => _requiredValidator(value, label: 'Nume'),
+                ),
+                _textField(
+                  controller: _lastNameController,
+                  label: 'Prenume',
+                  validator: (value) => _requiredValidator(value, label: 'Prenume'),
+                ),
+                _textField(
+                  controller: _cnpController,
+                  label: 'CNP',
+                  validator: (value) => _requiredValidator(value, label: 'CNP'),
+                  keyboardType: TextInputType.number,
+                ),
+                _textField(
+                  controller: _phoneController,
+                  label: 'Telefon',
+                  validator: (value) => _requiredValidator(value, label: 'Telefon'),
+                  keyboardType: TextInputType.phone,
+                ),
+                _textField(
+                  controller: _cityIdController,
+                  label: 'ID oraș',
+                  validator: (value) => _numberValidator(value, label: 'Oraș'),
+                  keyboardType: TextInputType.number,
+                ),
+                _textField(
+                  controller: _occupationIdController,
+                  label: 'ID ocupație',
+                  validator: (value) => _numberValidator(value, label: 'Ocupație'),
+                  keyboardType: TextInputType.number,
+                ),
+                _textField(
+                  controller: _specializationIdController,
+                  label: 'ID specializare',
+                  validator: (value) => _numberValidator(value, label: 'Specializare'),
+                  keyboardType: TextInputType.number,
+                ),
+                _textField(
+                  controller: _cuimController,
+                  label: 'CUIM',
+                  validator: (_) => null,
+                ),
+                _textField(
+                  controller: _codParafaController,
+                  label: 'Cod parafă',
+                  validator: (_) => null,
+                ),
+                _textField(
+                  controller: _titluUniversitarController,
+                  label: 'Titlu universitar',
+                  validator: (_) => null,
+                ),
+                CheckboxListTile(
+                  value: _acordEmail,
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: PulseTheme.primary,
+                  title: const Text('Sunt de acord să primesc email-uri'),
+                  onChanged: (value) {
                     setState(() {
-                      _currentStep = step;
+                      _acordEmail = value ?? false;
                     });
                   },
-                  steps: _buildSteps(),
                 ),
-              ),
+                CheckboxListTile(
+                  value: _acordSms,
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: PulseTheme.primary,
+                  title: const Text('Sunt de acord să primesc SMS-uri'),
+                  onChanged: (value) {
+                    setState(() {
+                      _acordSms = value ?? false;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _isSubmitting ? null : _submitRegistration,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: PulseTheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Finalizează'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

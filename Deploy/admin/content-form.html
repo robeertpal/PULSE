@@ -229,6 +229,49 @@
                             <label>URL înregistrare</label>
                             <input type="url" id="event_registration_url">
                         </div>
+                        <div class="form-group">
+                            <div class="section-header-inline">
+                                <label>Prețuri programate</label>
+                                <button type="button" class="btn" id="add_event_price_btn" onclick="showEventPriceForm()">Setează preț viitor</button>
+                            </div>
+                            <div id="event_current_price_info" class="price-info-card muted">Prețul curent se încarcă...</div>
+                            <div id="event_price_schedule_status" class="upload-status"></div>
+                            <div id="event_price_schedule_list" class="schedule-list muted">Salvați evenimentul înainte de a programa prețuri.</div>
+                            <div id="event_price_form" class="inline-form-card" style="display:none;">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label>Tip preț</label>
+                                        <select id="event_future_price_type">
+                                            <option value="paid">Plătit</option>
+                                            <option value="free">Gratuit</option>
+                                            <option value="subscription">Abonament</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Valoare</label>
+                                        <input type="number" id="event_future_price_amount" min="0" step="0.01">
+                                    </div>
+                                </div>
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label>Monedă</label>
+                                        <input type="text" id="event_future_price_currency" value="RON">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Activ de la *</label>
+                                        <input type="datetime-local" id="event_future_price_effective_from">
+                                    </div>
+                                </div>
+                                <div class="inline-actions">
+                                    <button type="button" class="btn" onclick="hideEventPriceForm()">Anulează</button>
+                                    <button type="button" class="btn btn-primary" onclick="saveEventFuturePrice()">Salvează preț viitor</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Parteneri</label>
+                            <div id="event_partners_list" class="partner-selector muted">Se încarcă partenerii...</div>
+                        </div>
                     </section>
 
                     <section id="publication-fields" class="details-section">
@@ -266,6 +309,17 @@
                         <div class="form-group">
                             <label>URL abonare</label>
                             <input type="url" id="publication_subscription_url">
+                        </div>
+                        <div class="form-group">
+                            <label>Autori</label>
+                            <div id="publication_authors_list" class="partner-selector muted">Se încarcă autorii...</div>
+                            <datalist id="author_role_options">
+                                <option value="author"></option>
+                                <option value="editor"></option>
+                                <option value="reviewer"></option>
+                                <option value="coordinator"></option>
+                                <option value="contributor"></option>
+                            </datalist>
                         </div>
                     </section>
                 </form>

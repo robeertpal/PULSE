@@ -18,7 +18,7 @@ class HomeHeader extends StatefulWidget {
     super.key,
     required this.doctorName,
     this.avatarUrl = '',
-    this.emcPoints = 142,
+    this.emcPoints = 12,
     this.onSavedTap,
     this.onLogoutTap,
     this.onProfileTap,
@@ -30,7 +30,6 @@ class HomeHeader extends StatefulWidget {
 }
 
 class _HomeHeaderState extends State<HomeHeader> {
-
   String _getTimeGreeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Bună dimineața';
@@ -51,9 +50,7 @@ class _HomeHeaderState extends State<HomeHeader> {
             children: [
               // Avatar with premium gradient ring
               GestureDetector(
-                onTap: () {
-                  if (widget.onProfileTap != null) widget.onProfileTap!();
-                },
+                onTap: widget.onProfileTap,
                 child: _buildAvatar(),
               ),
               const SizedBox(width: 14),
@@ -94,7 +91,9 @@ class _HomeHeaderState extends State<HomeHeader> {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                      MaterialPageRoute(
+                        builder: (context) => const NotificationsScreen(),
+                      ),
                     );
                   },
                   hasBadge: true,
@@ -105,7 +104,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                   onTap: () => _showPremiumMenu(context),
                   iconSize: 4,
                 ),
-              ]
+              ],
             ],
           ),
           if (!widget.compactMode) ...[
@@ -119,7 +118,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                 letterSpacing: -0.1,
               ),
             ),
-          ]
+          ],
         ],
       ),
     );
@@ -149,18 +148,29 @@ class _HomeHeaderState extends State<HomeHeader> {
         ),
         child: ClipOval(
           child: widget.avatarUrl.isNotEmpty
-              ? Image.network(widget.avatarUrl, fit: BoxFit.cover)
-              : Center(
-                  child: SvgPicture.asset(
-                    'assets/icons/people.svg',
-                    width: 22,
-                    height: 22,
-                    colorFilter: const ColorFilter.mode(
-                      PulseTheme.textSecondary,
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                ),
+              ? Image.network(
+                  widget.avatarUrl,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                  errorBuilder: (context, error, stackTrace) =>
+                      _buildAvatarPlaceholder(),
+                )
+              : _buildAvatarPlaceholder(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatarPlaceholder() {
+    return Center(
+      child: SvgPicture.asset(
+        'assets/icons/people.svg',
+        width: 22,
+        height: 22,
+        colorFilter: const ColorFilter.mode(
+          PulseTheme.textSecondary,
+          BlendMode.srcIn,
         ),
       ),
     );
@@ -177,11 +187,7 @@ class _HomeHeaderState extends State<HomeHeader> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SvgPicture.asset(
-            'assets/icons/EMC.svg',
-            width: 16,
-            height: 16,
-          ),
+          SvgPicture.asset('assets/icons/EMC.svg', width: 16, height: 16),
           const SizedBox(width: 6),
           Text(
             '${widget.emcPoints}',
@@ -198,7 +204,12 @@ class _HomeHeaderState extends State<HomeHeader> {
   }
 
   // â”€â”€ Small icon button (bell, menu) â”€â”€
-  Widget _buildIconButton(String iconPath, {required VoidCallback onTap, double iconSize = 20, bool hasBadge = false}) {
+  Widget _buildIconButton(
+    String iconPath, {
+    required VoidCallback onTap,
+    double iconSize = 20,
+    bool hasBadge = false,
+  }) {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -269,7 +280,10 @@ class _HomeHeaderState extends State<HomeHeader> {
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.75),
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          width: 1,
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.08),
@@ -289,12 +303,30 @@ class _HomeHeaderState extends State<HomeHeader> {
                             'assets/icons/people.svg',
                             onTap: widget.onProfileTap,
                           ),
-                          _buildDropdownItem(context, 'Cursurile mele', 'assets/icons/graduation.svg'),
-                          _buildDropdownItem(context, 'Revistele mele', 'assets/icons/books.svg'),
-                          _buildDropdownItem(context, 'Biletele mele', 'assets/icons/events.svg'),
+                          _buildDropdownItem(
+                            context,
+                            'Cursurile mele',
+                            'assets/icons/graduation.svg',
+                          ),
+                          _buildDropdownItem(
+                            context,
+                            'Revistele mele',
+                            'assets/icons/books.svg',
+                          ),
+                          _buildDropdownItem(
+                            context,
+                            'Biletele mele',
+                            'assets/icons/events.svg',
+                          ),
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
-                            child: Divider(height: 1, color: Colors.black.withValues(alpha: 0.06)),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16.0,
+                              vertical: 6.0,
+                            ),
+                            child: Divider(
+                              height: 1,
+                              color: Colors.black.withValues(alpha: 0.06),
+                            ),
                           ),
                           _buildDropdownItem(
                             context,
@@ -318,7 +350,10 @@ class _HomeHeaderState extends State<HomeHeader> {
         return FadeTransition(
           opacity: animation,
           child: ScaleTransition(
-            scale: CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+            scale: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutBack,
+            ),
             alignment: Alignment.topRight,
             child: child,
           ),
@@ -405,22 +440,18 @@ class _HomeHeaderState extends State<HomeHeader> {
       },
       splashColor: Colors.red.withValues(alpha: 0.1),
       highlightColor: Colors.red.withValues(alpha: 0.05),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         child: Row(
           children: [
-            const SizedBox(
+            SizedBox(
               width: 26,
               child: Center(
-                child: Icon(
-                  Icons.logout,
-                  size: 20,
-                  color: Colors.redAccent,
-                ),
+                child: Icon(Icons.logout, size: 20, color: Colors.redAccent),
               ),
             ),
-            const SizedBox(width: 12),
-            const Expanded(
+            SizedBox(width: 12),
+            Expanded(
               child: Text(
                 'Ieșire',
                 style: TextStyle(
