@@ -23,13 +23,52 @@ OCCUPATIONS = [
 ]
 
 
-PROFESSIONAL_GRADES = [
+# Titluri universitare (folosite pentru câmpul `titlu_universitar`, dependente de ocupație)
+ACADEMIC_TITLES = [
     "Fără titlu universitar",
     "Asistent universitar",
+    "Preparator universitar",
     "Șef de lucrări",
     "Conferențiar",
     "Profesor universitar",
-    "Doctor",
+    "Altul",
+]
+
+# Grad profesional (apare pentru TOATE ocupațiile - opțiunile din poze)
+PROFESSIONAL_GRADES = [
+    'Asistent de Farmacie',
+    'Asistent Medical',
+    'Asistent Veterinar',
+    'Biolog',
+    'Cercetător Științific',
+    'Conferențiar Universitar',
+    'Director',
+    'Director Adjunct',
+    'Director General',
+    'Director Medical',
+    'Doctor in Medicina',
+    'Doctor in stiinte medicale',
+    'Farmacist',
+    'Farmacist Diriginte',
+    'Farmacist pensionar',
+    'Farmacist Primar',
+    'Farmacist Sef',
+    'Farmacist Specialist',
+    'Farmacolog',
+    'Grad profesional',
+    'Inspector',
+    'Medic Pensionar',
+    'Medic Primar',
+    'Medic Rezident',
+    'Medic Specialist',
+    'Medic Stagiar',
+    'Medic veterinar',
+    'Sef Sectie',
+    'Sef Clinica',
+    'Sef Depozit',
+    'Sef Laborator',
+    'Sef Lucrari',
+    'Sef Policlinica',
 ]
 
 
