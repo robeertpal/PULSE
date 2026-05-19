@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -9,7 +10,8 @@ import 'auth_storage.dart';
 
 class ApiService {
   // Pentru local development:
-  // - iOS Simulator / Web: http://127.0.0.1:8000
+  // - Web: http://localhost:8000
+  // - iOS Simulator: http://127.0.0.1:8000
   // - Android Emulator: http://10.0.2.2:8000
   static const String _configuredBaseUrl = String.fromEnvironment(
     'PULSE_API_BASE_URL',
@@ -35,6 +37,9 @@ class ApiService {
     if (kDebugMode) {
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
         return 'http://10.0.2.2:8000';
+      }
+      if (kIsWeb) {
+        return 'http://localhost:8000';
       }
       return 'http://127.0.0.1:8000';
     }
@@ -73,6 +78,23 @@ class ApiService {
     return fallback;
   }
 
+  Exception _friendlyNetworkException(
+    Object error,
+    String actionLabel,
+  ) {
+    if (error is TimeoutException) {
+      return Exception(
+        '$actionLabel durează prea mult. Verifică dacă backend-ul rulează pe $baseUrl și încearcă din nou.',
+      );
+    }
+    if (error is http.ClientException) {
+      return Exception(
+        'Nu mă pot conecta la backend pentru $actionLabel. Verifică dacă serverul API rulează pe $baseUrl și dacă pagina Flutter este deschisă cu un URL permis de CORS.',
+      );
+    }
+    return Exception('$actionLabel a eșuat. Te rugăm să încerci din nou.');
+  }
+
   Future<void> _handleAuthFailure(http.Response response) async {
     if (response.statusCode == 401 || response.statusCode == 403) {
       await _authStorage.clearSession();
@@ -106,13 +128,18 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> register(Map<String, dynamic> payload) async {
-    final response = await http
-        .post(
-          Uri.parse('$baseUrl/api/register'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(payload),
-        )
-        .timeout(const Duration(seconds: 20));
+    late final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/api/register'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 35));
+    } catch (error) {
+      throw _friendlyNetworkException(error, 'înregistrarea contului');
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(_responseErrorMessage(response, 'Înregistrare eșuată'));
@@ -121,6 +148,59 @@ class ApiService {
     final decoded = json.decode(response.body);
     if (decoded is! Map<String, dynamic>) {
       throw Exception('Răspuns de înregistrare neașteptat.');
+    }
+    return decoded;
+  }
+
+  Future<Map<String, dynamic>> verifyEmailOtp({
+    required String email,
+    required String otpCode,
+  }) async {
+    late final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/api/email-verifications/verify'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email, 'otp_code': otpCode}),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (error) {
+      throw _friendlyNetworkException(error, 'verificarea codului');
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_responseErrorMessage(response, 'Verificare eșuată'));
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Răspuns de verificare neașteptat.');
+    }
+    return decoded;
+  }
+
+  Future<Map<String, dynamic>> resendEmailOtp({required String email}) async {
+    late final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/api/email-verifications/resend'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email}),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (error) {
+      throw _friendlyNetworkException(error, 'retrimiterea codului');
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_responseErrorMessage(response, 'Retrimitere eșuată'));
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Răspuns de retrimitere neașteptat.');
     }
     return decoded;
   }

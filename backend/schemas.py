@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -12,6 +12,7 @@ class UserCreate(BaseModel):
     last_name: str = Field(min_length=1, max_length=255)
     cnp: str = Field(min_length=1, max_length=13)
     phone: str = Field(min_length=1, max_length=50)
+    correspondence_address: Optional[str] = Field(default=None, max_length=1000)
     city_id: Optional[int] = Field(default=None, gt=0)
     county_id: Optional[int] = Field(default=None, gt=0)
     city_name: Optional[str] = Field(default=None, max_length=255)
@@ -24,20 +25,24 @@ class UserCreate(BaseModel):
 
     professional_grade_id: Optional[int] = Field(default=None, gt=0)
     professional_grade_name: Optional[str] = Field(default=None, max_length=255)
+    institution_id: Optional[int] = Field(default=None, gt=0)
     titlu_universitar: Optional[str] = Field(default=None, max_length=255)
     cuim: Optional[str] = Field(default=None, max_length=255)
     cod_parafa: Optional[str] = Field(default=None, max_length=255)
     professional_registration_code: Optional[str] = Field(default=None, max_length=255)
     sectia: Optional[str] = Field(default=None, max_length=255)
+    interest_ids: List[int] = Field(default_factory=list)
 
     acord_email: bool = False
     acord_sms: bool = False
+    gdpr_consent: bool = False
 
     @field_validator(
         "first_name",
         "last_name",
         "cnp",
         "phone",
+        "correspondence_address",
         "city_name",
         "county_name",
         "occupation_name",
@@ -65,6 +70,22 @@ class UserLogin(BaseModel):
 
 class UserLogout(BaseModel):
     session_token: str = Field(min_length=16, max_length=512)
+
+
+class EmailVerificationVerify(BaseModel):
+    email: EmailStr
+    otp_code: str = Field(min_length=6, max_length=6)
+
+    @field_validator("otp_code", mode="before")
+    @classmethod
+    def strip_otp_code(cls, value):
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+
+class EmailVerificationResend(BaseModel):
+    email: EmailStr
 
 
 class AdminLogin(BaseModel):

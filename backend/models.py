@@ -230,7 +230,11 @@ class UserProfile(Base):
     institution_id = Column(Integer, ForeignKey("institutions.id"))
     cuim = Column(String(255))
     cod_parafa = Column(String(255))
+    professional_registration_code = Column(String(255))
     titlu_universitar = Column(String(255))
+    acord_email = Column(Boolean, nullable=False, default=False)
+    acord_sms = Column(Boolean, nullable=False, default=False)
+    gdpr_consent = Column(Boolean, nullable=False, default=False)
     total_emc_points = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True))
     updated_at = Column(DateTime(timezone=True))
@@ -241,6 +245,21 @@ class UserProfile(Base):
     specialization = relationship("Specialization")
     professional_grade = relationship("ProfessionalGrade")
     institution = relationship("Institution")
+
+
+class UserProfileInterest(Base):
+    __tablename__ = "user_profile_interests"
+
+    user_profile_id = Column(Integer, ForeignKey("user_profiles.id"), primary_key=True)
+    interest_id = Column(Integer, ForeignKey("interests.id"), primary_key=True)
+
+
+class UserInterest(Base):
+    __tablename__ = "user_interests"
+
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    interest_id = Column(Integer, ForeignKey("interests.id"), primary_key=True)
+    created_at = Column(DateTime(timezone=True))
 
 
 class Role(Base):

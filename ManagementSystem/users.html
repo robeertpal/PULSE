@@ -1,30 +1,159 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-
     <meta charset="UTF-8">
-    <title>Utilizatori - PULSE Management</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - PULSE Management</title>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
     <div class="main-content">
-        <div class="content-wrapper">
+        <div class="content-wrapper user-management">
             <div class="header-actions">
-                <h2>Management Utilizatori (Coming Soon)</h2>
+                <div>
+                    <h2>User Management</h2>
+                    <p class="page-subtitle">Administrare completă utilizatori, profil medical, securitate, abonamente și EMC.</p>
+                </div>
+                <button class="btn btn-primary" id="refresh-btn">Reîmprospătează</button>
             </div>
-            <div id="error-msg" class="alert error"></div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Email</th>
-                        <th>Activ</th>
-                        <th>Data Înregistrării</th>
-                    </tr>
-                </thead>
-                <tbody id="table-body">
-                    <tr><td colspan="3">Se încarcă...</td></tr>
-                </tbody>
-            </table>
+
+            <div id="alert-box" class="alert"></div>
+
+            <section class="admin-panel filters-panel">
+                <div class="filters-grid">
+                    <div class="form-group wide">
+                        <label for="search-input">Search realtime</label>
+                        <input id="search-input" type="search" placeholder="Nume, email, telefon, CNP, CUIM, cod parafă">
+                    </div>
+                    <div class="form-group">
+                        <label for="occupation-filter">Ocupație</label>
+                        <select id="occupation-filter"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="specialization-filter">Specializare</label>
+                        <select id="specialization-filter"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="county-filter">Județ</label>
+                        <select id="county-filter"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="city-filter">Oraș</label>
+                        <select id="city-filter"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="role-filter">Rol</label>
+                        <select id="role-filter"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="active-filter">Status</label>
+                        <select id="active-filter">
+                            <option value="">Toți</option>
+                            <option value="true">Activ</option>
+                            <option value="false">Inactiv</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="verified-filter">Email verificat</label>
+                        <select id="verified-filter">
+                            <option value="">Toți</option>
+                            <option value="true">Verificat</option>
+                            <option value="false">Neverificat</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="subscription-filter">Subscription activă</label>
+                        <select id="subscription-filter">
+                            <option value="">Toți</option>
+                            <option value="true">Da</option>
+                            <option value="false">Nu</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="gdpr-filter">GDPR</label>
+                        <select id="gdpr-filter">
+                            <option value="">Toți</option>
+                            <option value="true">Acceptat</option>
+                            <option value="false">Lipsă</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="created-from-filter">Creat de la</label>
+                        <input id="created-from-filter" type="date">
+                    </div>
+                    <div class="form-group">
+                        <label for="created-to-filter">Creat până la</label>
+                        <input id="created-to-filter" type="date">
+                    </div>
+                </div>
+            </section>
+
+            <section class="admin-panel users-table-panel">
+                <div class="table-toolbar">
+                    <div id="users-count" class="muted">Se încarcă...</div>
+                    <div class="table-toolbar-actions">
+                        <select id="sort-select">
+                            <option value="created_at:desc">Newest</option>
+                            <option value="created_at:asc">Oldest</option>
+                            <option value="name:asc">Nume A-Z</option>
+                            <option value="email:asc">Email A-Z</option>
+                            <option value="emc:desc">EMC desc</option>
+                            <option value="last_login_at:desc">Last login</option>
+                        </select>
+                        <select id="page-size-select">
+                            <option value="10">10 / pagină</option>
+                            <option value="25" selected>25 / pagină</option>
+                            <option value="50">50 / pagină</option>
+                            <option value="100">100 / pagină</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="table-scroll">
+                    <table class="enterprise-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nume</th>
+                                <th>Email</th>
+                                <th>Telefon</th>
+                                <th>Ocupație</th>
+                                <th>Specializare</th>
+                                <th>Oraș</th>
+                                <th>Instituție</th>
+                                <th>Status</th>
+                                <th>Email</th>
+                                <th>Rol</th>
+                                <th>Subscription</th>
+                                <th>EMC</th>
+                                <th>Creat</th>
+                                <th>Last login</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-body">
+                            <tr><td colspan="16">Se încarcă...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination-bar">
+                    <button class="btn" id="prev-page">Înapoi</button>
+                    <span id="page-label">Pagina 1</span>
+                    <button class="btn" id="next-page">Înainte</button>
+                </div>
+            </section>
+
+            <aside id="details-drawer" class="details-drawer" aria-hidden="true">
+                <div class="drawer-header">
+                    <div>
+                        <div class="drawer-eyebrow">User profile</div>
+                        <h3 id="drawer-title">Selectează un utilizator</h3>
+                        <p id="drawer-subtitle" class="muted"></p>
+                    </div>
+                    <button class="icon-btn" id="close-drawer" aria-label="Închide">×</button>
+                </div>
+                <div class="drawer-tabs" id="drawer-tabs"></div>
+                <div id="drawer-content" class="drawer-content"></div>
+            </aside>
         </div>
     </div>
 
@@ -33,33 +162,623 @@
     <script src="js/auth.js"></script>
     <script src="js/ui.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', async () => {
-            UI.init('users', 'Utilizatori');
-            const tbody = document.getElementById('table-body');
-            
-            try {
-                const data = await API.get('/admin/users');
-                tbody.innerHTML = '';
-                
-                if (data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="3">Nu există utilizatori.</td></tr>';
-                    return;
-                }
+        const state = {
+            users: [],
+            total: 0,
+            page: 1,
+            pageSize: 25,
+            selectedUserId: null,
+            selectedUser: null,
+            activeTab: 'general',
+            lookups: {
+                counties: [],
+                cities: [],
+                occupations: [],
+                specializations: [],
+                professionalGrades: [],
+                institutions: [],
+                interests: [],
+                roles: [],
+                subscriptionPlans: [],
+            },
+            tabCache: {},
+        };
 
-                data.forEach(user => {
-                    const tr = document.createElement('tr');
-                    const dateStr = user.created_at ? new Date(user.created_at).toLocaleDateString('ro-RO') : '-';
-                    const activeBadge = user.is_active ? '<span class="badge published">Activ</span>' : '<span class="badge archived">Inactiv</span>';
-                    
-                    tr.innerHTML = `
-                        <td><strong>${user.email}</strong></td>
-                        <td>${activeBadge}</td>
-                        <td>${dateStr}</td>
-                    `;
-                    tbody.appendChild(tr);
-                });
+        const tabs = [
+            ['general', 'General'],
+            ['professional', 'Professional'],
+            ['interests', 'Interests'],
+            ['security', 'Security'],
+            ['activity', 'Activity'],
+            ['emc', 'EMC'],
+            ['subscriptions', 'Subscriptions'],
+            ['payments', 'Payments'],
+            ['saved', 'Saved Content'],
+        ];
+
+        const $ = (id) => document.getElementById(id);
+        const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+        }[char]));
+        const fmtDate = (value) => value ? new Date(value).toLocaleString('ro-RO') : '-';
+        const badge = (text, type = 'draft') => `<span class="badge ${type}">${escapeHtml(text)}</span>`;
+        const optionName = (items, id) => items.find((item) => Number(item.id) === Number(id))?.name || '';
+
+        function debounce(fn, wait = 300) {
+            let timeout;
+            return (...args) => {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => fn(...args), wait);
+            };
+        }
+
+        function showSuccess(message) {
+            UI.showAlert('alert-box', message, 'success');
+        }
+
+        function showError(message) {
+            UI.showError('alert-box', message);
+        }
+
+        function fillSelect(id, items, placeholder = 'Toți') {
+            const select = $(id);
+            select.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>`;
+            items.forEach((item) => {
+                const option = document.createElement('option');
+                option.value = item.id;
+                option.textContent = item.name;
+                select.appendChild(option);
+            });
+        }
+
+        function fillEditSelect(name, items, value, placeholder = 'Selectează') {
+            const options = [`<option value="">${escapeHtml(placeholder)}</option>`]
+                .concat(items.map((item) => `<option value="${item.id}" ${Number(value) === Number(item.id) ? 'selected' : ''}>${escapeHtml(item.name)}</option>`));
+            return `<select name="${name}">${options.join('')}</select>`;
+        }
+
+        async function loadLookups() {
+            const [
+                counties,
+                cities,
+                occupations,
+                specializations,
+                professionalGrades,
+                institutions,
+                interests,
+                roles,
+                subscriptionPlans,
+            ] = await Promise.all([
+                API.get('/admin/counties'),
+                API.get('/admin/cities'),
+                API.get('/admin/occupations'),
+                API.get('/admin/specializations'),
+                API.get('/admin/professional-grades'),
+                API.get('/admin/institutions'),
+                API.get('/admin/interests'),
+                API.get('/admin/roles'),
+                API.get('/admin/subscription-plans'),
+            ]);
+            Object.assign(state.lookups, {
+                counties,
+                cities,
+                occupations,
+                specializations,
+                professionalGrades,
+                institutions,
+                interests,
+                roles,
+                subscriptionPlans,
+            });
+            fillSelect('occupation-filter', occupations);
+            fillSelect('specialization-filter', specializations);
+            fillSelect('county-filter', counties);
+            fillSelect('city-filter', cities);
+            fillSelect('role-filter', roles);
+        }
+
+        function queryParams() {
+            const [sort, direction] = $('sort-select').value.split(':');
+            const params = new URLSearchParams({
+                page: state.page,
+                page_size: state.pageSize,
+                sort,
+                direction,
+            });
+            const map = {
+                search: $('search-input').value.trim(),
+                occupation_id: $('occupation-filter').value,
+                specialization_id: $('specialization-filter').value,
+                county_id: $('county-filter').value,
+                city_id: $('city-filter').value,
+                role_id: $('role-filter').value,
+                is_active: $('active-filter').value,
+                email_verified: $('verified-filter').value,
+                subscription_active: $('subscription-filter').value,
+                gdpr_consent: $('gdpr-filter').value,
+                created_from: $('created-from-filter').value,
+                created_to: $('created-to-filter').value,
+            };
+            Object.entries(map).forEach(([key, value]) => {
+                if (value !== '') params.set(key, value);
+            });
+            return params.toString();
+        }
+
+        async function loadUsers() {
+            $('users-body').innerHTML = skeletonRows(16);
+            try {
+                const data = await API.get(`/admin/users?${queryParams()}`);
+                state.users = data.items || [];
+                state.total = data.total || 0;
+                renderUsers();
             } catch (err) {
-                UI.showError('error-msg', err.message);
+                $('users-body').innerHTML = `<tr><td colspan="16" class="empty-cell">Nu am putut încărca utilizatorii.</td></tr>`;
+                showError(err.message);
+            }
+        }
+
+        function skeletonRows(cols) {
+            return Array.from({ length: 6 }).map(() => `
+                <tr>${Array.from({ length: cols }).map(() => '<td><span class="skeleton-line"></span></td>').join('')}</tr>
+            `).join('');
+        }
+
+        function renderUsers() {
+            const tbody = $('users-body');
+            $('users-count').textContent = `${state.total} utilizatori`;
+            $('page-label').textContent = `Pagina ${state.page} din ${Math.max(1, Math.ceil(state.total / state.pageSize))}`;
+            $('prev-page').disabled = state.page <= 1;
+            $('next-page').disabled = state.page >= Math.ceil(state.total / state.pageSize);
+
+            if (!state.users.length) {
+                tbody.innerHTML = `<tr><td colspan="16" class="empty-cell">Nu există utilizatori pentru filtrele selectate.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = state.users.map((user) => `
+                <tr class="${state.selectedUserId === user.id ? 'selected-row' : ''}">
+                    <td>#${user.id}</td>
+                    <td><strong>${escapeHtml(user.full_name || '-')}</strong></td>
+                    <td>${escapeHtml(user.email)}</td>
+                    <td>${escapeHtml(user.phone || '-')}</td>
+                    <td>${escapeHtml(user.occupation_name || '-')}</td>
+                    <td>${escapeHtml(user.specialization_name || '-')}</td>
+                    <td>${escapeHtml(user.city_name || '-')}</td>
+                    <td>${escapeHtml(user.institution_name || '-')}</td>
+                    <td>${user.is_active ? badge('Activ', 'published') : badge('Inactiv', 'archived')}</td>
+                    <td>${user.email_verified ? badge('Verificat', 'published') : badge('Neverificat', 'draft')}</td>
+                    <td>${escapeHtml(user.role || 'user')}</td>
+                    <td>${user.subscription_status === 'active' ? badge('Active', 'active') : badge(user.subscription_status || 'none', 'draft')}</td>
+                    <td><strong>${Number(user.total_emc_points || 0)}</strong></td>
+                    <td>${fmtDate(user.created_at)}</td>
+                    <td>${fmtDate(user.last_login_at)}</td>
+                    <td><button class="btn table-btn" data-user-id="${user.id}">Details</button></td>
+                </tr>
+            `).join('');
+
+            tbody.querySelectorAll('[data-user-id]').forEach((button) => {
+                button.addEventListener('click', () => openUser(Number(button.dataset.userId)));
+            });
+        }
+
+        async function openUser(userId) {
+            state.selectedUserId = userId;
+            state.activeTab = 'general';
+            state.tabCache = {};
+            $('details-drawer').classList.add('open');
+            $('details-drawer').setAttribute('aria-hidden', 'false');
+            $('drawer-content').innerHTML = `<div class="drawer-loading">Se încarcă profilul...</div>`;
+            renderUsers();
+            await refreshSelectedUser();
+        }
+
+        async function refreshSelectedUser(keepTab = false) {
+            if (!state.selectedUserId) return;
+            state.selectedUser = await API.get(`/admin/users/${state.selectedUserId}`);
+            if (!keepTab) state.activeTab = 'general';
+            $('drawer-title').textContent = state.selectedUser.full_name || state.selectedUser.email;
+            $('drawer-subtitle').textContent = `#${state.selectedUser.id} · ${state.selectedUser.email}`;
+            renderTabs();
+            await renderActiveTab();
+            await loadUsers();
+        }
+
+        function renderTabs() {
+            $('drawer-tabs').innerHTML = tabs.map(([id, label]) => `
+                <button class="tab-btn ${state.activeTab === id ? 'active' : ''}" data-tab="${id}">${label}</button>
+            `).join('');
+            $('drawer-tabs').querySelectorAll('[data-tab]').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    state.activeTab = button.dataset.tab;
+                    renderTabs();
+                    await renderActiveTab();
+                });
+            });
+        }
+
+        async function renderActiveTab() {
+            const user = state.selectedUser;
+            if (!user) return;
+            const renderers = {
+                general: renderGeneralTab,
+                professional: renderProfessionalTab,
+                interests: renderInterestsTab,
+                security: renderSecurityTab,
+                activity: renderActivityTab,
+                emc: renderEmcTab,
+                subscriptions: renderSubscriptionsTab,
+                payments: renderPaymentsTab,
+                saved: renderSavedTab,
+            };
+            await renderers[state.activeTab]();
+        }
+
+        function formData(form) {
+            return Object.fromEntries(new FormData(form).entries());
+        }
+
+        function boolFromCheckbox(form, name) {
+            return form.querySelector(`[name="${name}"]`)?.checked || false;
+        }
+
+        function intOrNull(value) {
+            return value ? Number(value) : null;
+        }
+
+        async function saveUserPatch(payload, message = 'Modificările au fost salvate.') {
+            await API.patch(`/admin/users/${state.selectedUserId}`, payload);
+            showSuccess(message);
+            await refreshSelectedUser(true);
+        }
+
+        function renderGeneralTab() {
+            const user = state.selectedUser;
+            $('drawer-content').innerHTML = `
+                <form id="general-form" class="drawer-form">
+                    <div class="form-grid">
+                        <div class="form-group"><label>Nume</label><input name="first_name" value="${escapeHtml(user.first_name || '')}" required></div>
+                        <div class="form-group"><label>Prenume</label><input name="last_name" value="${escapeHtml(user.last_name || '')}" required></div>
+                        <div class="form-group"><label>Email</label><input name="email" type="email" value="${escapeHtml(user.email || '')}" required></div>
+                        <div class="form-group"><label>Telefon</label><input name="phone" value="${escapeHtml(user.phone || '')}"></div>
+                        <div class="form-group"><label>Județ</label>${fillEditSelect('county_id', state.lookups.counties, user.county_id)}</div>
+                        <div class="form-group"><label>Oraș</label>${fillEditSelect('city_id', state.lookups.cities, user.city_id)}</div>
+                        <div class="form-group wide"><label>Adresă corespondență</label><textarea name="correspondence_address" rows="3">${escapeHtml(user.correspondence_address || '')}</textarea></div>
+                    </div>
+                    <div class="toggle-row">
+                        <label><input type="checkbox" name="is_active" ${user.is_active ? 'checked' : ''}> Activ</label>
+                        <label><input type="checkbox" name="email_verified" ${user.email_verified ? 'checked' : ''}> Email verificat</label>
+                        <label><input type="checkbox" name="acord_email" ${user.acord_email ? 'checked' : ''}> Acord email</label>
+                        <label><input type="checkbox" name="acord_sms" ${user.acord_sms ? 'checked' : ''}> Acord SMS</label>
+                        <label><input type="checkbox" name="gdpr_consent" ${user.gdpr_consent ? 'checked' : ''}> GDPR</label>
+                    </div>
+                    <div class="form-group">
+                        <label>Roluri</label>
+                        <div class="role-checkbox-grid">
+                            ${state.lookups.roles.map((role) => `
+                                <label><input type="checkbox" name="role_ids" value="${role.id}" ${(user.role_ids || []).map(Number).includes(Number(role.id)) ? 'checked' : ''}> ${escapeHtml(role.name)}</label>
+                            `).join('') || '<span class="muted">Nu există roluri definite.</span>'}
+                        </div>
+                    </div>
+                    <div class="drawer-actions"><button class="btn btn-primary">Salvează General</button></div>
+                </form>
+            `;
+            $('general-form').addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const form = event.currentTarget;
+                const data = formData(form);
+                await saveUserPatch({
+                    first_name: data.first_name,
+                    last_name: data.last_name,
+                    email: data.email,
+                    phone: data.phone,
+                    correspondence_address: data.correspondence_address,
+                    city_id: intOrNull(data.city_id),
+                    is_active: boolFromCheckbox(form, 'is_active'),
+                    email_verified: boolFromCheckbox(form, 'email_verified'),
+                    acord_email: boolFromCheckbox(form, 'acord_email'),
+                    acord_sms: boolFromCheckbox(form, 'acord_sms'),
+                    gdpr_consent: boolFromCheckbox(form, 'gdpr_consent'),
+                    role_ids: Array.from(form.querySelectorAll('[name="role_ids"]:checked')).map((item) => Number(item.value)),
+                });
+            });
+        }
+
+        function renderProfessionalTab() {
+            const user = state.selectedUser;
+            $('drawer-content').innerHTML = `
+                <form id="professional-form" class="drawer-form">
+                    <div class="form-grid">
+                        <div class="form-group"><label>Ocupație</label>${fillEditSelect('occupation_id', state.lookups.occupations, user.occupation_id)}</div>
+                        <div class="form-group"><label>Specializare</label>${fillEditSelect('specialization_id', state.lookups.specializations, user.specialization_id)}</div>
+                        <div class="form-group"><label>Specializare secundară</label><input name="specialization_secondary_name" value="${escapeHtml(user.specialization_secondary_name || '')}"></div>
+                        <div class="form-group"><label>Grad profesional</label>${fillEditSelect('professional_grade_id', state.lookups.professionalGrades, user.professional_grade_id)}</div>
+                        <div class="form-group wide"><label>Instituție</label>${fillEditSelect('institution_id', state.lookups.institutions, user.institution_id, 'Fără instituție')}</div>
+                        <div class="form-group"><label>CUIM</label><input name="cuim" value="${escapeHtml(user.cuim || '')}"></div>
+                        <div class="form-group"><label>Cod parafă</label><input name="cod_parafa" value="${escapeHtml(user.cod_parafa || '')}"></div>
+                        <div class="form-group"><label>Cod profesional</label><input name="professional_registration_code" value="${escapeHtml(user.professional_registration_code || '')}"></div>
+                        <div class="form-group"><label>Titlu universitar</label><input name="titlu_universitar" value="${escapeHtml(user.titlu_universitar || '')}"></div>
+                    </div>
+                    <div class="drawer-actions"><button class="btn btn-primary">Salvează Professional</button></div>
+                </form>
+            `;
+            $('professional-form').addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const data = formData(event.currentTarget);
+                await saveUserPatch({
+                    occupation_id: intOrNull(data.occupation_id),
+                    specialization_id: intOrNull(data.specialization_id),
+                    specialization_secondary_name: data.specialization_secondary_name,
+                    professional_grade_id: intOrNull(data.professional_grade_id),
+                    institution_id: intOrNull(data.institution_id),
+                    cuim: data.cuim,
+                    cod_parafa: data.cod_parafa,
+                    professional_registration_code: data.professional_registration_code,
+                    titlu_universitar: data.titlu_universitar,
+                });
+            });
+        }
+
+        function renderInterestsTab() {
+            const selected = new Set((state.selectedUser.interest_ids || []).map(Number));
+            $('drawer-content').innerHTML = `
+                <div class="form-group"><label>Caută interese</label><input id="interest-search" placeholder="Filtrează chip-uri"></div>
+                <div id="interest-chips" class="chip-grid"></div>
+                <div class="drawer-actions"><button class="btn btn-primary" id="save-interests">Salvează Interests</button></div>
+            `;
+            const renderChips = () => {
+                const q = $('interest-search').value.toLowerCase();
+                $('interest-chips').innerHTML = state.lookups.interests
+                    .filter((item) => item.name.toLowerCase().includes(q))
+                    .map((item) => `<button class="chip ${selected.has(Number(item.id)) ? 'selected' : ''}" data-interest="${item.id}">${escapeHtml(item.name)}</button>`)
+                    .join('');
+                $('interest-chips').querySelectorAll('[data-interest]').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const id = Number(button.dataset.interest);
+                        selected.has(id) ? selected.delete(id) : selected.add(id);
+                        renderChips();
+                    });
+                });
+            };
+            $('interest-search').addEventListener('input', renderChips);
+            $('save-interests').addEventListener('click', () => saveUserPatch({ interest_ids: Array.from(selected) }, 'Interesele au fost actualizate.'));
+            renderChips();
+        }
+
+        async function renderSecurityTab() {
+            const sessions = await API.get(`/admin/users/${state.selectedUserId}/sessions`);
+            $('drawer-content').innerHTML = `
+                <div class="security-actions">
+                    <form id="password-form" class="admin-panel flat">
+                        <h4>Schimbă parola</h4>
+                        <div class="form-group"><label>Parolă nouă</label><input name="password" type="password" minlength="8"></div>
+                        <label><input type="checkbox" name="force_reset"> Generează token resetare</label>
+                        <label><input type="checkbox" name="revoke_sessions" checked> Invalidează sesiunile după schimbare/resetare</label>
+                        <button class="btn btn-primary">Aplică</button>
+                    </form>
+                    <div class="admin-panel flat">
+                        <h4>Logout all devices</h4>
+                        <p class="muted">Revocă toate sesiunile active ale utilizatorului.</p>
+                        <button class="btn danger" id="revoke-sessions">Revoke sessions</button>
+                    </div>
+                </div>
+                ${renderMiniTable(['ID', 'IP', 'User agent', 'Creat', 'Expiră', 'Status'], sessions.map((s) => [
+                    `#${s.id}`,
+                    escapeHtml(s.ip_address || '-'),
+                    escapeHtml(s.user_agent || '-'),
+                    fmtDate(s.created_at),
+                    fmtDate(s.expires_at),
+                    s.is_active ? badge('Activ', 'published') : badge('Revocat/expirat', 'archived'),
+                ]))}
+            `;
+            $('password-form').addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const form = event.currentTarget;
+                const data = formData(form);
+                const result = await API.patch(`/admin/users/${state.selectedUserId}/password`, {
+                    password: data.password || null,
+                    force_reset: boolFromCheckbox(form, 'force_reset'),
+                    revoke_sessions: boolFromCheckbox(form, 'revoke_sessions'),
+                });
+                showSuccess(result.reset_token ? `Token resetare generat: ${result.reset_token}` : 'Parola a fost actualizată.');
+                await renderSecurityTab();
+            });
+            $('revoke-sessions').addEventListener('click', async () => {
+                if (!confirm('Revoci toate sesiunile acestui utilizator?')) return;
+                const result = await API.post(`/admin/users/${state.selectedUserId}/revoke-sessions`, {});
+                showSuccess(`${result.revoked_sessions} sesiuni revocate.`);
+                await renderSecurityTab();
+            });
+        }
+
+        async function renderActivityTab() {
+            const data = await API.get(`/admin/users/${state.selectedUserId}/activity`);
+            $('drawer-content').innerHTML = `
+                <h4>Activity logs</h4>
+                ${renderMiniTable(['Timestamp', 'Action', 'Content', 'Metadata'], (data.logs || []).map((row) => [
+                    fmtDate(row.created_at),
+                    escapeHtml(row.action_type),
+                    escapeHtml(row.content_title || '-'),
+                    `<code>${escapeHtml(JSON.stringify(row.metadata || row.metadata_json || {}))}</code>`,
+                ]))}
+                <h4>Event registrations</h4>
+                ${renderMiniTable(['Timestamp', 'Event', 'Status'], (data.event_registrations || []).map((row) => [
+                    fmtDate(row.registered_at),
+                    escapeHtml(row.title),
+                    escapeHtml(row.status),
+                ]))}
+                <h4>Course progress</h4>
+                ${renderMiniTable(['Enrolled', 'Course', 'Progress', 'Status'], (data.course_progress || []).map((row) => [
+                    fmtDate(row.enrolled_at),
+                    escapeHtml(row.title),
+                    `${row.progress_percent || 0}%`,
+                    escapeHtml(row.status),
+                ]))}
+            `;
+        }
+
+        async function renderEmcTab() {
+            const data = await API.get(`/admin/users/${state.selectedUserId}/emc`);
+            $('drawer-content').innerHTML = `
+                <div class="metric-strip"><div><span>Total EMC</span><strong>${Number(data.total_emc_points || 0)}</strong></div></div>
+                <h4>EMC logs</h4>
+                ${renderMiniTable(['Awarded', 'Source', 'Source ID', 'Points'], (data.logs || []).map((row) => [
+                    fmtDate(row.awarded_at),
+                    escapeHtml(row.source_type),
+                    row.source_id,
+                    `<strong>${row.points}</strong>`,
+                ]))}
+                <h4>Certificates</h4>
+                ${renderMiniTable(['Issued', 'Certificate', 'Source', 'URL'], (data.certificates || []).map((row) => [
+                    fmtDate(row.issued_at),
+                    escapeHtml(row.certificate_number || '-'),
+                    `${escapeHtml(row.source_type)} #${row.source_id}`,
+                    row.certificate_url ? `<a href="${escapeHtml(row.certificate_url)}" target="_blank">Open</a>` : '-',
+                ]))}
+            `;
+        }
+
+        async function renderSubscriptionsTab() {
+            const rows = await API.get(`/admin/users/${state.selectedUserId}/subscriptions`);
+            $('drawer-content').innerHTML = `
+                <form id="new-subscription-form" class="inline-create-form">
+                    ${fillEditSelect('subscription_plan_id', state.lookups.subscriptionPlans, null, 'Plan nou')}
+                    <input name="end_date" type="date">
+                    <select name="status">
+                        <option value="active">active</option>
+                        <option value="pending">pending</option>
+                        <option value="expired">expired</option>
+                        <option value="cancelled">cancelled</option>
+                        <option value="suspended">suspended</option>
+                    </select>
+                    <label><input type="checkbox" name="auto_renew"> Auto renew</label>
+                    <button class="btn btn-primary">Adaugă</button>
+                </form>
+                ${renderMiniTable(['Plan', 'Start', 'End', 'Status', 'Auto renew', 'Acțiuni'], rows.map((row) => [
+                    escapeHtml(row.plan_name),
+                    fmtDate(row.start_date),
+                    `<input type="date" value="${row.end_date ? row.end_date.slice(0, 10) : ''}" data-sub-end="${row.id}">`,
+                    `<select data-sub-status="${row.id}">
+                        ${['pending','active','expired','cancelled','suspended'].map((status) => `<option value="${status}" ${row.status === status ? 'selected' : ''}>${status}</option>`).join('')}
+                    </select>`,
+                    `<input type="checkbox" data-sub-renew="${row.id}" ${row.auto_renew ? 'checked' : ''}>`,
+                    `<button class="btn table-btn" data-save-sub="${row.id}">Save</button>`,
+                ]))}
+            `;
+            $('new-subscription-form').addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const form = event.currentTarget;
+                const data = formData(form);
+                await API.post(`/admin/users/${state.selectedUserId}/subscriptions`, {
+                    subscription_plan_id: Number(data.subscription_plan_id),
+                    end_date: data.end_date ? `${data.end_date}T23:59:59` : null,
+                    status: data.status,
+                    auto_renew: boolFromCheckbox(form, 'auto_renew'),
+                });
+                showSuccess('Abonamentul a fost creat.');
+                await renderSubscriptionsTab();
+            });
+            document.querySelectorAll('[data-save-sub]').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    const id = button.dataset.saveSub;
+                    await API.patch(`/admin/users/${state.selectedUserId}/subscriptions/${id}`, {
+                        end_date: document.querySelector(`[data-sub-end="${id}"]`).value ? `${document.querySelector(`[data-sub-end="${id}"]`).value}T23:59:59` : null,
+                        status: document.querySelector(`[data-sub-status="${id}"]`).value,
+                        auto_renew: document.querySelector(`[data-sub-renew="${id}"]`).checked,
+                    });
+                    showSuccess('Abonamentul a fost actualizat.');
+                    await renderSubscriptionsTab();
+                });
+            });
+        }
+
+        async function renderPaymentsTab() {
+            const rows = await API.get(`/admin/users/${state.selectedUserId}/payments`);
+            $('drawer-content').innerHTML = renderMiniTable(['Amount', 'Currency', 'Provider', 'Transaction', 'Status', 'Paid at'], rows.map((row) => [
+                row.amount,
+                escapeHtml(row.currency),
+                escapeHtml(row.provider || '-'),
+                escapeHtml(row.provider_transaction_id || '-'),
+                escapeHtml(row.status),
+                fmtDate(row.paid_at),
+            ]));
+        }
+
+        async function renderSavedTab() {
+            const rows = await API.get(`/admin/users/${state.selectedUserId}/saved-content`);
+            $('drawer-content').innerHTML = renderMiniTable(['Saved', 'Type', 'Title', 'Acțiuni'], rows.map((row) => [
+                fmtDate(row.saved_at),
+                escapeHtml(row.content_type),
+                escapeHtml(row.content_title),
+                `<a class="btn table-btn" href="content-form.html?id=${row.content_item_id}" target="_blank">Open</a>
+                 <button class="btn danger table-btn" data-remove-saved="${row.id}">Remove</button>`,
+            ]));
+            document.querySelectorAll('[data-remove-saved]').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    if (!confirm('Elimini acest conținut salvat?')) return;
+                    await API.delete(`/admin/users/${state.selectedUserId}/saved-content/${button.dataset.removeSaved}`);
+                    showSuccess('Conținutul salvat a fost eliminat.');
+                    await renderSavedTab();
+                });
+            });
+        }
+
+        function renderMiniTable(headers, rows) {
+            if (!rows.length) return '<div class="empty-state">Nu există date pentru această secțiune.</div>';
+            return `
+                <div class="table-scroll nested">
+                    <table class="compact-table">
+                        <thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
+                        <tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join('')}</tr>`).join('')}</tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function bindFilters() {
+            const reload = debounce(() => {
+                state.page = 1;
+                loadUsers();
+            });
+            [
+                'search-input', 'occupation-filter', 'specialization-filter', 'county-filter', 'city-filter',
+                'role-filter', 'active-filter', 'verified-filter', 'subscription-filter', 'gdpr-filter',
+                'created-from-filter', 'created-to-filter', 'sort-select', 'page-size-select',
+            ].forEach((id) => {
+                $(id).addEventListener(id === 'search-input' ? 'input' : 'change', () => {
+                    state.pageSize = Number($('page-size-select').value);
+                    reload();
+                });
+            });
+            $('prev-page').addEventListener('click', () => {
+                if (state.page > 1) {
+                    state.page -= 1;
+                    loadUsers();
+                }
+            });
+            $('next-page').addEventListener('click', () => {
+                if (state.page < Math.ceil(state.total / state.pageSize)) {
+                    state.page += 1;
+                    loadUsers();
+                }
+            });
+            $('refresh-btn').addEventListener('click', () => loadUsers());
+            $('close-drawer').addEventListener('click', () => {
+                $('details-drawer').classList.remove('open');
+                $('details-drawer').setAttribute('aria-hidden', 'true');
+                state.selectedUserId = null;
+                renderUsers();
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            UI.init('users', 'User Management');
+            bindFilters();
+            try {
+                await loadLookups();
+                await loadUsers();
+            } catch (err) {
+                showError(err.message);
             }
         });
     </script>

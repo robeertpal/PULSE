@@ -202,8 +202,14 @@ def ensure_user_profile_columns(db: Session) -> None:
     statements = [
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS cuim VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS cod_parafa VARCHAR(255)",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS professional_registration_code VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS titlu_universitar VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS specialization_secondary_name VARCHAR(255)",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS correspondence_address TEXT",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS institution_id INTEGER",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS acord_email BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS acord_sms BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS gdpr_consent BOOLEAN NOT NULL DEFAULT FALSE",
     ]
     for statement in statements:
         db.execute(text(statement))

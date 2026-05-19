@@ -3,7 +3,7 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'home_screen.dart';
 import '../services/auth_storage.dart';
 import '../theme/pulse_theme.dart';
-import 'login_screen.dart';
+import 'auth_welcome_screen.dart';
 import '../services/api_service.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -73,7 +73,7 @@ class _SplashScreenState extends State<SplashScreen> {
   void _navigateToLogin() {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+        pageBuilder: (context, animation, secondaryAnimation) => const AuthWelcomeScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },

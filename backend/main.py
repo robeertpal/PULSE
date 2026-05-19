@@ -1,15 +1,20 @@
 from collections import defaultdict, deque
+import base64
 from datetime import datetime
 from datetime import timedelta
 from decimal import Decimal
+from email.message import EmailMessage
+import html
 import enum
 import hashlib
+import hmac
 from io import BytesIO
 import json
 import logging
 import os
 import re
 import secrets
+import smtplib
 from pathlib import Path
 from typing import List, Optional
 from uuid import uuid4
@@ -27,14 +32,21 @@ from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 import models
-from schemas import AdminLogin, UserCreate, UserLogin, UserLogout
+from schemas import (
+    AdminLogin,
+    EmailVerificationResend,
+    EmailVerificationVerify,
+    UserCreate,
+    UserLogin,
+    UserLogout,
+)
 
 try:
     from google import genai
 except ImportError:
     genai = None
 
-load_dotenv()
+load_dotenv(Path(__file__).with_name(".env"))
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").strip().lower()
 IS_PRODUCTION = ENVIRONMENT in {"prod", "production"}
@@ -337,6 +349,173 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
+EMAIL_VERIFICATION_EXPIRY_MINUTES = 10
+EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = 60
+EMAIL_VERIFICATION_SUBJECT = "Confirmă adresa de email • pulse"
+
+
+def create_email_otp() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def hash_email_otp(otp_code: str) -> str:
+    return hashlib.sha256(otp_code.encode("utf-8")).hexdigest()
+
+
+def validate_email_otp_code(otp_code: str) -> None:
+    if not otp_code:
+        raise ValueError("OTP code is required")
+    if len(otp_code) != 6:
+        raise ValueError("OTP code must have exactly 6 characters")
+    if not otp_code.isdigit():
+        raise ValueError("OTP code must contain only digits")
+
+
+def build_email_verification_html(otp_code: str) -> str:
+    validate_email_otp_code(otp_code)
+    digits = list(otp_code)
+    escaped_digits = [html.escape(digit) for digit in digits]
+    return f"""<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Confirmare email pulse</title>
+</head>
+
+<body style="margin:0;padding:0;background:#f6f2fb;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellspacing="0" cellpadding="0" border="0" style="background:linear-gradient(180deg,#f6f2fb 0%,#fff7f1 100%);padding:44px 14px;">
+<tr>
+<td align="center">
+
+<table width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;background:#ffffff;border-radius:38px;overflow:hidden;box-shadow:0 34px 90px rgba(46,20,82,0.16);">
+
+<tr>
+<td style="background:linear-gradient(135deg,rgba(76,29,149,0.80),rgba(124,58,237,0.68),rgba(249,115,22,0.62)),url('https://storageforpulse.blob.core.windows.net/content-images/images/2026/05/Screenshot%202026-05-19%20at%2015.33.30.png') center/cover no-repeat;padding:62px 44px 128px;text-align:center;">
+  <img src="https://storageforpulse.blob.core.windows.net/content-images/images/2026/05/icon-iOS-Default-1024x1024@1x.png" width="174" alt="pulse" style="display:block;margin:0 auto 40px;border:0;max-width:174px;height:auto;">
+
+  <p style="margin:0 0 18px;color:rgba(255,255,255,0.88);font-size:14px;line-height:1.7;">
+    Bine ai venit în pulse!
+  </p>
+
+  <h1 style="margin:0;color:#ffffff;font-size:46px;line-height:1.04;font-weight:900;letter-spacing:-0.06em;">
+    Mai ai un singur pas.
+  </h1>
+
+  <p style="margin:24px auto 0;max-width:455px;color:rgba(255,255,255,0.94);font-size:16px;line-height:1.8;">
+    Introdu codul de verificare în aplicație pentru a confirma adresa de email și pentru a continua configurarea profilului tău medical.
+  </p>
+</td>
+</tr>
+
+<tr>
+<td align="center" style="padding:0 30px;">
+<table width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:530px;margin-top:-82px;background:#ffffff;border-radius:34px;box-shadow:0 30px 76px rgba(35,16,60,0.18);border:1px solid rgba(124,58,237,0.08);">
+<tr>
+<td style="padding:46px 30px 42px;text-align:center;">
+  <p style="margin:0 0 22px;color:#7c3aed;font-size:12px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;">
+    Cod de verificare
+  </p>
+
+  <table cellspacing="0" cellpadding="0" border="0" align="center">
+    <tr>
+      <td style="width:58px;height:68px;background:linear-gradient(180deg,#fbf8ff,#f7f3ff);border:1px solid #e8dcff;border-radius:18px;text-align:center;font-size:31px;font-weight:900;color:#2d174d;">{escaped_digits[0]}</td>
+      <td width="8"></td>
+      <td style="width:58px;height:68px;background:linear-gradient(180deg,#fbf8ff,#f7f3ff);border:1px solid #e8dcff;border-radius:18px;text-align:center;font-size:31px;font-weight:900;color:#2d174d;">{escaped_digits[1]}</td>
+      <td width="8"></td>
+      <td style="width:58px;height:68px;background:linear-gradient(180deg,#fbf8ff,#f7f3ff);border:1px solid #e8dcff;border-radius:18px;text-align:center;font-size:31px;font-weight:900;color:#2d174d;">{escaped_digits[2]}</td>
+      <td width="8"></td>
+      <td style="width:58px;height:68px;background:linear-gradient(180deg,#fbf8ff,#f7f3ff);border:1px solid #e8dcff;border-radius:18px;text-align:center;font-size:31px;font-weight:900;color:#2d174d;">{escaped_digits[3]}</td>
+      <td width="8"></td>
+      <td style="width:58px;height:68px;background:linear-gradient(180deg,#fbf8ff,#f7f3ff);border:1px solid #e8dcff;border-radius:18px;text-align:center;font-size:31px;font-weight:900;color:#2d174d;">{escaped_digits[4]}</td>
+      <td width="8"></td>
+      <td style="width:58px;height:68px;background:linear-gradient(180deg,#fbf8ff,#f7f3ff);border:1px solid #e8dcff;border-radius:18px;text-align:center;font-size:31px;font-weight:900;color:#2d174d;">{escaped_digits[5]}</td>
+    </tr>
+  </table>
+
+  <p style="margin:26px 0 0;color:#7b7288;font-size:14px;line-height:1.7;">
+    Codul expiră în 10 minute.
+  </p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<tr>
+<td style="padding:48px 44px 44px;">
+  <div style="padding:30px;border-radius:28px;background:#ffffff;border:1px solid #eee8f7;box-shadow:0 14px 34px rgba(36,17,63,0.06);text-align:left;">
+    <h3 style="margin:0 0 14px;color:#24113f;font-size:21px;font-weight:900;letter-spacing:-0.04em;">
+      Confirmarea protejează contul tău
+    </h3>
+    <p style="margin:0;color:#5f5a69;font-size:15px;line-height:1.9;">
+      Folosim această verificare pentru a ne asigura că adresa de email îți aparține. Dacă nu ai solicitat crearea unui cont, poți ignora acest mesaj.
+    </p>
+  </div>
+</td>
+</tr>
+
+<tr>
+<td style="padding:40px;background:#13091f;text-align:center;">
+  <p style="margin:0 0 12px;color:#ffffff;font-size:18px;font-weight:900;letter-spacing:0.08em;">pulse</p>
+  <p style="margin:0 auto;max-width:430px;color:#c9bddc;font-size:13px;line-height:1.9;">
+    Platformă medicală digitală pentru conținut editorial, publicații, educație profesională și evenimente.
+  </p>
+  <div style="max-width:150px;height:1px;background:rgba(255,255,255,0.12);margin:26px auto;"></div>
+  <p style="margin:0;color:#9387a6;font-size:12px;line-height:1.8;">
+    Acest email a fost trimis automat. Te rugăm să nu răspunzi la acest mesaj.
+  </p>
+</td>
+</tr>
+
+</table>
+
+</td>
+</tr>
+</table>
+</body>
+</html>"""
+
+
+def send_email_verification_email(to_email: str, otp_code: str) -> None:
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
+    smtp_port = parse_int_env("SMTP_PORT", 587)
+    smtp_user = os.getenv("SMTP_USER", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+    email_from = os.getenv("EMAIL_FROM", smtp_user).strip()
+    if not smtp_host or not smtp_port or not smtp_user or not smtp_password or not email_from:
+        raise RuntimeError("SMTP configuration is incomplete")
+
+    message = EmailMessage()
+    message["Subject"] = EMAIL_VERIFICATION_SUBJECT
+    message["From"] = email_from
+    message["To"] = to_email
+    message.set_content(
+        "Bine ai venit în pulse!\n\n"
+        f"Codul tău de verificare este {otp_code}. Codul expiră în 10 minute."
+    )
+    message.add_alternative(build_email_verification_html(otp_code), subtype="html")
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as smtp:
+        smtp.starttls()
+        smtp.login(smtp_user, smtp_password)
+        smtp.send_message(message)
+
+
+def create_email_verification(db: Session, user_id: int, to_email: str, now: datetime) -> None:
+    otp_code = create_email_otp()
+    db.add(
+        models.UserEmailVerification(
+            user_id=user_id,
+            token_hash=hash_email_otp(otp_code),
+            expires_at=now + timedelta(minutes=EMAIL_VERIFICATION_EXPIRY_MINUTES),
+            created_at=now,
+        )
+    )
+    db.flush()
+    send_email_verification_email(to_email, otp_code)
+
+
 def create_session_token() -> str:
     return secrets.token_urlsafe(32)
 
@@ -376,15 +555,57 @@ def require_rate_limit(request: Request, bucket: str, limit_env: str, default_li
 admin_sessions: dict[str, datetime] = {}
 
 
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def _b64url_decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode((value + padding).encode("ascii"))
+
+
+def _admin_jwt_secret() -> bytes:
+    secret = os.getenv("ADMIN_JWT_SECRET") or os.getenv("ADMIN_PASSWORD_HASH") or "pulse-admin-development-secret"
+    return secret.encode("utf-8")
+
+
 def create_admin_session() -> str:
-    token = create_session_token()
-    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
     ttl_minutes = parse_int_env("ADMIN_SESSION_TTL_MINUTES", 480)
-    admin_sessions[token_hash] = datetime.utcnow() + timedelta(minutes=ttl_minutes)
+    expires_at = datetime.utcnow() + timedelta(minutes=ttl_minutes)
+    header = {"alg": "HS256", "typ": "JWT"}
+    payload = {
+        "sub": "admin",
+        "role": "admin",
+        "iat": int(datetime.utcnow().timestamp()),
+        "exp": int(expires_at.timestamp()),
+        "jti": secrets.token_urlsafe(16),
+    }
+    signing_input = ".".join(
+        [
+            _b64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8")),
+            _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8")),
+        ]
+    )
+    signature = hmac.new(_admin_jwt_secret(), signing_input.encode("ascii"), hashlib.sha256).digest()
+    token = f"{signing_input}.{_b64url_encode(signature)}"
+    admin_sessions[hashlib.sha256(token.encode("utf-8")).hexdigest()] = expires_at
     return token
 
 
 def validate_admin_token(token: str) -> bool:
+    parts = token.split(".")
+    if len(parts) == 3:
+        signing_input = ".".join(parts[:2])
+        expected = hmac.new(_admin_jwt_secret(), signing_input.encode("ascii"), hashlib.sha256).digest()
+        try:
+            provided = _b64url_decode(parts[2])
+            payload = json.loads(_b64url_decode(parts[1]).decode("utf-8"))
+        except Exception:
+            return False
+        if not hmac.compare_digest(provided, expected):
+            return False
+        return payload.get("role") == "admin" and int(payload.get("exp", 0)) > int(datetime.utcnow().timestamp())
+
     token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
     expires_at = admin_sessions.get(token_hash)
     if expires_at is None:
@@ -573,6 +794,92 @@ def _resolve_professional_grade_id(db: Session, payload: UserCreate) -> Optional
     if grade is None:
         raise HTTPException(status_code=422, detail="Professional grade name is invalid")
     return grade.id
+
+
+def _resolve_institution_id(db: Session, payload: UserCreate) -> Optional[int]:
+    if payload.institution_id is None:
+        return None
+    institution = (
+        db.query(models.Institution)
+        .filter(models.Institution.id == payload.institution_id)
+        .first()
+    )
+    if institution is None:
+        raise HTTPException(status_code=422, detail="Institution id is invalid")
+    return institution.id
+
+
+def _resolve_interest_ids(db: Session, interest_ids: List[int]) -> List[int]:
+    unique_ids = sorted({int(item) for item in interest_ids if int(item) > 0})
+    if not unique_ids:
+        return []
+
+    existing_ids = {
+        item.id
+        for item in db.query(models.Interest).filter(models.Interest.id.in_(unique_ids)).all()
+    }
+    missing_ids = sorted(set(unique_ids) - existing_ids)
+    if missing_ids:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Interest ids are invalid: {','.join(str(item) for item in missing_ids)}",
+        )
+    return unique_ids
+
+
+def _ensure_registration_schema(db: Session) -> None:
+    statements = [
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS correspondence_address TEXT",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS institution_id INTEGER",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS cuim VARCHAR(255)",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS cod_parafa VARCHAR(255)",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS professional_registration_code VARCHAR(255)",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS titlu_universitar VARCHAR(255)",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS specialization_secondary_name VARCHAR(255)",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS acord_email BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS acord_sms BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS gdpr_consent BOOLEAN NOT NULL DEFAULT FALSE",
+        """
+        CREATE TABLE IF NOT EXISTS user_profile_interests (
+            user_profile_id INTEGER NOT NULL REFERENCES user_profiles(id),
+            interest_id INTEGER NOT NULL REFERENCES interests(id),
+            PRIMARY KEY (user_profile_id, interest_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS user_interests (
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            interest_id INTEGER NOT NULL REFERENCES interests(id),
+            created_at TIMESTAMPTZ,
+            PRIMARY KEY (user_id, interest_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS user_email_verifications (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            token_hash VARCHAR(255) NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            verified_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ
+        )
+        """,
+    ]
+    for statement in statements:
+        db.execute(text(statement))
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        db.execute(
+            text(
+                """
+                SELECT setval(
+                    pg_get_serial_sequence('user_email_verifications', 'id'),
+                    COALESCE((SELECT MAX(id) FROM user_email_verifications), 1),
+                    (SELECT COUNT(*) > 0 FROM user_email_verifications)
+                )
+                """
+            )
+        )
+    db.commit()
 
 
 def get_public_content_item_or_404(db: Session, content_item_id: int):
@@ -2113,6 +2420,7 @@ def get_event_gallery(
 @app.post("/api/register")
 def register_user(payload: UserCreate, request: Request, db: Session = Depends(get_db)):
     require_rate_limit(request, "register", "AUTH_RATE_LIMIT_PER_MINUTE", 10)
+    _ensure_registration_schema(db)
     user_model = get_user_model()
     existing_user = db.query(user_model).filter(user_model.email == payload.email).first()
     if existing_user is not None:
@@ -2120,12 +2428,16 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
 
     if not payload.password or len(payload.password) < 8:
         raise HTTPException(status_code=422, detail="Password must have at least 8 characters")
+    if not payload.gdpr_consent:
+        raise HTTPException(status_code=422, detail="GDPR consent is required")
 
     county_id = _resolve_county_id(db, payload)
     city_id = _resolve_city_id(db, payload, county_id)
     occupation_id = _resolve_occupation_id(db, payload)
     specialization_id = _resolve_specialization_id(db, payload)
     professional_grade_id = _resolve_professional_grade_id(db, payload)
+    institution_id = _resolve_institution_id(db, payload)
+    interest_ids = _resolve_interest_ids(db, payload.interest_ids)
 
     missing = []
     if not payload.first_name:
@@ -2167,11 +2479,17 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
         "occupation_id": occupation_id,
         "specialization_id": specialization_id,
         "professional_grade_id": professional_grade_id,
+        "institution_id": institution_id,
+        "correspondence_address": payload.correspondence_address,
+        "acord_email": payload.acord_email,
+        "acord_sms": payload.acord_sms,
+        "gdpr_consent": payload.gdpr_consent,
         "created_at": now,
         "updated_at": now,
     }
     optional_profile_fields = {
-        "cod_parafa": payload.cod_parafa or payload.professional_registration_code,
+        "cod_parafa": payload.cod_parafa,
+        "professional_registration_code": payload.professional_registration_code,
         "cuim": payload.cuim,
         "titlu_universitar": payload.titlu_universitar or payload.professional_grade_name,
         "specialization_secondary_name": payload.specialization_secondary_name,
@@ -2180,12 +2498,111 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
         if hasattr(models.UserProfile, field_name):
             profile_kwargs[field_name] = value
 
-    db.add(models.UserProfile(**profile_kwargs))
+    profile = models.UserProfile(**profile_kwargs)
+    db.add(profile)
+    db.flush()
+
+    for interest_id in interest_ids:
+        db.add(
+            models.UserProfileInterest(
+                user_profile_id=profile.id,
+                interest_id=interest_id,
+            )
+        )
+        db.add(
+            models.UserInterest(
+                user_id=user.id,
+                interest_id=interest_id,
+                created_at=now,
+            )
+        )
+    create_email_verification(db, user.id, user.email, now)
     db.commit()
 
     return {
         "message": "User registered successfully",
         "user_id": user.id,
+        "email_verification_required": True,
+    }
+
+
+@app.post("/api/email-verifications/verify")
+def verify_email_otp(
+    payload: EmailVerificationVerify,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_rate_limit(request, "verify-email", "AUTH_RATE_LIMIT_PER_MINUTE", 10)
+    try:
+        validate_email_otp_code(payload.otp_code)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    user_model = get_user_model()
+    user = db.query(user_model).filter(user_model.email == payload.email).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Contul nu a fost găsit")
+    if user.email_verified_at is not None:
+        return {"message": "Email already verified", "email_verified": True}
+
+    now = datetime.utcnow()
+    verification = (
+        db.query(models.UserEmailVerification)
+        .filter(models.UserEmailVerification.user_id == user.id)
+        .filter(models.UserEmailVerification.verified_at.is_(None))
+        .filter(models.UserEmailVerification.expires_at > now)
+        .order_by(models.UserEmailVerification.created_at.desc())
+        .first()
+    )
+    if verification is None:
+        raise HTTPException(status_code=400, detail="Codul a expirat. Solicită un cod nou.")
+
+    if not secrets.compare_digest(verification.token_hash, hash_email_otp(payload.otp_code)):
+        raise HTTPException(status_code=400, detail="Codul introdus este incorect")
+
+    verification.verified_at = now
+    user.email_verified_at = now
+    user.updated_at = now
+    db.commit()
+    return {"message": "Email verified successfully", "email_verified": True}
+
+
+@app.post("/api/email-verifications/resend")
+def resend_email_otp(
+    payload: EmailVerificationResend,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_rate_limit(request, "resend-email", "AUTH_RATE_LIMIT_PER_MINUTE", 10)
+    user_model = get_user_model()
+    user = db.query(user_model).filter(user_model.email == payload.email).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Contul nu a fost găsit")
+    if user.email_verified_at is not None:
+        return {"message": "Email already verified", "email_verified": True}
+
+    now = datetime.utcnow()
+    latest_verification = (
+        db.query(models.UserEmailVerification)
+        .filter(models.UserEmailVerification.user_id == user.id)
+        .order_by(models.UserEmailVerification.created_at.desc())
+        .first()
+    )
+    if latest_verification and latest_verification.created_at:
+        elapsed = (now - latest_verification.created_at).total_seconds()
+        if elapsed < EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS:
+            retry_after = int(EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS - elapsed)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Poți solicita un cod nou peste {retry_after} secunde.",
+            )
+
+    create_email_verification(db, user.id, user.email, now)
+    db.commit()
+    return {
+        "message": "Verification code resent successfully",
+        "email_verified": False,
+        "expires_in_seconds": EMAIL_VERIFICATION_EXPIRY_MINUTES * 60,
     }
 
 
@@ -2528,6 +2945,53 @@ def get_audit_logs(db: Session = Depends(get_db)):
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Dict, Optional, List
 from sqlalchemy import func
+
+
+class AdminUserUpdate(BaseModel):
+    email: Optional[str] = Field(default=None, max_length=255)
+    first_name: Optional[str] = Field(default=None, max_length=255)
+    last_name: Optional[str] = Field(default=None, max_length=255)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    correspondence_address: Optional[str] = Field(default=None, max_length=1000)
+    city_id: Optional[int] = Field(default=None, gt=0)
+    occupation_id: Optional[int] = Field(default=None, gt=0)
+    specialization_id: Optional[int] = Field(default=None, gt=0)
+    specialization_secondary_name: Optional[str] = Field(default=None, max_length=255)
+    professional_grade_id: Optional[int] = Field(default=None, gt=0)
+    institution_id: Optional[int] = Field(default=None, gt=0)
+    cuim: Optional[str] = Field(default=None, max_length=255)
+    cod_parafa: Optional[str] = Field(default=None, max_length=255)
+    professional_registration_code: Optional[str] = Field(default=None, max_length=255)
+    titlu_universitar: Optional[str] = Field(default=None, max_length=255)
+    is_active: Optional[bool] = None
+    email_verified: Optional[bool] = None
+    acord_email: Optional[bool] = None
+    acord_sms: Optional[bool] = None
+    gdpr_consent: Optional[bool] = None
+    role_ids: Optional[List[int]] = None
+    interest_ids: Optional[List[int]] = None
+
+
+class AdminPasswordChange(BaseModel):
+    password: Optional[str] = Field(default=None, min_length=8, max_length=128)
+    force_reset: bool = False
+    revoke_sessions: bool = True
+
+
+class AdminSubscriptionUpdate(BaseModel):
+    subscription_plan_id: Optional[int] = Field(default=None, gt=0)
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    status: Optional[str] = None
+    auto_renew: Optional[bool] = None
+
+
+class AdminSubscriptionCreate(BaseModel):
+    subscription_plan_id: int = Field(gt=0)
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    status: str = "active"
+    auto_renew: bool = False
 
 IMAGE_ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 IMAGE_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -3566,9 +4030,679 @@ def admin_get_specializations(db: Session = Depends(get_db)):
 def admin_get_cities(db: Session = Depends(get_db)):
     return get_cities(db)
 
+
+@app.get("/admin/counties")
+def admin_get_counties(db: Session = Depends(get_db)):
+    return get_counties(db)
+
+
+@app.get("/admin/occupations")
+def admin_get_occupations(db: Session = Depends(get_db)):
+    return get_occupations(db)
+
+
+@app.get("/admin/professional-grades")
+def admin_get_professional_grades(db: Session = Depends(get_db)):
+    return get_professional_grades(db)
+
+
+@app.get("/admin/institutions")
+def admin_get_institutions(db: Session = Depends(get_db)):
+    return get_institutions(db)
+
+
+@app.get("/admin/interests")
+def admin_get_interests(db: Session = Depends(get_db)):
+    return get_interests(db)
+
+
+@app.get("/admin/roles")
+def admin_get_roles(db: Session = Depends(get_db)):
+    return get_roles(db)
+
+
+@app.get("/admin/subscription-plans")
+def admin_get_subscription_plans(db: Session = Depends(get_db)):
+    return get_subscription_plans(db)
+
+
+def admin_audit(
+    db: Session,
+    entity_type: str,
+    entity_id: int,
+    action: str,
+    old_data: Optional[dict] = None,
+    new_data: Optional[dict] = None,
+) -> None:
+    def jsonable(value):
+        if isinstance(value, dict):
+            return {key: jsonable(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [jsonable(item) for item in value]
+        return serialize_value(value)
+
+    try:
+        db.add(
+            models.AuditLog(
+                actor_user_id=None,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                action=action,
+                old_data=jsonable(old_data),
+                new_data=jsonable(new_data),
+                created_at=datetime.utcnow(),
+            )
+        )
+    except Exception:
+        logger.exception("Failed to append admin audit log")
+
+
+def get_admin_user_or_404(db: Session, user_id: int):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+def get_admin_profile_or_404(db: Session, user_id: int):
+    profile = (
+        db.query(models.UserProfile)
+        .filter(models.UserProfile.user_id == user_id)
+        .options(
+            joinedload(models.UserProfile.city).joinedload(models.City.county),
+            joinedload(models.UserProfile.occupation),
+            joinedload(models.UserProfile.specialization),
+            joinedload(models.UserProfile.professional_grade),
+            joinedload(models.UserProfile.institution),
+        )
+        .first()
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="User profile not found")
+    return profile
+
+
+def _role_names_for_user(db: Session, user_id: int) -> list[str]:
+    rows = (
+        db.query(models.Role.name)
+        .join(models.UserRole, models.UserRole.role_id == models.Role.id)
+        .filter(models.UserRole.user_id == user_id)
+        .order_by(models.Role.name.asc())
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
+def _role_ids_for_user(db: Session, user_id: int) -> list[int]:
+    return [
+        row[0]
+        for row in db.query(models.UserRole.role_id)
+        .filter(models.UserRole.user_id == user_id)
+        .order_by(models.UserRole.role_id.asc())
+        .all()
+    ]
+
+
+def _interest_ids_for_profile(db: Session, profile_id: int) -> list[int]:
+    return [
+        row[0]
+        for row in db.query(models.UserProfileInterest.interest_id)
+        .filter(models.UserProfileInterest.user_profile_id == profile_id)
+        .order_by(models.UserProfileInterest.interest_id.asc())
+        .all()
+    ]
+
+
+def _interests_for_profile(db: Session, profile_id: int) -> list[dict]:
+    rows = (
+        db.query(models.Interest)
+        .join(models.UserProfileInterest, models.UserProfileInterest.interest_id == models.Interest.id)
+        .filter(models.UserProfileInterest.user_profile_id == profile_id)
+        .order_by(models.Interest.name.asc())
+        .all()
+    )
+    return [serialize_model(row) for row in rows]
+
+
+def _active_subscription_summary(db: Session, user_id: int) -> Optional[dict]:
+    subscription = (
+        db.query(models.UserSubscription, models.SubscriptionPlan)
+        .join(models.SubscriptionPlan, models.SubscriptionPlan.id == models.UserSubscription.subscription_plan_id)
+        .filter(models.UserSubscription.user_id == user_id)
+        .filter(models.UserSubscription.status == models.SubscriptionStatus.active)
+        .order_by(models.UserSubscription.end_date.desc().nullslast(), models.UserSubscription.created_at.desc().nullslast())
+        .first()
+    )
+    if subscription is None:
+        return None
+    row, plan = subscription
+    return {
+        "id": row.id,
+        "status": serialize_value(row.status),
+        "plan_name": plan.name,
+        "plan_id": plan.id,
+        "start_date": serialize_value(row.start_date),
+        "end_date": serialize_value(row.end_date),
+        "auto_renew": row.auto_renew,
+    }
+
+
+def serialize_admin_user_summary(db: Session, user, profile) -> dict:
+    roles = _role_names_for_user(db, user.id)
+    city = profile.city if profile else None
+    county = city.county if city and getattr(city, "county", None) else None
+    active_subscription = _active_subscription_summary(db, user.id)
+    return {
+        "id": user.id,
+        "email": user.email,
+        "full_name": f"{getattr(profile, 'first_name', '') or ''} {getattr(profile, 'last_name', '') or ''}".strip(),
+        "first_name": getattr(profile, "first_name", None),
+        "last_name": getattr(profile, "last_name", None),
+        "phone": getattr(profile, "phone", None),
+        "cnp": getattr(profile, "cnp", None),
+        "cuim": getattr(profile, "cuim", None),
+        "cod_parafa": getattr(profile, "cod_parafa", None),
+        "professional_registration_code": getattr(profile, "professional_registration_code", None),
+        "occupation_id": getattr(profile, "occupation_id", None),
+        "occupation_name": profile.occupation.name if profile and profile.occupation else None,
+        "specialization_id": getattr(profile, "specialization_id", None),
+        "specialization_name": profile.specialization.name if profile and profile.specialization else None,
+        "city_id": getattr(profile, "city_id", None),
+        "city_name": city.name if city else None,
+        "county_id": county.id if county else None,
+        "county_name": county.name if county else None,
+        "institution_id": getattr(profile, "institution_id", None),
+        "institution_name": profile.institution.name if profile and profile.institution else None,
+        "is_active": user.is_active,
+        "email_verified": user.email_verified_at is not None,
+        "roles": roles,
+        "role": ", ".join(roles) if roles else "user",
+        "subscription_status": active_subscription["status"] if active_subscription else "none",
+        "subscription": active_subscription,
+        "total_emc_points": getattr(profile, "total_emc_points", 0) or 0,
+        "gdpr_consent": getattr(profile, "gdpr_consent", False),
+        "created_at": serialize_value(user.created_at),
+        "last_login_at": serialize_value(user.last_login_at),
+    }
+
+
+def serialize_admin_user_detail(db: Session, user) -> dict:
+    profile = get_admin_profile_or_404(db, user.id)
+    summary = serialize_admin_user_summary(db, user, profile)
+    return {
+        **summary,
+        "profile_id": profile.id,
+        "correspondence_address": profile.correspondence_address,
+        "specialization_secondary_name": profile.specialization_secondary_name,
+        "professional_grade_id": profile.professional_grade_id,
+        "professional_grade_name": profile.professional_grade.name if profile.professional_grade else None,
+        "titlu_universitar": profile.titlu_universitar,
+        "professional_registration_code": profile.professional_registration_code,
+        "acord_email": profile.acord_email,
+        "acord_sms": profile.acord_sms,
+        "role_ids": _role_ids_for_user(db, user.id),
+        "interest_ids": _interest_ids_for_profile(db, profile.id),
+        "interests": _interests_for_profile(db, profile.id),
+    }
+
+
 @app.get("/admin/users")
-def admin_get_users(db: Session = Depends(get_db)):
-    return get_users(db)
+def admin_get_users(
+    search: Optional[str] = Query(default=None),
+    occupation_id: Optional[int] = Query(default=None),
+    specialization_id: Optional[int] = Query(default=None),
+    county_id: Optional[int] = Query(default=None),
+    city_id: Optional[int] = Query(default=None),
+    role_id: Optional[int] = Query(default=None),
+    is_active: Optional[bool] = Query(default=None),
+    email_verified: Optional[bool] = Query(default=None),
+    subscription_active: Optional[bool] = Query(default=None),
+    gdpr_consent: Optional[bool] = Query(default=None),
+    created_from: Optional[datetime] = Query(default=None),
+    created_to: Optional[datetime] = Query(default=None),
+    sort: str = Query(default="created_at"),
+    direction: str = Query(default="desc"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    _ensure_registration_schema(db)
+    query = (
+        db.query(models.User, models.UserProfile)
+        .outerjoin(models.UserProfile, models.UserProfile.user_id == models.User.id)
+        .outerjoin(models.City, models.City.id == models.UserProfile.city_id)
+        .outerjoin(models.County, models.County.id == models.City.county_id)
+        .outerjoin(models.Occupation, models.Occupation.id == models.UserProfile.occupation_id)
+        .outerjoin(models.Specialization, models.Specialization.id == models.UserProfile.specialization_id)
+        .outerjoin(models.Institution, models.Institution.id == models.UserProfile.institution_id)
+        .options(
+            joinedload(models.UserProfile.city).joinedload(models.City.county),
+            joinedload(models.UserProfile.occupation),
+            joinedload(models.UserProfile.specialization),
+            joinedload(models.UserProfile.institution),
+        )
+    )
+
+    if search:
+        term = f"%{search.strip()}%"
+        query = query.filter(
+            models.User.email.ilike(term)
+            | models.UserProfile.first_name.ilike(term)
+            | models.UserProfile.last_name.ilike(term)
+            | models.UserProfile.phone.ilike(term)
+            | models.UserProfile.cnp.ilike(term)
+            | models.UserProfile.cuim.ilike(term)
+            | models.UserProfile.cod_parafa.ilike(term)
+        )
+    if occupation_id is not None:
+        query = query.filter(models.UserProfile.occupation_id == occupation_id)
+    if specialization_id is not None:
+        query = query.filter(models.UserProfile.specialization_id == specialization_id)
+    if county_id is not None:
+        query = query.filter(models.City.county_id == county_id)
+    if city_id is not None:
+        query = query.filter(models.UserProfile.city_id == city_id)
+    if role_id is not None:
+        query = query.join(models.UserRole, models.UserRole.user_id == models.User.id).filter(models.UserRole.role_id == role_id)
+    if is_active is not None:
+        query = query.filter(models.User.is_active == is_active)
+    if email_verified is not None:
+        query = query.filter(models.User.email_verified_at.isnot(None) if email_verified else models.User.email_verified_at.is_(None))
+    if gdpr_consent is not None:
+        query = query.filter(models.UserProfile.gdpr_consent == gdpr_consent)
+    if created_from is not None:
+        query = query.filter(models.User.created_at >= created_from)
+    if created_to is not None:
+        query = query.filter(models.User.created_at <= created_to)
+    if subscription_active is not None:
+        subquery = (
+            db.query(models.UserSubscription.id)
+            .filter(models.UserSubscription.user_id == models.User.id)
+            .filter(models.UserSubscription.status == models.SubscriptionStatus.active)
+            .exists()
+        )
+        query = query.filter(subquery if subscription_active else ~subquery)
+
+    total = query.count()
+    sort_columns = {
+        "id": models.User.id,
+        "email": models.User.email,
+        "created_at": models.User.created_at,
+        "last_login_at": models.User.last_login_at,
+        "name": models.UserProfile.last_name,
+        "emc": models.UserProfile.total_emc_points,
+    }
+    sort_column = sort_columns.get(sort, models.User.created_at)
+    query = query.order_by(sort_column.asc() if direction == "asc" else sort_column.desc().nullslast())
+    rows = query.offset((page - 1) * page_size).limit(page_size).all()
+    items = [serialize_admin_user_summary(db, user, profile) for user, profile in rows]
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+@app.get("/admin/users/{user_id}")
+def admin_get_user(user_id: int, db: Session = Depends(get_db)):
+    _ensure_registration_schema(db)
+    user = get_admin_user_or_404(db, user_id)
+    return serialize_admin_user_detail(db, user)
+
+
+@app.patch("/admin/users/{user_id}")
+def admin_update_user(user_id: int, payload: AdminUserUpdate, db: Session = Depends(get_db)):
+    _ensure_registration_schema(db)
+    user = get_admin_user_or_404(db, user_id)
+    profile = get_admin_profile_or_404(db, user_id)
+    data = pydantic_dump(payload, exclude_unset=True)
+    old_data = serialize_admin_user_detail(db, user)
+
+    try:
+        if "email" in data and data["email"]:
+            email = data["email"].strip().lower()
+            existing = db.query(models.User).filter(models.User.email == email, models.User.id != user_id).first()
+            if existing is not None:
+                raise HTTPException(status_code=409, detail="Email is already used by another user")
+            user.email = email
+        if "is_active" in data:
+            user.is_active = data["is_active"]
+        if "email_verified" in data:
+            user.email_verified_at = datetime.utcnow() if data["email_verified"] else None
+
+        profile_fields = {
+            "first_name",
+            "last_name",
+            "phone",
+            "correspondence_address",
+            "city_id",
+            "occupation_id",
+            "specialization_id",
+            "specialization_secondary_name",
+            "professional_grade_id",
+            "institution_id",
+            "cuim",
+            "cod_parafa",
+            "professional_registration_code",
+            "titlu_universitar",
+            "acord_email",
+            "acord_sms",
+            "gdpr_consent",
+        }
+        for field in profile_fields:
+            if field in data:
+                setattr(profile, field, data[field])
+        profile.updated_at = datetime.utcnow()
+        user.updated_at = datetime.utcnow()
+
+        if "role_ids" in data and data["role_ids"] is not None:
+            role_ids = sorted({int(item) for item in data["role_ids"] if int(item) > 0})
+            if role_ids:
+                existing_role_ids = {
+                    item.id for item in db.query(models.Role).filter(models.Role.id.in_(role_ids)).all()
+                }
+                missing_role_ids = sorted(set(role_ids) - existing_role_ids)
+                if missing_role_ids:
+                    raise HTTPException(status_code=422, detail=f"Role ids are invalid: {missing_role_ids}")
+            db.query(models.UserRole).filter(models.UserRole.user_id == user_id).delete()
+            for role_id in role_ids:
+                db.add(models.UserRole(user_id=user_id, role_id=role_id))
+
+        if "interest_ids" in data and data["interest_ids"] is not None:
+            interest_ids = _resolve_interest_ids(db, data["interest_ids"])
+            db.query(models.UserProfileInterest).filter(models.UserProfileInterest.user_profile_id == profile.id).delete()
+            db.query(models.UserInterest).filter(models.UserInterest.user_id == user_id).delete()
+            for interest_id in interest_ids:
+                db.add(models.UserProfileInterest(user_profile_id=profile.id, interest_id=interest_id))
+                db.add(models.UserInterest(user_id=user_id, interest_id=interest_id, created_at=datetime.utcnow()))
+
+        admin_audit(db, "users", user_id, "update", old_data=old_data, new_data=data)
+        db.commit()
+        return serialize_admin_user_detail(db, user)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.patch("/admin/users/{user_id}/password")
+def admin_change_user_password(user_id: int, payload: AdminPasswordChange, db: Session = Depends(get_db)):
+    user = get_admin_user_or_404(db, user_id)
+    if not payload.password and not payload.force_reset:
+        raise HTTPException(status_code=422, detail="Password or force_reset is required")
+
+    reset_token = None
+    try:
+        if payload.password:
+            user.password_hash = hash_password(payload.password)
+            user.updated_at = datetime.utcnow()
+        if payload.force_reset:
+            reset_token = create_session_token()
+            db.add(
+                models.UserPasswordReset(
+                    user_id=user_id,
+                    token_hash=hashlib.sha256(reset_token.encode("utf-8")).hexdigest(),
+                    expires_at=datetime.utcnow() + timedelta(hours=24),
+                    created_at=datetime.utcnow(),
+                )
+            )
+        revoked_count = 0
+        if payload.revoke_sessions:
+            revoked_count = (
+                db.query(models.UserSession)
+                .filter(models.UserSession.user_id == user_id)
+                .filter(models.UserSession.revoked_at.is_(None))
+                .update({"revoked_at": datetime.utcnow()}, synchronize_session=False)
+            )
+        admin_audit(
+            db,
+            "users",
+            user_id,
+            "password_change" if payload.password else "password_reset",
+            new_data={"force_reset": payload.force_reset, "revoked_sessions": revoked_count},
+        )
+        db.commit()
+        response = {"success": True, "revoked_sessions": revoked_count}
+        if reset_token:
+            response["reset_token"] = reset_token
+            response["reset_expires_at"] = serialize_value(datetime.utcnow() + timedelta(hours=24))
+        return response
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.post("/admin/users/{user_id}/revoke-sessions")
+def admin_revoke_user_sessions(user_id: int, db: Session = Depends(get_db)):
+    get_admin_user_or_404(db, user_id)
+    revoked_count = (
+        db.query(models.UserSession)
+        .filter(models.UserSession.user_id == user_id)
+        .filter(models.UserSession.revoked_at.is_(None))
+        .update({"revoked_at": datetime.utcnow()}, synchronize_session=False)
+    )
+    admin_audit(db, "users", user_id, "revoke_sessions", new_data={"revoked_sessions": revoked_count})
+    db.commit()
+    return {"success": True, "revoked_sessions": revoked_count}
+
+
+@app.get("/admin/users/{user_id}/sessions")
+def admin_get_user_sessions(user_id: int, db: Session = Depends(get_db)):
+    get_admin_user_or_404(db, user_id)
+    rows = (
+        db.query(models.UserSession)
+        .filter(models.UserSession.user_id == user_id)
+        .order_by(models.UserSession.created_at.desc().nullslast())
+        .all()
+    )
+    return [
+        {
+            **serialize_model(row),
+            "is_active": row.revoked_at is None and row.expires_at > datetime.utcnow(),
+        }
+        for row in rows
+    ]
+
+
+@app.get("/admin/users/{user_id}/activity")
+def admin_get_user_activity(user_id: int, db: Session = Depends(get_db)):
+    get_admin_user_or_404(db, user_id)
+    activity = (
+        db.query(models.UserActivityLog, models.ContentItem)
+        .outerjoin(models.ContentItem, models.ContentItem.id == models.UserActivityLog.content_item_id)
+        .filter(models.UserActivityLog.user_id == user_id)
+        .order_by(models.UserActivityLog.created_at.desc().nullslast())
+        .limit(200)
+        .all()
+    )
+    event_registrations = (
+        db.query(models.UserEventRegistration, models.Event, models.ContentItem)
+        .join(models.Event, models.Event.id == models.UserEventRegistration.event_id)
+        .join(models.ContentItem, models.ContentItem.id == models.Event.content_item_id)
+        .filter(models.UserEventRegistration.user_id == user_id)
+        .order_by(models.UserEventRegistration.registered_at.desc().nullslast())
+        .all()
+    )
+    courses = (
+        db.query(models.UserCourse, models.Course, models.ContentItem)
+        .join(models.Course, models.Course.id == models.UserCourse.course_id)
+        .join(models.ContentItem, models.ContentItem.id == models.Course.content_item_id)
+        .filter(models.UserCourse.user_id == user_id)
+        .order_by(models.UserCourse.enrolled_at.desc().nullslast())
+        .all()
+    )
+    return {
+        "logs": [
+            {
+                **serialize_model(row),
+                "content_title": item.title if item else None,
+                "content_type": serialize_value(item.content_type) if item else None,
+            }
+            for row, item in activity
+        ],
+        "event_registrations": [
+            {
+                **serialize_model(row),
+                "event_id": event.id,
+                "content_item_id": item.id,
+                "title": item.title,
+            }
+            for row, event, item in event_registrations
+        ],
+        "course_progress": [
+            {
+                **serialize_model(row),
+                "course_id": course.id,
+                "content_item_id": item.id,
+                "title": item.title,
+            }
+            for row, course, item in courses
+        ],
+    }
+
+
+@app.get("/admin/users/{user_id}/emc")
+def admin_get_user_emc(user_id: int, db: Session = Depends(get_db)):
+    profile = get_admin_profile_or_404(db, user_id)
+    logs = (
+        db.query(models.UserEmcPointLog)
+        .filter(models.UserEmcPointLog.user_id == user_id)
+        .order_by(models.UserEmcPointLog.awarded_at.desc().nullslast())
+        .all()
+    )
+    certificates = (
+        db.query(models.UserEmcCertificate)
+        .filter(models.UserEmcCertificate.user_id == user_id)
+        .order_by(models.UserEmcCertificate.issued_at.desc().nullslast())
+        .all()
+    )
+    return {
+        "total_emc_points": profile.total_emc_points,
+        "logs": [serialize_model(row) for row in logs],
+        "certificates": [serialize_model(row) for row in certificates],
+    }
+
+
+@app.get("/admin/users/{user_id}/subscriptions")
+def admin_get_user_subscriptions(user_id: int, db: Session = Depends(get_db)):
+    get_admin_user_or_404(db, user_id)
+    rows = (
+        db.query(models.UserSubscription, models.SubscriptionPlan)
+        .join(models.SubscriptionPlan, models.SubscriptionPlan.id == models.UserSubscription.subscription_plan_id)
+        .filter(models.UserSubscription.user_id == user_id)
+        .order_by(models.UserSubscription.created_at.desc().nullslast())
+        .all()
+    )
+    return [
+        {
+            **serialize_model(subscription),
+            "plan": serialize_model(plan),
+            "plan_name": plan.name,
+        }
+        for subscription, plan in rows
+    ]
+
+
+@app.post("/admin/users/{user_id}/subscriptions")
+def admin_create_user_subscription(user_id: int, payload: AdminSubscriptionCreate, db: Session = Depends(get_db)):
+    get_admin_user_or_404(db, user_id)
+    plan = db.query(models.SubscriptionPlan).filter(models.SubscriptionPlan.id == payload.subscription_plan_id).first()
+    if plan is None:
+        raise HTTPException(status_code=422, detail="Subscription plan id is invalid")
+    subscription = models.UserSubscription(
+        user_id=user_id,
+        subscription_plan_id=payload.subscription_plan_id,
+        start_date=payload.start_date or datetime.utcnow(),
+        end_date=payload.end_date,
+        status=enum_value(models.SubscriptionStatus, payload.status, "status"),
+        auto_renew=payload.auto_renew,
+        created_at=datetime.utcnow(),
+    )
+    db.add(subscription)
+    db.flush()
+    admin_audit(db, "user_subscriptions", subscription.id, "create", new_data=pydantic_dump(payload))
+    db.commit()
+    return serialize_model(subscription)
+
+
+@app.patch("/admin/users/{user_id}/subscriptions/{subscription_id}")
+def admin_update_user_subscription(
+    user_id: int,
+    subscription_id: int,
+    payload: AdminSubscriptionUpdate,
+    db: Session = Depends(get_db),
+):
+    get_admin_user_or_404(db, user_id)
+    subscription = (
+        db.query(models.UserSubscription)
+        .filter(models.UserSubscription.id == subscription_id)
+        .filter(models.UserSubscription.user_id == user_id)
+        .first()
+    )
+    if subscription is None:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    old_data = serialize_model(subscription)
+    data = pydantic_dump(payload, exclude_unset=True)
+    if "subscription_plan_id" in data:
+        plan = db.query(models.SubscriptionPlan).filter(models.SubscriptionPlan.id == data["subscription_plan_id"]).first()
+        if plan is None:
+            raise HTTPException(status_code=422, detail="Subscription plan id is invalid")
+    if "status" in data:
+        data["status"] = enum_value(models.SubscriptionStatus, data["status"], "status")
+    for key, value in data.items():
+        setattr(subscription, key, value)
+    admin_audit(db, "user_subscriptions", subscription.id, "update", old_data=old_data, new_data=pydantic_dump(payload, exclude_unset=True))
+    db.commit()
+    return serialize_model(subscription)
+
+
+@app.get("/admin/users/{user_id}/payments")
+def admin_get_user_payments(user_id: int, db: Session = Depends(get_db)):
+    get_admin_user_or_404(db, user_id)
+    rows = (
+        db.query(models.Payment)
+        .filter(models.Payment.user_id == user_id)
+        .order_by(models.Payment.created_at.desc().nullslast())
+        .all()
+    )
+    return [serialize_model(row) for row in rows]
+
+
+@app.get("/admin/users/{user_id}/saved-content")
+def admin_get_user_saved_content(user_id: int, db: Session = Depends(get_db)):
+    get_admin_user_or_404(db, user_id)
+    rows = (
+        db.query(models.SavedContent, models.ContentItem)
+        .join(models.ContentItem, models.ContentItem.id == models.SavedContent.content_item_id)
+        .filter(models.SavedContent.user_id == user_id)
+        .order_by(models.SavedContent.saved_at.desc().nullslast())
+        .all()
+    )
+    return [
+        {
+            **serialize_model(saved),
+            "content": serialize_admin_specialized_content_item(item),
+            "content_title": item.title,
+            "content_type": serialize_value(item.content_type),
+        }
+        for saved, item in rows
+    ]
+
+
+@app.delete("/admin/users/{user_id}/saved-content/{saved_id}")
+def admin_delete_user_saved_content(user_id: int, saved_id: int, db: Session = Depends(get_db)):
+    saved = (
+        db.query(models.SavedContent)
+        .filter(models.SavedContent.id == saved_id)
+        .filter(models.SavedContent.user_id == user_id)
+        .first()
+    )
+    if saved is None:
+        raise HTTPException(status_code=404, detail="Saved content not found")
+    old_data = serialize_model(saved)
+    db.delete(saved)
+    admin_audit(db, "saved_content", saved_id, "delete", old_data=old_data)
+    db.commit()
+    return {"success": True}
 
 
 def update_course_details(db_course: models.Course, details: CourseDetailsPayload):
