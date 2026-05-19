@@ -718,6 +718,15 @@ td {
     color: #B91C1C;
 }
 
+.btn-destructive {
+    background: #DC2626;
+    color: #FFFFFF;
+}
+
+.btn-destructive:hover {
+    background: #B91C1C;
+}
+
 .btn:disabled {
     cursor: not-allowed;
     opacity: 0.55;
@@ -894,6 +903,113 @@ td {
     margin-bottom: 18px;
 }
 
+.danger-zone-panel {
+    align-items: flex-start;
+    background: #FFF7F7;
+    border: 1px solid #FECACA;
+    border-radius: 14px;
+    display: flex;
+    gap: 18px;
+    justify-content: space-between;
+    margin-bottom: 18px;
+    padding: 20px;
+}
+
+.danger-zone-panel h4 {
+    color: #991B1B;
+    margin: 4px 0 8px;
+}
+
+.danger-zone-panel p,
+.danger-zone-note p {
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin: 0;
+}
+
+.danger-zone-eyebrow,
+.modal-kicker {
+    color: #B91C1C;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.modal-backdrop {
+    align-items: center;
+    background: rgba(15, 23, 42, 0.42);
+    bottom: 0;
+    display: none;
+    justify-content: center;
+    left: 0;
+    padding: 24px;
+    position: fixed;
+    right: 0;
+    top: 0;
+    z-index: 90;
+}
+
+.modal-backdrop.open {
+    display: flex;
+}
+
+.confirm-modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+    max-width: 500px;
+    padding: 24px;
+    width: min(500px, 100%);
+}
+
+.destructive-modal {
+    border-color: #FECACA;
+}
+
+.confirm-modal h3 {
+    margin: 8px 0 10px;
+}
+
+.confirm-modal p {
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin: 0 0 16px;
+}
+
+.delete-user-summary {
+    background: #FEF2F2;
+    border: 1px solid #FECACA;
+    border-radius: 12px;
+    display: grid;
+    gap: 4px;
+    margin-bottom: 18px;
+    padding: 12px;
+}
+
+.delete-user-summary span {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.modal-error {
+    background: #FEF2F2;
+    border: 1px solid #FECACA;
+    border-radius: 10px;
+    color: #B91C1C;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    padding: 10px 12px;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
 .metric-strip {
     display: grid;
     gap: 12px;
@@ -955,6 +1071,12 @@ td {
 
     .table-toolbar,
     .pagination-bar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .danger-zone-panel,
+    .modal-actions {
         align-items: stretch;
         flex-direction: column;
     }

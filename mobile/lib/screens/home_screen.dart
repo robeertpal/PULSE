@@ -51,6 +51,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _filtersExpanded = false;
   int _contentRequestId = 0;
   String? _errorMessage;
+  String _doctorName = 'Medic';
 
   static const int _sectionCount = 10;
   static const List<String> _homeAdPlacements = [
@@ -100,6 +101,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _loadData();
     _loadFilterOptions();
     _loadSavedContentIds();
+    _loadDoctorName();
+  }
+
+  Future<void> _loadDoctorName() async {
+    // 1. Încărcăm numele din cache (AuthStorage) pentru afișare instantanee
+    final cachedName = await _authStorage.getUserName();
+    if (cachedName != null && cachedName.trim().isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _doctorName = cachedName;
+        });
+      }
+    }
+
+    // 2. Interogăm profilul din API pentru a asigura sincronizarea numelui la zi
+    try {
+      final profileData = await _apiService.getMyProfile();
+      final freshName = profileData['display_name'] as String?;
+      if (freshName != null && freshName.trim().isNotEmpty) {
+        await _authStorage.saveUserName(freshName.trim());
+        if (mounted) {
+          setState(() {
+            _doctorName = freshName.trim();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Eroare la obținerea numelui medicului din API: $e');
+    }
   }
 
   List<int> get _categoryFilterIds => _selectedCategoryIds.toList()..sort();
@@ -1150,7 +1180,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             _animatedSection(
               0,
               HomeHeader(
-                doctorName: 'Andrei',
+                doctorName: _doctorName,
                 avatarUrl: '',
                 onSavedTap: _openSavedContent,
                 onProfileTap: _openProfile,

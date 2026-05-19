@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../services/api_service.dart';
 import '../widgets/auth_shell.dart';
+import '../widgets/otp_code_input.dart';
 import 'login_screen.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
@@ -16,33 +16,59 @@ class EmailVerificationScreen extends StatefulWidget {
 }
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
-  final _codeController = TextEditingController();
   final _apiService = ApiService();
+  final _emailController = TextEditingController();
 
   bool _isSubmitting = false;
   bool _isResending = false;
+  bool _isEditingEmail = false;
+  int _otpInputVersion = 0;
+  String _currentEmail = '';
+  String _otpCode = '';
+  String? _otpErrorText;
+  String? _emailErrorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentEmail = widget.email.trim();
+    _emailController.text = _currentEmail;
+  }
 
   @override
   void dispose() {
-    _codeController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
+  bool _isValidEmail(String email) {
+    return email.contains('@') && email.contains('.') && email.length >= 5;
+  }
+
+  void _resetOtp() {
+    setState(() {
+      _otpInputVersion += 1;
+      _otpCode = '';
+      _otpErrorText = null;
+    });
+  }
+
   Future<void> _verifyCode() async {
-    final code = _codeController.text.trim();
+    final code = _otpCode.trim();
     if (code.length != 6 || !RegExp(r'^\d{6}$').hasMatch(code)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Introdu codul de 6 cifre din email.')),
-      );
+      setState(() {
+        _otpErrorText = 'Introdu codul de 6 cifre din email.';
+      });
       return;
     }
 
     setState(() {
       _isSubmitting = true;
+      _otpErrorText = null;
     });
 
     try {
-      await _apiService.verifyEmailOtp(email: widget.email, otpCode: code);
+      await _apiService.verifyEmailOtp(email: _currentEmail, otpCode: code);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Email confirmat cu succes.')),
@@ -53,9 +79,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      setState(() {
+        _otpErrorText = e.toString().replaceFirst('Exception: ', '');
+      });
     } finally {
       if (mounted) {
         setState(() {
@@ -65,17 +91,20 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     }
   }
 
-  Future<void> _resendCode() async {
+  Future<void> _resendCode({String? emailOverride}) async {
+    final targetEmail = (emailOverride ?? _currentEmail).trim();
     setState(() {
       _isResending = true;
+      _otpErrorText = null;
     });
 
     try {
-      await _apiService.resendEmailOtp(email: widget.email);
+      await _apiService.resendEmailOtp(email: targetEmail);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Am trimis un cod nou pe email.')),
       );
+      _resetOtp();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -90,36 +119,167 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     }
   }
 
-  InputDecoration _codeDecoration() {
+  Future<void> _saveChangedEmail() async {
+    final newEmail = _emailController.text.trim();
+    if (!_isValidEmail(newEmail)) {
+      setState(() {
+        _emailErrorText = 'Introdu o adresă de email validă.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isResending = true;
+      _emailErrorText = null;
+    });
+
+    try {
+      await _apiService.resendEmailOtp(email: newEmail);
+      if (!mounted) return;
+      setState(() {
+        _currentEmail = newEmail;
+        _isEditingEmail = false;
+      });
+      _resetOtp();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Am trimis codul pe noua adresă.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _emailErrorText = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isResending = false;
+        });
+      }
+    }
+  }
+
+  InputDecoration _emailDecoration() {
     return InputDecoration(
-      hintText: 'Cod verificare',
+      hintText: 'Email',
       floatingLabelBehavior: FloatingLabelBehavior.never,
-      prefixIcon: const Icon(
-        Icons.numbers_rounded,
-        color: AuthShell.pulsePurple,
-        size: 21,
-      ),
-      prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 56),
       filled: true,
       fillColor: AuthShell.fieldFill,
-      contentPadding: const EdgeInsets.fromLTRB(18, 19, 18, 19),
+      contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      errorText: _emailErrorText,
       hintStyle: const TextStyle(
         color: AuthShell.textSecondary,
         fontWeight: FontWeight.w600,
-        height: 1.2,
       ),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide.none,
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(20),
-        borderSide: const BorderSide(color: AuthShell.pulseOrange, width: 1.4),
+        borderRadius: BorderRadius.circular(18),
+        borderSide: const BorderSide(color: AuthShell.pulsePurple, width: 1.4),
       ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: Colors.red.shade300, width: 1.2),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: Colors.red.shade400, width: 1.3),
+      ),
+    );
+  }
+
+  Widget _emailSummary() {
+    if (_isEditingEmail) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.done,
+            cursorColor: AuthShell.pulsePurple,
+            style: const TextStyle(
+              color: AuthShell.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+            decoration: _emailDecoration(),
+            onSubmitted: (_) => _isResending ? null : _saveChangedEmail(),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: _isResending
+                      ? null
+                      : () {
+                          setState(() {
+                            _emailController.text = _currentEmail;
+                            _emailErrorText = null;
+                            _isEditingEmail = false;
+                          });
+                        },
+                  child: const Text('Renunță'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _isResending ? null : _saveChangedEmail,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AuthShell.pulsePurple,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: Text(_isResending ? 'Se trimite...' : 'Retrimite'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 6,
+      runSpacing: 2,
+      children: [
+        Text(
+          'Am trimis codul la $_currentEmail',
+          style: const TextStyle(
+            color: AuthShell.textSecondary,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            height: 1.25,
+          ),
+        ),
+        TextButton(
+          onPressed: _isSubmitting || _isResending
+              ? null
+              : () {
+                  setState(() {
+                    _emailController.text = _currentEmail;
+                    _emailErrorText = null;
+                    _isEditingEmail = true;
+                  });
+                },
+          style: TextButton.styleFrom(
+            foregroundColor: AuthShell.pulsePurple,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: const Text(
+            'Schimbă emailul',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ),
+      ],
     );
   }
 
@@ -148,27 +308,24 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
-                            widget.email,
-                            style: const TextStyle(
-                              color: AuthShell.textSecondary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          TextField(
-                            controller: _codeController,
-                            keyboardType: TextInputType.number,
-                            textInputAction: TextInputAction.done,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(6),
-                            ],
-                            decoration: _codeDecoration(),
+                          _emailSummary(),
+                          const SizedBox(height: 22),
+                          OtpCodeInput(
+                            key: ValueKey(_otpInputVersion),
+                            errorText: _otpErrorText,
+                            enabled: !_isSubmitting,
+                            autofocus: true,
+                            onChanged: (code) {
+                              setState(() {
+                                _otpCode = code;
+                                if (_otpErrorText != null) {
+                                  _otpErrorText = null;
+                                }
+                              });
+                            },
                             onSubmitted: (_) => _verifyCode(),
                           ),
-                          const SizedBox(height: 18),
+                          const SizedBox(height: 20),
                           SizedBox(
                             height: 54,
                             child: FilledButton(

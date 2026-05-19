@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../services/api_service.dart';
 import '../services/auth_storage.dart';
@@ -14,6 +15,12 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const _backIcon = 'assets/icons/arrow.backward.svg';
+  static const _emailIcon = 'assets/icons/envelope.fill.svg';
+  static const _passwordIcon = 'assets/icons/key.fill.svg';
+  static const _eyeIcon = 'assets/icons/eye.fill.svg';
+  static const _eyeSlashIcon = 'assets/icons/eye.slash.fill.svg';
+
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -21,6 +28,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _authStorage = AuthStorage();
 
   bool _isSubmitting = false;
+  bool _showPassword = false;
 
   @override
   void dispose() {
@@ -79,6 +87,17 @@ class _LoginScreenState extends State<LoginScreen> {
         email: email,
       );
 
+      // Pre-fetch and cache user name for immediate display on HomeScreen
+      try {
+        final profileData = await _apiService.getMyProfile();
+        final name = profileData['display_name'] as String?;
+        if (name != null && name.trim().isNotEmpty) {
+          await _authStorage.saveUserName(name.trim());
+        }
+      } catch (e) {
+        debugPrint('Failed to pre-fetch profile name on login: $e');
+      }
+
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
@@ -98,12 +117,66 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  InputDecoration _fieldDecoration(String hint, IconData icon) {
+  Widget _svgIcon(String asset, {double size = 21, Color? color}) {
+    return SvgPicture.asset(
+      asset,
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(
+        color ?? AuthShell.pulsePurple,
+        BlendMode.srcIn,
+      ),
+    );
+  }
+
+  Widget _decorativeIconSlot(String asset) {
+    return SizedBox(
+      width: 48,
+      height: 56,
+      child: Center(child: _svgIcon(asset, size: 21)),
+    );
+  }
+
+  Widget _passwordVisibilityButton() {
+    return SizedBox(
+      width: 48,
+      height: 56,
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 48, height: 56),
+        icon: Opacity(
+          opacity: 0.62,
+          child: _svgIcon(
+            _showPassword ? _eyeSlashIcon : _eyeIcon,
+            size: 20,
+            color: AuthShell.pulsePurple,
+          ),
+        ),
+        onPressed: () => setState(() => _showPassword = !_showPassword),
+      ),
+    );
+  }
+
+  InputDecoration _fieldDecoration(
+    String hint,
+    String iconAsset, {
+    Widget? suffixIcon,
+  }) {
     return InputDecoration(
       hintText: hint,
       floatingLabelBehavior: FloatingLabelBehavior.never,
-      prefixIcon: Icon(icon, color: AuthShell.pulsePurple, size: 21),
-      prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 56),
+      prefixIcon: _decorativeIconSlot(iconAsset),
+      prefixIconConstraints: const BoxConstraints(
+        minWidth: 48,
+        maxWidth: 48,
+        minHeight: 56,
+      ),
+      suffixIcon: suffixIcon,
+      suffixIconConstraints: const BoxConstraints(
+        minWidth: 48,
+        maxWidth: 48,
+        minHeight: 56,
+      ),
       filled: true,
       fillColor: AuthShell.fieldFill,
       isDense: false,
@@ -155,7 +228,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       alignment: Alignment.centerLeft,
                       child: IconButton.filledTonal(
                         onPressed: () => Navigator.of(context).maybePop(),
-                        icon: const Icon(Icons.arrow_back_rounded),
+                        icon: _svgIcon(
+                          _backIcon,
+                          size: 22,
+                          color: Colors.white,
+                        ),
                         color: Colors.white,
                         style: IconButton.styleFrom(
                           backgroundColor: Colors.white.withValues(alpha: 0.16),
@@ -180,24 +257,36 @@ class _LoginScreenState extends State<LoginScreen> {
                             TextFormField(
                               controller: _emailController,
                               keyboardType: TextInputType.emailAddress,
+                              cursorColor: AuthShell.pulsePurple,
+                              style: const TextStyle(
+                                color: AuthShell.textPrimary,
+                                fontSize: 15,
+                                height: 1.2,
+                                fontWeight: FontWeight.w600,
+                              ),
                               validator: _emailValidator,
                               autovalidateMode:
                                   AutovalidateMode.onUserInteraction,
-                              decoration: _fieldDecoration(
-                                'Email',
-                                Icons.mail_outline_rounded,
-                              ),
+                              decoration: _fieldDecoration('Email', _emailIcon),
                             ),
                             const SizedBox(height: 14),
                             TextFormField(
                               controller: _passwordController,
-                              obscureText: true,
+                              obscureText: !_showPassword,
+                              cursorColor: AuthShell.pulsePurple,
+                              style: const TextStyle(
+                                color: AuthShell.textPrimary,
+                                fontSize: 15,
+                                height: 1.2,
+                                fontWeight: FontWeight.w600,
+                              ),
                               validator: _passwordValidator,
                               autovalidateMode:
                                   AutovalidateMode.onUserInteraction,
                               decoration: _fieldDecoration(
                                 'Parolă',
-                                Icons.lock_outline_rounded,
+                                _passwordIcon,
+                                suffixIcon: _passwordVisibilityButton(),
                               ),
                             ),
                             const SizedBox(height: 24),
