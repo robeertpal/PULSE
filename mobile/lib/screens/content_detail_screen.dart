@@ -31,9 +31,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   static const String _checkIcon = 'assets/icons/checkmark.svg';
   static const String _courseIcon = 'assets/icons/graduation.svg';
   static const String _eventIcon = 'assets/icons/events.svg';
-  static const String _globeIcon = 'assets/icons/globe.svg';
   static const String _newsIcon = 'assets/icons/newspaper.svg';
-  static const String _paymentIcon = 'assets/icons/creditcard.svg';
   static const String _calendarIcon = 'assets/icons/calendar.svg';
   static const String _eyeglassesIcon = 'assets/icons/eyeglasses.svg';
   static const String _buildingIcon = 'assets/icons/building.svg';
@@ -864,7 +862,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           Expanded(
             child: Text(
               [
-                if (date != null) date,
+                ?date,
                 '${_readingMinutes(item)} min citire',
               ].join(' • '),
               style: const TextStyle(
@@ -876,40 +874,6 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildDetailChips(List<_DetailInfo> items) {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: items
-          .map(
-            (item) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: item.accent.withValues(alpha: 0.07),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: item.accent.withValues(alpha: 0.11)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildAssetIcon(item.iconAsset, color: item.accent, size: 15),
-                  const SizedBox(width: 8),
-                  Text(
-                    item.value,
-                    style: const TextStyle(
-                      color: PulseTheme.textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-          .toList(),
     );
   }
 
@@ -1306,15 +1270,6 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(backgroundColor: PulseTheme.background, body: _buildBody());
   }
-}
-
-class _DetailInfo {
-  final String iconAsset;
-  final String label;
-  final String value;
-  final Color accent;
-
-  const _DetailInfo(this.iconAsset, this.label, this.value, this.accent);
 }
 
 class _EventPartnerCarousel extends StatefulWidget {

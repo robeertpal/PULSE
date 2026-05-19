@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../services/auth_storage.dart';
-import '../theme/pulse_theme.dart';
+import '../widgets/auth_shell.dart';
 import 'home_screen.dart';
 import 'register_page.dart';
 
@@ -98,23 +98,42 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  InputDecoration _fieldDecoration(String label) {
+  InputDecoration _fieldDecoration(String hint, IconData icon) {
     return InputDecoration(
-      labelText: label,
+      hintText: hint,
+      floatingLabelBehavior: FloatingLabelBehavior.never,
+      prefixIcon: Icon(icon, color: AuthShell.pulsePurple, size: 21),
+      prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 56),
       filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      fillColor: AuthShell.fieldFill,
+      isDense: false,
+      contentPadding: const EdgeInsets.fromLTRB(18, 19, 18, 19),
+      errorMaxLines: 3,
+      hintStyle: const TextStyle(
+        color: AuthShell.textSecondary,
+        fontWeight: FontWeight.w600,
+        height: 1.2,
+      ),
+      errorStyle: const TextStyle(height: 1.25),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: PulseTheme.border),
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: PulseTheme.border),
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: PulseTheme.primary, width: 1.5),
+        borderRadius: BorderRadius.circular(20),
+        borderSide: const BorderSide(color: AuthShell.pulseOrange, width: 1.4),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: Colors.red.shade300, width: 1.2),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: Colors.red.shade400, width: 1.3),
       ),
     );
   }
@@ -122,117 +141,97 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: PulseTheme.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 44),
-                Center(
-                  child: Image.asset(
-                    'assets/images/in-app-logo.png',
-                    height: 80,
-                  ),
-                ),
-                const SizedBox(height: 40),
-                const Text(
-                  'Bun venit în Pulse',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: PulseTheme.textPrimary,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Autentifică-te pentru a continua către feed și profil.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: PulseTheme.textSecondary,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  validator: _emailValidator,
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  decoration: _fieldDecoration('Email'),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  validator: _passwordValidator,
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  decoration: _fieldDecoration('Parolă'),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submitLogin,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: PulseTheme.primary,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                  ),
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Autentificare',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
+      body: AuthShell.background(
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(22),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 430),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton.filledTonal(
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        icon: const Icon(Icons.arrow_back_rounded),
+                        color: Colors.white,
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.16),
                         ),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  onPressed: _isSubmitting
-                      ? null
-                      : () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const RegisterPage(),
+                      ),
+                    ),
+                    const SizedBox(height: 34),
+                    const AuthHeaderText(
+                      title: 'Bine ai revenit',
+                      subtitle:
+                          'Autentifică-te pentru a continua experiența ta medicală personalizată.',
+                      light: true,
+                      align: TextAlign.left,
+                    ),
+                    const SizedBox(height: 30),
+                    FrostedAuthCard(
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            TextFormField(
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              validator: _emailValidator,
+                              autovalidateMode:
+                                  AutovalidateMode.onUserInteraction,
+                              decoration: _fieldDecoration(
+                                'Email',
+                                Icons.mail_outline_rounded,
+                              ),
                             ),
-                          );
-                        },
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: PulseTheme.primary),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _passwordController,
+                              obscureText: true,
+                              validator: _passwordValidator,
+                              autovalidateMode:
+                                  AutovalidateMode.onUserInteraction,
+                              decoration: _fieldDecoration(
+                                'Parolă',
+                                Icons.lock_outline_rounded,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            AuthPrimaryButton(
+                              label: 'Intră în cont',
+                              isLoading: _isSubmitting,
+                              onPressed: _submitLogin,
+                            ),
+                            const SizedBox(height: 18),
+                            TextButton(
+                              onPressed: _isSubmitting
+                                  ? null
+                                  : () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => const RegisterPage(),
+                                        ),
+                                      );
+                                    },
+                              child: const Text(
+                                'Nu ai cont? Creează unul',
+                                style: TextStyle(
+                                  color: AuthShell.pulsePurple,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                  child: const Text(
-                    'Creează cont nou',
-                    style: TextStyle(
-                      color: PulseTheme.primary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 32),
-              ],
+              ),
             ),
           ),
         ),

@@ -1,18 +1,39 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import '../utils/validators.dart' as validators;
 
 import '../services/api_service.dart';
 import '../services/auth_storage.dart';
 import '../theme/pulse_theme.dart';
+import '../utils/validators.dart' as validators;
+import '../widgets/auth_shell.dart';
+import 'email_verification_screen.dart';
 
 class _OptionItem {
-  const _OptionItem({required this.id, required this.name, this.countyId});
+  const _OptionItem({
+    required this.id,
+    required this.name,
+    this.countyId,
+    this.cityId,
+  });
 
   final int id;
   final String name;
   final int? countyId;
+  final int? cityId;
+
+  factory _OptionItem.fromJson(Map<String, dynamic> json) {
+    return _OptionItem(
+      id: (json['id'] as num).toInt(),
+      name: (json['name'] ?? '').toString(),
+      countyId: json['county_id'] is num
+          ? (json['county_id'] as num).toInt()
+          : null,
+      cityId: json['city_id'] is num ? (json['city_id'] as num).toInt() : null,
+    );
+  }
 }
 
 class _ProfessionalRule {
@@ -22,7 +43,7 @@ class _ProfessionalRule {
     this.requiresRegistrationCode = false,
     this.requiresSecondarySpecialization = false,
     this.requiresTitluUniversitar = false,
-    this.registrationCodeLabel = 'Cod înregistrare',
+    this.registrationCodeLabel = 'Cod profesional',
   });
 
   final bool requiresCuim;
@@ -46,46 +67,46 @@ class _RegisterPageState extends State<RegisterPage> {
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _cnpController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _cityIdController = TextEditingController();
-  final _occupationIdController = TextEditingController(text: '1');
-  final _specializationIdController = TextEditingController();
+  final _addressController = TextEditingController();
   final _cuimController = TextEditingController();
   final _codParafaController = TextEditingController();
   final _professionalCodeController = TextEditingController();
-  final _secondarySpecializationController = TextEditingController();
 
+  bool _showPassword = false;
+  bool _showConfirmPassword = false;
   bool _acordEmail = false;
   bool _acordSms = false;
-  bool _isSubmitting = false;
+  bool _gdprConsent = false;
   bool _isLoadingOptions = false;
+  bool _isSubmitting = false;
   int _currentStep = 0;
+  String _phonePrefix = '+40';
+  String? _loadError;
+  String? _selectedTitluUniversitar;
 
   List<_OptionItem> _counties = const [];
   List<_OptionItem> _cities = const [];
   List<_OptionItem> _occupations = const [];
   List<_OptionItem> _specializations = const [];
   List<_OptionItem> _professionalGrades = const [];
+  List<_OptionItem> _institutions = const [];
+  List<_OptionItem> _interests = const [];
 
-  static const List<String> _defaultOccupationNames = [
-    'Medic',
-    'Farmacist',
-    'Asistent',
-    'Medic Veterinar',
-    'Student',
-    'Medic Rezident',
-    'Pensionar',
-    'Psiholog',
-    'Alta ocupatie',
-    'Nutritionist-Dietetician',
-    'Stomatolog',
-  ];
+  int? _selectedCountyId;
+  int? _selectedCityId;
+  int? _selectedOccupationId;
+  int? _selectedSpecializationId;
+  int? _selectedSecondarySpecializationId;
+  int? _selectedProfessionalGradeId;
+  int? _selectedInstitutionId;
+  final Set<int> _selectedInterestIds = {};
 
-  // Titluri universitare (must match backend ACADEMIC_TITLES)
-  final List<String> _titluriUniversitare = [
+  static const List<String> _titluriUniversitare = [
     'Fără titlu universitar',
     'Asistent universitar',
     'Preparator universitar',
@@ -95,251 +116,15 @@ class _RegisterPageState extends State<RegisterPage> {
     'Altul',
   ];
 
-  String? _selectedTitluUniversitar;
-  static const List<String> _defaultSpecializationNames = [
-    'Alergologie',
-    'Anatomie patologica',
-    'Anestezie si terapie intensiva',
-    'Asistent de farmacie',
-    'Asistent medical',
-    'Balneofizioterapie',
-    'Boli infectioase',
-    'Cardiologie',
-    'Chirurgie cardiovasculara',
-    'Chirurgie generala',
-    'Chirurgie pediatrica',
-    'Chirurgie maxilofaciala',
-    'Chirurgie plastica',
-    'Chirurgie toracica',
-    'Chirurgie vasculara',
-    'Dermato-venerologie',
-    'Diabetologie/Nutritie si Boli Metabolice',
-    'Ecografie',
-    'Endocrinologie',
-    'Epidemiologie',
-    'Expertiza medicala',
-    'Farmacie',
-    'Farmacologie Clinica',
-    'Fiziokinetoterapie/Recuperare medicala',
-    'Gastroenterologie',
-    'Genetica medicala',
-    'Geriatrie si gerontologie',
-    'Hematologie',
-    'Homeopatie',
-    'Igiena si sanatate publica',
-    'Imunologie clinica',
-    'Medicina de familie',
-    'Medicina de intreprindere',
-    'Medicina de laborator',
-    'Medicina de urgenta',
-    'Medicina fizica si de reabilitare',
-    'Medicina generala',
-    'Medicina interna',
-    'Medicina legala',
-    'Medicina muncii',
-    'Medicina nucleara',
-    'Medicina scolara',
-    'Medicina sportiva',
-    'Medicina veterinara',
-    'Nefrologie',
-    'Neonatologie',
-    'Neurochirurgie',
-    'Neurologie',
-    'Neurologie pediatrica',
-    'Obstetrica-Ginecologie',
-    'Oftalmologie',
-    'Oncologie',
-    'ORL',
-    'Ortopedie pediatrica',
-    'Ortopedie si traumatologie',
-    'Pediatrie',
-    'Planificare Familiala',
-    'Pneumologie',
-    'Psihiatrie',
-    'Psihiatrie pediatrica',
-    'Psihologie medicala',
-    'Radiologie si imagistica medicala',
-    'Radioterapie',
-    'Reumatologie',
-    'Sanatate publica',
-    'Stomatologie',
-    'Urologie',
-  ];
-
-  int? _selectedCountyId;
-  int? _selectedCityId;
-  int? _selectedOccupationId;
-  int? _selectedSpecializationId;
-  int? _selectedSecondarySpecializationId;
-  int? _selectedProfessionalGradeId;
-
-  // manual county/city entry removed per UX request
-
-  static String get _registerUrl => '${ApiService.baseUrl}/api/register';
   static String get _countiesUrl => '${ApiService.baseUrl}/counties';
   static String get _citiesUrl => '${ApiService.baseUrl}/cities';
   static String get _occupationsUrl => '${ApiService.baseUrl}/occupations';
-  static String get _specializationsUrl => '${ApiService.baseUrl}/specializations';
-  static String get _professionalGradesUrl => '${ApiService.baseUrl}/professional-grades';
-
-  List<_OptionItem> get _filteredCities {
-    if (_selectedCountyId == null) {
-      return const [];
-    }
-    return _cities.where((city) => city.countyId == _selectedCountyId).toList();
-  }
-
-  _OptionItem? get _selectedOccupation {
-    if (_selectedOccupationId == null) return null;
-    for (final item in _occupations) {
-      if (item.id == _selectedOccupationId) {
-        return item;
-      }
-    }
-    return null;
-  }
-
-  _OptionItem? get _selectedSpecialization {
-    if (_selectedSpecializationId == null) return null;
-    for (final item in _specializations) {
-      if (item.id == _selectedSpecializationId) {
-        return item;
-      }
-    }
-    return null;
-  }
-
-  _OptionItem? get _selectedSecondarySpecialization {
-    if (_selectedSecondarySpecializationId == null) return null;
-    for (final item in _specializations) {
-      if (item.id == _selectedSecondarySpecializationId) {
-        return item;
-      }
-    }
-    return null;
-  }
-
-  _OptionItem? get _selectedProfessionalGrade {
-    if (_selectedProfessionalGradeId == null) return null;
-    for (final item in _professionalGrades) {
-      if (item.id == _selectedProfessionalGradeId) {
-        return item;
-      }
-    }
-    return null;
-  }
-
-  int? _optionIdByName(List<_OptionItem> items, String name) {
-    for (final item in items) {
-      if (item.name.toLowerCase() == name.toLowerCase()) {
-        return item.id;
-      }
-    }
-    return null;
-  }
-
-  List<_OptionItem> get _filteredSpecializations {
-    final occupationName = _selectedOccupation?.name.toLowerCase() ?? '';
-    if (occupationName.contains('asistent')) {
-      return _specializations
-          .where((item) =>
-              item.name == 'Asistent medical' ||
-              item.name == 'Asistent de farmacie' ||
-              item.name == 'Fiziokinetoterapie/Recuperare medicala')
-          .toList();
-    }
-    if (occupationName.contains('farmacist')) {
-      return _specializations
-          .where((item) =>
-              item.name == 'Farmacie' ||
-              item.name == 'Farmacologie Clinica' ||
-              item.name == 'Homeopatie')
-          .toList();
-    }
-    if (occupationName.contains('veterinar')) {
-      return _specializations.where((item) => item.name == 'Medicina veterinara').toList();
-    }
-    if (occupationName.contains('psiholog')) {
-      return _specializations.where((item) => item.name == 'Psihologie medicala').toList();
-    }
-    if (occupationName.contains('nutritionist')) {
-      return _specializations
-          .where((item) =>
-              item.name == 'Diabetologie/Nutritie si Boli Metabolice' ||
-              item.name == 'Sanatate publica')
-          .toList();
-    }
-    if (occupationName.contains('stomatolog')) {
-      return _specializations
-          .where((item) =>
-              item.name == 'Stomatologie' || item.name == 'Chirurgie maxilofaciala')
-          .toList();
-    }
-    return _specializations;
-  }
-
-  List<_OptionItem> get _filteredSecondarySpecializations {
-    final selectedPrimaryId = _selectedSpecializationId;
-    return _filteredSpecializations
-        .where((item) => item.id != selectedPrimaryId)
-        .toList();
-  }
-
-  _ProfessionalRule get _professionalRule {
-    final occupationName = (_selectedOccupation?.name ?? '').toLowerCase();
-    final specializationName = (_selectedSpecialization?.name ?? '').toLowerCase();
-
-    final isDoctor = occupationName.contains('medic');
-    final isVeterinary = occupationName.contains('veterinar');
-    final isPharmacist = occupationName.contains('farmacist');
-    final isPsychologist = occupationName.contains('psiholog');
-    final isNurse = occupationName.contains('asistent');
-
-    if (occupationName.isEmpty) return const _ProfessionalRule();
-
-    // Medic (excluding veterinari): CUIM, Cod parafă, Specializare secundară, Titlu Universitar
-    if (occupationName.contains('medic') && !occupationName.contains('veterinar')) {
-      return const _ProfessionalRule(
-        requiresCuim: true,
-        requiresCodParafa: true,
-        requiresSecondarySpecialization: true,
-        requiresTitluUniversitar: true,
-      );
-    }
-
-    // Medic rezident: Specializare secundară, CUIM
-    if (occupationName.contains('medic rezident') || occupationName.contains('rezident')) {
-      return const _ProfessionalRule(
-        requiresCuim: true,
-        requiresSecondarySpecialization: true,
-      );
-    }
-
-    // Pensionar: Specializare secundară + Titlu Universitar
-    if (occupationName.contains('pensionar')) {
-      return const _ProfessionalRule(
-        requiresSecondarySpecialization: true,
-        requiresTitluUniversitar: true,
-      );
-    }
-
-    // Medic veterinar: registration code (CMV) + Titlu Universitar
-    if (occupationName.contains('medic veterinar') || occupationName.contains('veterinar')) {
-      return const _ProfessionalRule(
-        requiresRegistrationCode: true,
-        requiresTitluUniversitar: true,
-        registrationCodeLabel: 'Nr. carte identitate CMV',
-      );
-    }
-
-    // Farmacist: Titlu Universitar
-    if (occupationName.contains('farmacist')) {
-      return const _ProfessionalRule(requiresTitluUniversitar: true);
-    }
-
-    // Default: no extra requirements
-    return const _ProfessionalRule();
-  }
+  static String get _specializationsUrl =>
+      '${ApiService.baseUrl}/specializations';
+  static String get _professionalGradesUrl =>
+      '${ApiService.baseUrl}/professional-grades';
+  static String get _institutionsUrl => '${ApiService.baseUrl}/institutions';
+  static String get _interestsUrl => '${ApiService.baseUrl}/interests';
 
   @override
   void initState() {
@@ -351,146 +136,208 @@ class _RegisterPageState extends State<RegisterPage> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _firstNameController.dispose();
     _lastNameController.dispose();
     _cnpController.dispose();
     _phoneController.dispose();
-    _cityIdController.dispose();
-    _occupationIdController.dispose();
-    _specializationIdController.dispose();
+    _addressController.dispose();
     _cuimController.dispose();
     _codParafaController.dispose();
     _professionalCodeController.dispose();
-    // titlu universitar now uses dropdown selection
-    _secondarySpecializationController.dispose();
     super.dispose();
+  }
+
+  List<_OptionItem> get _filteredCities {
+    if (_selectedCountyId == null) return const [];
+    return _cities.where((city) => city.countyId == _selectedCountyId).toList();
+  }
+
+  List<_OptionItem> get _filteredInstitutions {
+    if (_selectedCityId == null) return _institutions;
+    final cityItems = _institutions
+        .where((item) => item.cityId == _selectedCityId)
+        .toList();
+    return cityItems.isEmpty ? _institutions : cityItems;
+  }
+
+  _OptionItem? get _selectedOccupation =>
+      _optionById(_occupations, _selectedOccupationId);
+  _OptionItem? get _selectedSecondarySpecialization =>
+      _optionById(_specializations, _selectedSecondarySpecializationId);
+
+  _ProfessionalRule get _selectedOccupationRule {
+    final occupationName = (_selectedOccupation?.name ?? '').toLowerCase();
+
+    if (occupationName.isEmpty) return const _ProfessionalRule();
+
+    if (occupationName.contains('rezident')) {
+      return const _ProfessionalRule(
+        requiresCuim: true,
+        requiresSecondarySpecialization: true,
+      );
+    }
+
+    if (occupationName.contains('medic') &&
+        !occupationName.contains('veterinar')) {
+      return const _ProfessionalRule(
+        requiresCuim: true,
+        requiresCodParafa: true,
+        requiresSecondarySpecialization: true,
+        requiresTitluUniversitar: true,
+      );
+    }
+
+    if (occupationName.contains('veterinar')) {
+      return const _ProfessionalRule(
+        requiresRegistrationCode: true,
+        requiresTitluUniversitar: true,
+        registrationCodeLabel: 'Nr. carte identitate CMV',
+      );
+    }
+
+    if (occupationName.contains('farmacist')) {
+      return const _ProfessionalRule(requiresTitluUniversitar: true);
+    }
+
+    if (occupationName.contains('pensionar')) {
+      return const _ProfessionalRule(
+        requiresSecondarySpecialization: true,
+        requiresTitluUniversitar: true,
+      );
+    }
+
+    return const _ProfessionalRule();
+  }
+
+  List<_OptionItem> get _filteredSpecializations {
+    final occupationName = (_selectedOccupation?.name ?? '').toLowerCase();
+    if (occupationName.contains('asistent')) {
+      return _specializations
+          .where(
+            (item) =>
+                item.name == 'Asistent medical' ||
+                item.name == 'Asistent de farmacie' ||
+                item.name == 'Fiziokinetoterapie/Recuperare medicala',
+          )
+          .toList();
+    }
+    if (occupationName.contains('farmacist')) {
+      return _specializations
+          .where(
+            (item) =>
+                item.name == 'Farmacie' ||
+                item.name == 'Farmacologie Clinica' ||
+                item.name == 'Homeopatie',
+          )
+          .toList();
+    }
+    if (occupationName.contains('veterinar')) {
+      return _specializations
+          .where((item) => item.name == 'Medicina veterinara')
+          .toList();
+    }
+    if (occupationName.contains('psiholog')) {
+      return _specializations
+          .where((item) => item.name == 'Psihologie medicala')
+          .toList();
+    }
+    if (occupationName.contains('nutritionist')) {
+      return _specializations
+          .where(
+            (item) =>
+                item.name == 'Diabetologie/Nutritie si Boli Metabolice' ||
+                item.name == 'Sanatate publica',
+          )
+          .toList();
+    }
+    if (occupationName.contains('stomatolog')) {
+      return _specializations
+          .where(
+            (item) =>
+                item.name == 'Stomatologie' ||
+                item.name == 'Chirurgie maxilofaciala',
+          )
+          .toList();
+    }
+    return _specializations;
+  }
+
+  List<_OptionItem> get _filteredSecondarySpecializations {
+    return _filteredSpecializations
+        .where((item) => item.id != _selectedSpecializationId)
+        .toList();
+  }
+
+  _OptionItem? _optionById(List<_OptionItem> options, int? id) {
+    if (id == null) return null;
+    for (final option in options) {
+      if (option.id == id) return option;
+    }
+    return null;
+  }
+
+  Future<List<_OptionItem>> _fetchOptions(String url) async {
+    final response = await http
+        .get(Uri.parse(url))
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Nu am putut încărca nomenclatorul.');
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List) return const [];
+    return decoded
+        .whereType<Map<String, dynamic>>()
+        .map(_OptionItem.fromJson)
+        .where((item) => item.name.trim().isNotEmpty)
+        .toList();
   }
 
   Future<void> _loadOptions() async {
     setState(() {
       _isLoadingOptions = true;
+      _loadError = null;
     });
 
     try {
-      final counties = <_OptionItem>[];
-      final cities = <_OptionItem>[];
-      final occupations = List<_OptionItem>.generate(
-        _defaultOccupationNames.length,
-        (i) => _OptionItem(id: 1000 + i, name: _defaultOccupationNames[i]),
-      );
-      List<_OptionItem> professionalGrades = [];
-      // try fetching professional grades from backend; fallback to local list
-      try {
-        final resp = await http.get(Uri.parse(_professionalGradesUrl));
-        if (resp.statusCode >= 200 && resp.statusCode < 300) {
-          final data = jsonDecode(resp.body);
-          if (data is List) {
-            if (data.isNotEmpty && data.first is Map && data.first.containsKey('id') && data.first.containsKey('name')) {
-              professionalGrades = (data as List).map((e) => _OptionItem(id: e['id'] as int, name: e['name'] as String)).toList();
-            } else if (data.isNotEmpty && data.first is String) {
-              professionalGrades = (data as List).asMap().entries.map((entry) => _OptionItem(id: 3000 + entry.key, name: entry.value as String)).toList();
-            }
-          }
-        }
-      } catch (_) {
-        // ignore and fallback below
-      }
-
-      if (professionalGrades.isEmpty) {
-        final fallback = [
-          'Asistent de Farmacie',
-          'Asistent Medical',
-          'Asistent Veterinar',
-          'Biolog',
-          'Cercetător Științific',
-          'Conferențiar Universitar',
-          'Director',
-          'Director Adjunct',
-          'Director General',
-          'Director Medical',
-          'Doctor in Medicina',
-          'Doctor in stiinte medicale',
-          'Farmacist',
-          'Farmacist Diriginte',
-          'Farmacist pensionar',
-          'Farmacist Primar',
-          'Farmacist Sef',
-          'Farmacist Specialist',
-          'Farmacolog',
-          'Grad profesional',
-          'Inspector',
-          'Medic Pensionar',
-          'Medic Primar',
-          'Medic Rezident',
-          'Medic Specialist',
-          'Medic Stagiar',
-          'Medic veterinar',
-          'Sef Sectie',
-          'Sef Clinica',
-          'Sef Depozit',
-          'Sef Laborator',
-          'Sef Lucrari',
-          'Sef Policlinica',
-        ];
-        professionalGrades = fallback.asMap().entries.map((entry) => _OptionItem(id: 3000 + entry.key, name: entry.value)).toList();
-      }
-
-      try {
-        final csv = await rootBundle.loadString('assets/locations.csv');
-        final countyMap = <String, int>{};
-        var countyIdSeed = 5000;
-        var cityIdSeed = 6000;
-        final lines = csv.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
-        for (var index = 1; index < lines.length; index++) {
-          final row = lines[index];
-          final commaIndex = row.indexOf(',');
-          if (commaIndex <= 0 || commaIndex >= row.length - 1) continue;
-          final countyName = row.substring(0, commaIndex).trim();
-          final cityName = row.substring(commaIndex + 1).trim();
-          if (countyName.isEmpty || cityName.isEmpty) continue;
-          final countyId = countyMap.putIfAbsent(countyName, () => countyIdSeed++);
-          if (!counties.any((county) => county.name == countyName)) {
-            counties.add(_OptionItem(id: countyId, name: countyName));
-          }
-          cities.add(_OptionItem(id: cityIdSeed++, name: cityName, countyId: countyId));
-        }
-      } catch (_) {
-        // If the asset is missing for any reason, keep empty lists and let the UI show hints.
-      }
+      final results = await Future.wait([
+        _fetchOptions(_countiesUrl),
+        _fetchOptions(_citiesUrl),
+        _fetchOptions(_occupationsUrl),
+        _fetchOptions(_specializationsUrl),
+        _fetchOptions(_professionalGradesUrl),
+        _fetchOptions(_institutionsUrl),
+        _fetchOptions(_interestsUrl),
+      ]);
 
       if (!mounted) return;
       setState(() {
-        _counties = counties;
-        _cities = cities;
-        _occupations = occupations;
-        _professionalGrades = professionalGrades;
-        _selectedCountyId = counties.isNotEmpty ? counties.first.id : null;
-        _selectedCityId = _selectedCountyId == null ? null : _filteredCities.isNotEmpty ? _filteredCities.first.id : null;
-        _selectedOccupationId = null;
-        _selectedSpecializationId = null;
-        _selectedSecondarySpecializationId = null;
-        _selectedProfessionalGradeId = professionalGrades.isNotEmpty ? professionalGrades.first.id : null;
+        _counties = results[0];
+        _cities = results[1];
+        _occupations = results[2];
+        _specializations = results[3];
+        _professionalGrades = results[4];
+        _institutions = results[5];
+        _interests = results[6];
+
+        _selectedCountyId = _counties.isNotEmpty ? _counties.first.id : null;
+        _selectedCityId = _filteredCities.isNotEmpty
+            ? _filteredCities.first.id
+            : null;
+        _selectedOccupationId = _occupations.isNotEmpty
+            ? _occupations.first.id
+            : null;
+        _selectedSpecializationId = _filteredSpecializations.isNotEmpty
+            ? _filteredSpecializations.first.id
+            : null;
+        _selectedProfessionalGradeId = _professionalGrades.isNotEmpty
+            ? _professionalGrades.first.id
+            : null;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _counties = const [];
-        _cities = const [];
-        _occupations = List<_OptionItem>.generate(
-          _defaultOccupationNames.length,
-          (i) => _OptionItem(id: 1000 + i, name: _defaultOccupationNames[i]),
-        );
-        _specializations = List<_OptionItem>.generate(
-          _defaultSpecializationNames.length,
-          (i) => _OptionItem(id: 2000 + i, name: _defaultSpecializationNames[i]),
-        );
-        _professionalGrades = const [];
-        _selectedCountyId = null;
-        _selectedCityId = null;
-        _selectedOccupationId = null;
-        _selectedSpecializationId = null;
-        _selectedSecondarySpecializationId = null;
-        _selectedProfessionalGradeId = null;
+        _loadError = e.toString().replaceFirst('Exception: ', '');
       });
     } finally {
       if (mounted) {
@@ -501,143 +348,158 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  Future<void> _loadSpecializationsForOccupation(int? occupationId) async {
-    final items = List<_OptionItem>.generate(
-      _defaultSpecializationNames.length,
-      (i) => _OptionItem(id: 2000 + i, name: _defaultSpecializationNames[i]),
-    );
-
-    if (!mounted) return;
-    setState(() {
-      _specializations = items;
-      _selectedSpecializationId = null;
-      _selectedSecondarySpecializationId = null;
-    });
-  }
-
   String? _requiredValidator(String? value, {String label = 'Câmp'}) {
     return validators.requiredValidator(value, label: label);
   }
 
-  String? _emailValidator(String? value) {
-    return validators.emailValidator(value);
-  }
+  String? _emailValidator(String? value) => validators.emailValidator(value);
 
-  String? _passwordValidator(String? value) {
-    return validators.passwordValidator(value);
-  }
+  String? _passwordValidator(String? value) =>
+      validators.passwordValidator(value);
 
   String? _confirmPasswordValidator(String? value) {
     return validators.confirmPasswordValidator(value, _passwordController.text);
   }
 
+  String? _cnpValidator(String? value) => validators.cnpValidator(value);
 
-  String? _cnpValidator(String? value) {
-    return validators.cnpValidator(value);
+  String? _phoneValidator(String? value) => validators.phoneValidator(value);
+
+  String? _cuimValidator(String? value) => validators.cuimValidator(value);
+
+  String? _codParafaValidator(String? value) =>
+      validators.codParafaValidator(value);
+
+  String? _numberValidator(int? value, {required String label}) {
+    if (value == null) return '$label este obligatoriu';
+    return null;
   }
 
-  String? _cuimValidator(String? value) {
-    return validators.cuimValidator(value);
-  }
-
-  String? _codParafaValidator(String? value) {
-    return validators.codParafaValidator(value);
-  }
-
-  String? _phoneValidator(String? value) {
-    return validators.phoneValidator(value);
-  }
-
-  String _formatLocalPhoneDigits(String value) {
-    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.isEmpty) return '';
-    final parts = <String>[];
-    for (var i = 0; i < digits.length; i += 3) {
-      parts.add(digits.substring(i, (i + 3).clamp(0, digits.length)));
-    }
-    return parts.join(' ');
+  String _fullPhoneNumber() {
+    final digits = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    return '$_phonePrefix$digits';
   }
 
   bool _validateStep(int step) {
-    setState(() {});
     switch (step) {
       case 0:
         return _emailValidator(_emailController.text) == null &&
             _passwordValidator(_passwordController.text) == null &&
             _confirmPasswordValidator(_confirmPasswordController.text) == null;
       case 1:
-        final hasCounty = _selectedCountyId != null;
-        final hasCity = _selectedCityId != null;
-
-        return _requiredValidator(_firstNameController.text, label: 'Nume') == null &&
-            _requiredValidator(_lastNameController.text, label: 'Prenume') == null &&
+        return _requiredValidator(_firstNameController.text, label: 'Nume') ==
+                null &&
+            _requiredValidator(_lastNameController.text, label: 'Prenume') ==
+                null &&
             _cnpValidator(_cnpController.text) == null &&
             _phoneValidator(_phoneController.text) == null &&
-            hasCounty &&
-            hasCity;
-      case 2:
-        final rule = _professionalRule;
-        final hasOccupation = _selectedOccupationId != null;
-        final hasSpecialization = _selectedSpecializationId != null;
-        final hasTitle = _selectedProfessionalGradeId != null;
-        final hasTitluUniversitar = !rule.requiresTitluUniversitar || (_selectedTitluUniversitar != null && _selectedTitluUniversitar!.trim().isNotEmpty);
-        final hasCuim = !rule.requiresCuim || _cuimValidator(_cuimController.text) == null;
-        final hasParafa = !rule.requiresCodParafa || _codParafaValidator(_codParafaController.text) == null;
-        final hasRegCode = !rule.requiresRegistrationCode ||
             _requiredValidator(
-                  _professionalCodeController.text,
-                  label: rule.registrationCodeLabel,
+                  _addressController.text,
+                  label: 'Adresă corespondență',
                 ) ==
-                null;
-        final hasSecondary = !rule.requiresSecondarySpecialization ||
-            _selectedSecondarySpecializationId != null;
-
-        return hasOccupation &&
-            hasSpecialization &&
-            hasTitle &&
-          hasTitluUniversitar &&
-            hasCuim &&
-            hasParafa &&
-            hasRegCode &&
-            hasSecondary;
+                null &&
+            _numberValidator(_selectedCountyId, label: 'Județ') == null &&
+            _numberValidator(_selectedCityId, label: 'Oraș') == null;
+      case 2:
+        final rule = _selectedOccupationRule;
+        return _numberValidator(_selectedOccupationId, label: 'Ocupație') ==
+                null &&
+            _numberValidator(
+                  _selectedSpecializationId,
+                  label: 'Specializare',
+                ) ==
+                null &&
+            _numberValidator(
+                  _selectedProfessionalGradeId,
+                  label: 'Grad profesional',
+                ) ==
+                null &&
+            (!rule.requiresSecondarySpecialization ||
+                _numberValidator(
+                      _selectedSecondarySpecializationId,
+                      label: 'Specializare secundară',
+                    ) ==
+                    null) &&
+            (!rule.requiresCuim ||
+                _cuimValidator(_cuimController.text) == null) &&
+            (!rule.requiresCodParafa ||
+                _codParafaValidator(_codParafaController.text) == null) &&
+            (!rule.requiresRegistrationCode ||
+                _requiredValidator(
+                      _professionalCodeController.text,
+                      label: rule.registrationCodeLabel,
+                    ) ==
+                    null) &&
+            (!rule.requiresTitluUniversitar ||
+                _requiredValidator(
+                      _selectedTitluUniversitar,
+                      label: 'Titlu universitar',
+                    ) ==
+                    null) &&
+            _gdprConsent;
       default:
         return false;
     }
-    return null;
+  }
+
+  Future<void> _continueStep() async {
+    if (_currentStep < 2) {
+      if (!_validateStep(_currentStep)) {
+        _formKey.currentState?.validate();
+        setState(() {});
+        return;
+      }
+      setState(() => _currentStep += 1);
+      return;
+    }
+    await _submitRegistration();
   }
 
   Future<void> _submitRegistration() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!(_formKey.currentState?.validate() ?? false) || !_validateStep(2)) {
+      setState(() {});
+      return;
+    }
+
+    final rule = _selectedOccupationRule;
+    final email = _emailController.text.trim();
+    final payload = <String, dynamic>{
+      'email': email,
+      'firebase_uid': 'local_${email.toLowerCase().hashCode.abs()}',
+      'password': _passwordController.text,
+      'first_name': _firstNameController.text.trim(),
+      'last_name': _lastNameController.text.trim(),
+      'cnp': _cnpController.text.trim(),
+      'phone': _fullPhoneNumber(),
+      'correspondence_address': _addressController.text.trim(),
+      'county_id': _selectedCountyId,
+      'city_id': _selectedCityId,
+      'occupation_id': _selectedOccupationId,
+      'specialization_id': _selectedSpecializationId,
+      'specialization_secondary_name': _selectedSecondarySpecialization?.name,
+      'professional_grade_id': _selectedProfessionalGradeId,
+      'institution_id': _selectedInstitutionId,
+      'interest_ids': _selectedInterestIds.toList(),
+      'cuim': rule.requiresCuim ? _cuimController.text.trim() : null,
+      'cod_parafa': rule.requiresCodParafa
+          ? _codParafaController.text.trim()
+          : null,
+      'professional_registration_code': rule.requiresRegistrationCode
+          ? _professionalCodeController.text.trim()
+          : null,
+      'titlu_universitar': rule.requiresTitluUniversitar
+          ? _selectedTitluUniversitar
+          : null,
+      'acord_email': _acordEmail,
+      'acord_sms': _acordSms,
+      'gdpr_consent': _gdprConsent,
+    };
+
+    payload.removeWhere((_, value) => value == null);
 
     setState(() {
       _isSubmitting = true;
     });
-
-    final email = _emailController.text.trim();
-    final payload = {
-      'email': email,
-      'firebase_uid': 'local_${email.toLowerCase().hashCode.abs()}',
-      'password': _passwordController.text.trim(),
-      'first_name': _firstNameController.text.trim(),
-      'last_name': _lastNameController.text.trim(),
-      'cnp': _cnpController.text.trim(),
-      'city_id': _selectedCityId,
-      'county_id': _selectedCountyId,
-      'occupation_id': _selectedOccupationId,
-      'occupation_name': _selectedOccupation?.name,
-      'specialization_id': _selectedSpecializationId,
-      'specialization_name': _selectedSpecialization?.name,
-      'specialization_secondary_name': _selectedSecondarySpecialization?.name,
-      'professional_grade_id': _selectedProfessionalGradeId,
-      'professional_grade_name': _selectedProfessionalGrade?.name,
-      'cuim': rule.requiresCuim ? _cuimController.text.trim() : null,
-      'cod_parafa': rule.requiresCodParafa ? _codParafaController.text.trim() : null,
-      'professional_registration_code':
-          rule.requiresRegistrationCode ? _professionalCodeController.text.trim() : null,
-      'titlu_universitar': rule.requiresTitluUniversitar ? _selectedTitluUniversitar : null,
-      'acord_email': _acordEmail,
-      'acord_sms': _acordSms,
-    };
 
     try {
       final data = await _apiService.register(payload);
@@ -645,10 +507,28 @@ class _RegisterPageState extends State<RegisterPage> {
         '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}',
       );
       if (!mounted) return;
+      final verificationRequired =
+          data['email_verification_required'] == true;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cont creat cu succes. ID utilizator: ${data['user_id']}')),
+        SnackBar(
+          content: Text(
+            verificationRequired
+                ? 'Cont creat. Verifică emailul pentru cod.'
+                : 'Cont creat cu succes.',
+          ),
+        ),
       );
-      Navigator.of(context).pop();
+      if (verificationRequired) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => EmailVerificationScreen(
+              email: _emailController.text.trim(),
+            ),
+          ),
+        );
+      } else {
+        Navigator.of(context).pop();
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -663,23 +543,51 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  InputDecoration _fieldDecoration(String label) {
+  InputDecoration _fieldDecoration(
+    String label, {
+    String? hintText,
+    IconData? icon,
+  }) {
     return InputDecoration(
-      labelText: label,
+      hintText: hintText ?? label,
+      floatingLabelBehavior: FloatingLabelBehavior.never,
+      prefixIcon: icon == null
+          ? null
+          : Icon(icon, color: AuthShell.pulsePurple, size: 21),
+      prefixIconConstraints: const BoxConstraints(minWidth: 42, minHeight: 58),
       filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      fillColor: AuthShell.fieldFill,
+      isDense: false,
+      hintStyle: const TextStyle(
+        color: AuthShell.textSecondary,
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        height: 1.2,
+      ),
+      contentPadding: const EdgeInsets.fromLTRB(12, 19, 12, 19),
+      errorMaxLines: 3,
+      helperMaxLines: 2,
+      errorStyle: const TextStyle(height: 1.25),
+      helperStyle: const TextStyle(height: 1.25),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: PulseTheme.border),
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: PulseTheme.border),
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: PulseTheme.primary, width: 1.5),
+        borderRadius: BorderRadius.circular(20),
+        borderSide: const BorderSide(color: AuthShell.pulseOrange, width: 1.4),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: Colors.red.shade300, width: 1.2),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: Colors.red.shade400, width: 1.3),
       ),
     );
   }
@@ -689,11 +597,16 @@ class _RegisterPageState extends State<RegisterPage> {
     required String label,
     required String? Function(String?) validator,
     TextInputType keyboardType = TextInputType.text,
-    bool obscure = false,
-    bool isPasswordField = false,
+    bool obscureText = false,
+    bool showPasswordToggle = false,
+    bool isPasswordVisible = false,
+    VoidCallback? onTogglePassword,
     List<TextInputFormatter>? inputFormatters,
     int? maxLength,
     String? helperText,
+    String? hintText,
+    IconData? icon,
+    int maxLines = 1,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -702,151 +615,186 @@ class _RegisterPageState extends State<RegisterPage> {
         keyboardType: keyboardType,
         inputFormatters: inputFormatters,
         maxLength: maxLength,
+        maxLines: maxLines,
         autovalidateMode: AutovalidateMode.onUserInteraction,
-        obscureText: isPasswordField ? !_showPassword : obscure,
+        obscureText: showPasswordToggle ? !isPasswordVisible : obscureText,
+        style: const TextStyle(
+          color: AuthShell.textPrimary,
+          fontSize: 15,
+          height: 1.2,
+          fontWeight: FontWeight.w600,
+        ),
         validator: validator,
-        decoration: _fieldDecoration(label).copyWith(
-          hintText: hintText,
-          helperText: helperText,
+        decoration: _fieldDecoration(label, hintText: hintText, icon: icon)
+            .copyWith(
+              helperText: helperText,
               counterText: '',
-          suffixIcon: isPasswordField
-              ? IconButton(
-                  icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility),
-                  onPressed: () {
-                    setState(() {
-                      _showPassword = !_showPassword;
-                    });
-                  },
-                )
-              : null,
-        ),
+              suffixIcon: showPasswordToggle
+                  ? IconButton(
+                      icon: Icon(
+                        isPasswordVisible
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
+                      color: AuthShell.pulsePurple,
+                      onPressed: onTogglePassword,
+                    )
+                  : null,
+              suffixIconConstraints: const BoxConstraints(
+                minWidth: 42,
+                minHeight: 58,
+              ),
+            ),
       ),
     );
   }
-
-  Future<int?> _showSelectionDialog(List<_OptionItem> options, String title, {int? selectedId}) async {
-    return showDialog<int>(
-      context: context,
-      builder: (context) {
-        return SimpleDialog(
-          title: Text(title),
-          children: options.map((opt) {
-            final selected = opt.id == selectedId;
-            return SimpleDialogOption(
-              onPressed: () => Navigator.of(context).pop(opt.id),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(child: Text(opt.name)),
-                  if (selected) const Icon(Icons.check, color: Colors.green),
-                ],
-              ),
-            );
-          }).toList(),
-        );
-      },
-    );
-  }
-
-  Widget _selectField({
-    required String label,
-    required String? selectedName,
-    required VoidCallback onTap,
-    String? emptyHint,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: onTap,
-        child: InputDecorator(
-          decoration: _fieldDecoration(label),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(selectedName ?? (emptyHint ?? 'Selectați $label')),
-              ),
-              const Icon(Icons.arrow_drop_down),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Prefill removed per UX
-
 
   Widget _dropdownField({
     required String label,
     required int? value,
     required List<_OptionItem> options,
     required ValueChanged<int?> onChanged,
+    bool required = true,
     String? emptyHint,
+    IconData? icon,
   }) {
     if (options.isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Text(
           emptyHint ?? 'Nu există opțiuni disponibile pentru $label.',
-          style: TextStyle(color: Colors.red.shade700),
+          style: TextStyle(
+            color: required ? Colors.red.shade700 : PulseTheme.textSecondary,
+          ),
         ),
       );
     }
 
+    final effectiveValue = options.any((item) => item.id == value)
+        ? value
+        : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: DropdownButtonFormField<int>(
-        initialValue: value,
-        decoration: _fieldDecoration(label),
+        key: ValueKey('$label-$effectiveValue-${options.length}'),
+        initialValue: effectiveValue,
+        isExpanded: true,
+        hint: Text(label, overflow: TextOverflow.ellipsis),
+        decoration: _fieldDecoration(label, icon: icon),
+        items: options
+            .map(
+              (item) => DropdownMenuItem<int>(
+                value: item.id,
+                child: Text(item.name, overflow: TextOverflow.ellipsis),
+              ),
+            )
+            .toList(),
+        onChanged: onChanged,
+        validator: required
+            ? (value) => _numberValidator(value, label: label)
+            : null,
+      ),
+    );
+  }
+
+  Widget _interestPicker() {
+    if (_interests.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InputDecorator(
+        decoration: _fieldDecoration(
+          'Interese',
+          hintText: 'Interese',
+          icon: Icons.interests_outlined,
+        ),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _interests.map((interest) {
+            final selected = _selectedInterestIds.contains(interest.id);
+            return FilterChip(
+              label: Text(interest.name),
+              selected: selected,
+              selectedColor: const Color(0xFFFFE4CF),
+              checkmarkColor: AuthShell.pulsePurple,
+              backgroundColor: Colors.white,
+              side: BorderSide(
+                color: selected
+                    ? AuthShell.pulseOrange
+                    : const Color(0xFFE8DDEC),
+              ),
+              onSelected: (value) {
+                setState(() {
+                  if (value) {
+                    _selectedInterestIds.add(interest.id);
+                  } else {
+                    _selectedInterestIds.remove(interest.id);
+                  }
+                });
+              },
+            );
+          }).toList(),
+        ),
       ),
     );
   }
 
   List<Step> _buildSteps() {
-    final rule = _professionalRule;
-
+    final rule = _selectedOccupationRule;
     return [
       Step(
         title: const Text('Cont'),
         isActive: _currentStep >= 0,
+        state: _currentStep > 0 ? StepState.complete : StepState.indexed,
         content: Column(
           children: [
-            const SizedBox(height: 8),
             _textField(
               controller: _emailController,
               label: 'Email',
               validator: _emailValidator,
               keyboardType: TextInputType.emailAddress,
+              icon: Icons.mail_outline_rounded,
             ),
             _textField(
               controller: _passwordController,
               label: 'Parolă',
               validator: _passwordValidator,
-              isPasswordField: true,
+              showPasswordToggle: true,
+              isPasswordVisible: _showPassword,
+              onTogglePassword: () =>
+                  setState(() => _showPassword = !_showPassword),
+              icon: Icons.lock_outline_rounded,
             ),
             _textField(
               controller: _confirmPasswordController,
-              label: 'Rescrie parola',
+              label: 'Confirmă',
               validator: _confirmPasswordValidator,
-              isPasswordField: true,
+              showPasswordToggle: true,
+              isPasswordVisible: _showConfirmPassword,
+              onTogglePassword: () =>
+                  setState(() => _showConfirmPassword = !_showConfirmPassword),
+              icon: Icons.verified_user_outlined,
             ),
           ],
         ),
       ),
       Step(
-        title: const Text('Date Personale'),
+        title: const Text('Date personale'),
         isActive: _currentStep >= 1,
+        state: _currentStep > 1 ? StepState.complete : StepState.indexed,
         content: Column(
           children: [
             _textField(
               controller: _firstNameController,
               label: 'Nume',
               validator: (value) => _requiredValidator(value, label: 'Nume'),
+              icon: Icons.person_outline_rounded,
             ),
             _textField(
               controller: _lastNameController,
               label: 'Prenume',
               validator: (value) => _requiredValidator(value, label: 'Prenume'),
+              icon: Icons.badge_outlined,
             ),
             _textField(
               controller: _cnpController,
@@ -855,59 +803,61 @@ class _RegisterPageState extends State<RegisterPage> {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               maxLength: 13,
-              helperText: '13 cifre',
+              icon: Icons.numbers_rounded,
             ),
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Row(
                 children: [
-                  Container(
-                    height: 56,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: PulseTheme.border),
-                    ),
-                    alignment: Alignment.center,
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _phonePrefix,
-                        isDense: true,
-                        items: ['+40', '+373', '+1']
-                            .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                            .toList(),
-                        onChanged: (v) {
-                          if (v == null) return;
-                          setState(() {
-                            _phonePrefix = v;
-                          });
-                        },
-                      ),
+                  SizedBox(
+                    width: 112,
+                    child: DropdownButtonFormField<String>(
+                      key: ValueKey('phone-prefix-$_phonePrefix'),
+                      initialValue: _phonePrefix,
+                      isExpanded: true,
+                      decoration: _fieldDecoration('Prefix'),
+                      items: ['+40', '+373', '+1']
+                          .map(
+                            (prefix) => DropdownMenuItem(
+                              value: prefix,
+                              child: Text(
+                                prefix,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _phonePrefix = value);
+                      },
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: TextFormField(
+                    child: _textField(
                       controller: _phoneController,
-                      keyboardType: TextInputType.phone,
+                      label: 'Telefon',
                       validator: _phoneValidator,
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]'))],
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]')),
+                      ],
                       maxLength: 20,
-                      textAlignVertical: TextAlignVertical.center,
-                      style: const TextStyle(height: 1.0),
-                      onChanged: (v) {
-                        final formatted = _formatLocalPhoneDigits(v);
-                        if (formatted != v) {
-                          _phoneController.text = formatted;
-                          _phoneController.selection = TextSelection.fromPosition(TextPosition(offset: _phoneController.text.length));
-                        }
-                      },
-                      decoration: _fieldDecoration('Telefon').copyWith(counterText: ''),
+                      icon: Icons.phone_outlined,
                     ),
                   ),
                 ],
               ),
+            ),
+            _textField(
+              controller: _addressController,
+              label: 'Adresă corespondență',
+              validator: (value) =>
+                  _requiredValidator(value, label: 'Adresă corespondență'),
+              hintText: 'Stradă, număr, bloc, apartament',
+              icon: Icons.home_outlined,
+              maxLines: 2,
             ),
             _dropdownField(
               label: 'Județ',
@@ -916,11 +866,13 @@ class _RegisterPageState extends State<RegisterPage> {
               onChanged: (value) {
                 setState(() {
                   _selectedCountyId = value;
-                  final citiesForCounty = _filteredCities;
-                  _selectedCityId = citiesForCounty.isNotEmpty ? citiesForCounty.first.id : null;
+                  _selectedCityId = _filteredCities.isNotEmpty
+                      ? _filteredCities.first.id
+                      : null;
+                  _selectedInstitutionId = null;
                 });
               },
-              emptyHint: 'Nu există județe în baza de date.',
+              icon: Icons.map_outlined,
             ),
             _dropdownField(
               label: 'Oraș',
@@ -929,131 +881,167 @@ class _RegisterPageState extends State<RegisterPage> {
               onChanged: (value) {
                 setState(() {
                   _selectedCityId = value;
+                  _selectedInstitutionId = null;
                 });
               },
               emptyHint: 'Nu există orașe pentru județul selectat.',
+              icon: Icons.location_city_outlined,
             ),
           ],
         ),
       ),
       Step(
-        title: const Text('Date Profesionale'),
+        title: const Text('Profesional'),
         isActive: _currentStep >= 2,
         content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 12),
-            _selectField(
+            _dropdownField(
               label: 'Ocupație',
-              selectedName: _selectedOccupation?.name,
-              emptyHint: 'Selectați ocupație',
-              onTap: () async {
-                final selected = await _showSelectionDialog(_occupations, 'Alege ocupație', selectedId: _selectedOccupationId);
-                if (selected != null) {
-                  setState(() {
-                    _selectedOccupationId = selected;
-                    _selectedSpecializationId = null;
-                    _selectedSecondarySpecializationId = null;
-                  });
-                  _loadSpecializationsForOccupation(selected);
-                }
+              value: _selectedOccupationId,
+              options: _occupations,
+              onChanged: (value) {
+                setState(() {
+                  _selectedOccupationId = value;
+                  _selectedSpecializationId =
+                      _filteredSpecializations.isNotEmpty
+                      ? _filteredSpecializations.first.id
+                      : null;
+                  _selectedSecondarySpecializationId = null;
+                  _selectedTitluUniversitar = null;
+                  _cuimController.clear();
+                  _codParafaController.clear();
+                  _professionalCodeController.clear();
+                });
               },
+              icon: Icons.work_outline_rounded,
             ),
-            const SizedBox(height: 12),
-            _selectField(
+            _dropdownField(
               label: 'Specializare',
-              selectedName: _selectedSpecialization?.name,
-              emptyHint: 'Selectați specializare',
-              onTap: () async {
-                final selected = await _showSelectionDialog(_filteredSpecializations, 'Alege specializare', selectedId: _selectedSpecializationId);
-                if (selected != null) {
-                  setState(() {
-                    _selectedSpecializationId = selected;
-                    if (_selectedSecondarySpecializationId == selected) {
-                      _selectedSecondarySpecializationId = null;
-                    }
-                  });
-                }
+              value: _selectedSpecializationId,
+              options: _filteredSpecializations,
+              onChanged: (value) {
+                setState(() {
+                  _selectedSpecializationId = value;
+                  if (_selectedSecondarySpecializationId == value) {
+                    _selectedSecondarySpecializationId = null;
+                  }
+                });
               },
+              icon: Icons.medical_services_outlined,
             ),
             if (rule.requiresSecondarySpecialization)
               _dropdownField(
                 label: 'Specializare secundară',
                 value: _selectedSecondarySpecializationId,
                 options: _filteredSecondarySpecializations,
-                onChanged: (value) {
-                  setState(() {
-                    _selectedSecondarySpecializationId = value;
-                  });
-                },
-                emptyHint: 'Nu există specializări secundare disponibile.',
-              ),
-            if (rule.requiresCuim)
-              _textField(
-                controller: _cuimController,
-                label: 'CUIM',
-                validator: (value) => _cuimValidator(value),
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                maxLength: 10,
-                helperText: 'Numai cifre, recomandat 8 cifre',
-              ),
-            if (rule.requiresCodParafa)
-              _textField(
-                controller: _codParafaController,
-                label: 'Cod parafă',
-                validator: (value) => _codParafaValidator(value),
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\-_]'))],
-                maxLength: 12,
-                helperText: 'Litere, cifre sau -/_ (3-12 caractere)',
-              ),
-            if (rule.requiresTitluUniversitar)
-              DropdownButtonFormField<String>(
-                value: _selectedTitluUniversitar,
-                decoration: _fieldDecoration('Titlu universitar'),
-                items: _titluriUniversitare
-                    .map((t) => DropdownMenuItem<String>(value: t, child: Text(t)))
-                    .toList(),
-                onChanged: (value) => setState(() => _selectedTitluUniversitar = value),
-                validator: (value) => rule.requiresTitluUniversitar ? _requiredValidator(value, label: 'Titlu universitar') : null,
-              ),
-            if (rule.requiresRegistrationCode)
-              _textField(
-                controller: _professionalCodeController,
-                label: rule.registrationCodeLabel,
-                validator: (value) => _requiredValidator(value, label: rule.registrationCodeLabel),
+                onChanged: (value) =>
+                    setState(() => _selectedSecondarySpecializationId = value),
+                icon: Icons.add_circle_outline_rounded,
               ),
             _dropdownField(
               label: 'Grad profesional',
               value: _selectedProfessionalGradeId,
               options: _professionalGrades,
-              onChanged: (value) {
-                setState(() {
-                  _selectedProfessionalGradeId = value;
-                });
-              },
-              emptyHint: 'Nu există grade profesionale disponibile.',
+              onChanged: (value) =>
+                  setState(() => _selectedProfessionalGradeId = value),
+              icon: Icons.workspace_premium_outlined,
             ),
+            _dropdownField(
+              label: 'Instituție',
+              value: _selectedInstitutionId,
+              options: _filteredInstitutions,
+              required: false,
+              onChanged: (value) =>
+                  setState(() => _selectedInstitutionId = value),
+              emptyHint: 'Instituția poate fi completată ulterior.',
+              icon: Icons.apartment_rounded,
+            ),
+            if (rule.requiresCuim)
+              _textField(
+                controller: _cuimController,
+                label: 'CUIM',
+                validator: _cuimValidator,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                maxLength: 10,
+                icon: Icons.confirmation_number_outlined,
+              ),
+            if (rule.requiresCodParafa)
+              _textField(
+                controller: _codParafaController,
+                label: 'Cod parafă',
+                validator: _codParafaValidator,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\-_]')),
+                ],
+                maxLength: 12,
+                icon: Icons.draw_outlined,
+              ),
+            if (rule.requiresRegistrationCode)
+              _textField(
+                controller: _professionalCodeController,
+                label: rule.registrationCodeLabel,
+                validator: (value) => _requiredValidator(
+                  value,
+                  label: rule.registrationCodeLabel,
+                ),
+                icon: Icons.assignment_ind_outlined,
+              ),
+            if (rule.requiresTitluUniversitar)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('titlu-universitar-$_selectedTitluUniversitar'),
+                  initialValue: _selectedTitluUniversitar,
+                  isExpanded: true,
+                  decoration: _fieldDecoration(
+                    'Titlu universitar',
+                    icon: Icons.school_outlined,
+                  ),
+                  items: _titluriUniversitare
+                      .map(
+                        (title) =>
+                            DropdownMenuItem(value: title, child: Text(title)),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => _selectedTitluUniversitar = value),
+                  validator: (value) =>
+                      _requiredValidator(value, label: 'Titlu universitar'),
+                ),
+              ),
+            _interestPicker(),
             CheckboxListTile(
               value: _acordEmail,
               contentPadding: EdgeInsets.zero,
-              activeColor: PulseTheme.primary,
+              activeColor: AuthShell.pulsePurple,
+              checkColor: Colors.white,
               title: const Text('Sunt de acord să primesc email-uri'),
-              onChanged: (value) {
-                setState(() {
-                  _acordEmail = value ?? false;
-                });
-              },
+              onChanged: (value) =>
+                  setState(() => _acordEmail = value ?? false),
             ),
             CheckboxListTile(
               value: _acordSms,
               contentPadding: EdgeInsets.zero,
-              activeColor: PulseTheme.primary,
+              activeColor: AuthShell.pulsePurple,
+              checkColor: Colors.white,
               title: const Text('Sunt de acord să primesc SMS-uri'),
-              onChanged: (value) {
-                setState(() {
-                  _acordSms = value ?? false;
-                });
-              },
+              onChanged: (value) => setState(() => _acordSms = value ?? false),
+            ),
+            CheckboxListTile(
+              value: _gdprConsent,
+              contentPadding: EdgeInsets.zero,
+              activeColor: AuthShell.pulsePurple,
+              checkColor: Colors.white,
+              title: const Text('Accept prelucrarea datelor personale'),
+              subtitle: !_gdprConsent && _currentStep == 2
+                  ? Text(
+                      'Consimțământul GDPR este obligatoriu.',
+                      style: TextStyle(color: Colors.red.shade700),
+                    )
+                  : null,
+              onChanged: (value) =>
+                  setState(() => _gdprConsent = value ?? false),
             ),
           ],
         ),
@@ -1061,135 +1049,168 @@ class _RegisterPageState extends State<RegisterPage> {
     ];
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: PulseTheme.background,
-      appBar: AppBar(title: const Text('Înregistrare cont')),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _textField(
-                  controller: _emailController,
-                  label: 'Email',
-                  validator: _emailValidator,
-                  keyboardType: TextInputType.emailAddress,
-                ),
-                _textField(
-                  controller: _passwordController,
-                  label: 'Parolă',
-                  validator: _passwordValidator,
-                  obscure: true,
-                ),
-                _textField(
-                  controller: _firstNameController,
-                  label: 'Nume',
-                  validator: (value) => _requiredValidator(value, label: 'Nume'),
-                ),
-                _textField(
-                  controller: _lastNameController,
-                  label: 'Prenume',
-                  validator: (value) => _requiredValidator(value, label: 'Prenume'),
-                ),
-                _textField(
-                  controller: _cnpController,
-                  label: 'CNP',
-                  validator: (value) => _requiredValidator(value, label: 'CNP'),
-                  keyboardType: TextInputType.number,
-                ),
-                _textField(
-                  controller: _phoneController,
-                  label: 'Telefon',
-                  validator: (value) => _requiredValidator(value, label: 'Telefon'),
-                  keyboardType: TextInputType.phone,
-                ),
-                _textField(
-                  controller: _cityIdController,
-                  label: 'ID oraș',
-                  validator: (value) => _numberValidator(value, label: 'Oraș'),
-                  keyboardType: TextInputType.number,
-                ),
-                _textField(
-                  controller: _occupationIdController,
-                  label: 'ID ocupație',
-                  validator: (value) => _numberValidator(value, label: 'Ocupație'),
-                  keyboardType: TextInputType.number,
-                ),
-                _textField(
-                  controller: _specializationIdController,
-                  label: 'ID specializare',
-                  validator: (value) => _numberValidator(value, label: 'Specializare'),
-                  keyboardType: TextInputType.number,
-                ),
-                _textField(
-                  controller: _cuimController,
-                  label: 'CUIM',
-                  validator: (_) => null,
-                ),
-                _textField(
-                  controller: _codParafaController,
-                  label: 'Cod parafă',
-                  validator: (_) => null,
-                ),
-                _textField(
-                  controller: _titluUniversitarController,
-                  label: 'Titlu universitar',
-                  validator: (_) => null,
-                ),
-                CheckboxListTile(
-                  value: _acordEmail,
-                  contentPadding: EdgeInsets.zero,
-                  activeColor: PulseTheme.primary,
-                  title: const Text('Sunt de acord să primesc email-uri'),
-                  onChanged: (value) {
-                    setState(() {
-                      _acordEmail = value ?? false;
-                    });
-                  },
-                ),
-                CheckboxListTile(
-                  value: _acordSms,
-                  contentPadding: EdgeInsets.zero,
-                  activeColor: PulseTheme.primary,
-                  title: const Text('Sunt de acord să primesc SMS-uri'),
-                  onChanged: (value) {
-                    setState(() {
-                      _acordSms = value ?? false;
-                    });
-                  },
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submitRegistration,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: PulseTheme.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+  Widget _buildBody() {
+    if (_isLoadingOptions) {
+      return AuthShell.background(
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      );
+    }
+
+    if (_loadError != null) {
+      return AuthShell.background(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: FrostedAuthCard(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _loadError!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AuthShell.textPrimary),
+                  ),
+                  const SizedBox(height: 16),
+                  AuthPrimaryButton(
+                    label: 'Reîncearcă',
+                    onPressed: _loadOptions,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return AuthShell.background(
+      child: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton.filledTonal(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      color: Colors.white,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.16),
+                      ),
                     ),
                   ),
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
+                  const SizedBox(height: 16),
+                  const AuthHeaderText(
+                    title: 'Creează cont',
+                    subtitle:
+                        'Completează datele profesionale pentru o experiență personalizată.',
+                    light: true,
+                    align: TextAlign.left,
+                  ),
+                  const SizedBox(height: 22),
+                  FrostedAuthCard(
+                    padding: const EdgeInsets.fromLTRB(14, 18, 14, 18),
+                    child: Form(
+                      key: _formKey,
+                      child: Theme(
+                        data: Theme.of(context).copyWith(
+                          colorScheme: Theme.of(context).colorScheme.copyWith(
+                            primary: AuthShell.pulsePurple,
+                            secondary: AuthShell.pulseOrange,
                           ),
-                        )
-                      : const Text('Finalizează'),
-                ),
-              ],
+                        ),
+                        child: Stepper(
+                          elevation: 0,
+                          margin: EdgeInsets.zero,
+                          currentStep: _currentStep,
+                          connectorColor: WidgetStateProperty.resolveWith(
+                            (_) =>
+                                AuthShell.pulseOrange.withValues(alpha: 0.28),
+                          ),
+                          controlsBuilder: (context, details) {
+                            final isLastStep = _currentStep == 2;
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 16),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: AuthPrimaryButton(
+                                      label: isLastStep
+                                          ? 'Finalizează înregistrarea'
+                                          : 'Continuă',
+                                      isLoading: _isSubmitting,
+                                      onPressed: details.onStepContinue,
+                                    ),
+                                  ),
+                                  if (_currentStep > 0) ...[
+                                    const SizedBox(width: 10),
+                                    TextButton(
+                                      onPressed: _isSubmitting
+                                          ? null
+                                          : details.onStepCancel,
+                                      child: const Text(
+                                        'Înapoi',
+                                        style: TextStyle(
+                                          color: AuthShell.pulsePurple,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            );
+                          },
+                          onStepTapped: (step) {
+                            if (step <= _currentStep ||
+                                _validateStep(_currentStep)) {
+                              setState(() => _currentStep = step);
+                            } else {
+                              _formKey.currentState?.validate();
+                            }
+                          },
+                          onStepContinue: _isSubmitting ? null : _continueStep,
+                          onStepCancel: _currentStep == 0
+                              ? null
+                              : () => setState(() => _currentStep -= 1),
+                          steps: _buildSteps(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: _isSubmitting
+                        ? null
+                        : () {
+                            Navigator.of(context).maybePop();
+                          },
+                    child: const Text(
+                      'Ai deja cont? Autentifică-te',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(backgroundColor: AuthShell.deepGreen, body: _buildBody());
   }
 }

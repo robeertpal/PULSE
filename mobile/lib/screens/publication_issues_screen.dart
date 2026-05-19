@@ -2581,19 +2581,13 @@ class _YearChip extends StatelessWidget {
 
 class _PremiumPill extends StatelessWidget {
   final String label;
-  final IconData? icon;
   final String? svgAsset;
   final Color color;
-  final Color? backgroundColor;
-  final Color? borderColor;
 
   const _PremiumPill({
     required this.label,
-    this.icon,
     this.svgAsset,
     required this.color,
-    this.backgroundColor,
-    this.borderColor,
   });
 
   @override
@@ -2601,7 +2595,7 @@ class _PremiumPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: backgroundColor ?? color.withValues(alpha: 0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -2614,9 +2608,6 @@ class _PremiumPill extends StatelessWidget {
               height: 12,
               colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
             ),
-            const SizedBox(width: 4),
-          ] else if (icon != null) ...[
-            Icon(icon, size: 12, color: color),
             const SizedBox(width: 4),
           ],
           Flexible(
