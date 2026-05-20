@@ -154,6 +154,20 @@
                 <div class="drawer-tabs" id="drawer-tabs"></div>
                 <div id="drawer-content" class="drawer-content"></div>
             </aside>
+
+            <div id="delete-user-modal" class="modal-backdrop" aria-hidden="true">
+                <div class="confirm-modal destructive-modal" role="dialog" aria-modal="true" aria-labelledby="delete-user-title">
+                    <div class="modal-kicker">Danger Zone</div>
+                    <h3 id="delete-user-title">Șterge cont</h3>
+                    <p id="delete-user-message">Sigur doriți să ștergeți acest cont? Această acțiune este permanentă și nu poate fi anulată.</p>
+                    <div id="delete-user-summary" class="delete-user-summary"></div>
+                    <div id="delete-user-error" class="modal-error" hidden></div>
+                    <div class="modal-actions">
+                        <button class="btn" id="cancel-delete-user">Anulează</button>
+                        <button class="btn btn-destructive" id="confirm-delete-user">Șterge cont</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -194,6 +208,7 @@
             ['subscriptions', 'Subscriptions'],
             ['payments', 'Payments'],
             ['saved', 'Saved Content'],
+            ['danger', 'Danger Zone'],
         ];
 
         const $ = (id) => document.getElementById(id);
@@ -410,6 +425,7 @@
                 subscriptions: renderSubscriptionsTab,
                 payments: renderPaymentsTab,
                 saved: renderSavedTab,
+                danger: renderDangerTab,
             };
             await renderers[state.activeTab]();
         }
@@ -723,6 +739,77 @@
             });
         }
 
+        function renderDangerTab() {
+            const user = state.selectedUser;
+            $('drawer-content').innerHTML = `
+                <section class="danger-zone-panel">
+                    <div>
+                        <div class="danger-zone-eyebrow">Danger Zone</div>
+                        <h4>Șterge cont utilizator</h4>
+                        <p>
+                            Ștergerea elimină contul, profilul, sesiunile, token-urile și datele asociate.
+                            Utilizatorul nu se va mai putea autentifica după această operațiune.
+                        </p>
+                    </div>
+                    <button class="btn btn-destructive" id="open-delete-user-modal">Șterge cont</button>
+                </section>
+                <div class="admin-panel flat danger-zone-note">
+                    <strong>Acțiune permanentă</strong>
+                    <p class="muted">Această operațiune este auditată și nu poate fi anulată din Management System.</p>
+                </div>
+            `;
+            $('open-delete-user-modal').addEventListener('click', () => openDeleteUserModal(user));
+        }
+
+        function openDeleteUserModal(user) {
+            $('delete-user-summary').innerHTML = `
+                <strong>${escapeHtml(user.full_name || user.email)}</strong>
+                <span>#${user.id} · ${escapeHtml(user.email)}</span>
+            `;
+            $('confirm-delete-user').disabled = false;
+            $('confirm-delete-user').textContent = 'Șterge cont';
+            $('delete-user-error').hidden = true;
+            $('delete-user-error').textContent = '';
+            $('delete-user-modal').classList.add('open');
+            $('delete-user-modal').setAttribute('aria-hidden', 'false');
+        }
+
+        function closeDeleteUserModal() {
+            $('delete-user-modal').classList.remove('open');
+            $('delete-user-modal').setAttribute('aria-hidden', 'true');
+            $('delete-user-error').hidden = true;
+            $('delete-user-error').textContent = '';
+        }
+
+        async function deleteSelectedUser() {
+            if (!state.selectedUserId) return;
+            const button = $('confirm-delete-user');
+            button.disabled = true;
+            button.textContent = 'Se șterge...';
+            try {
+                const deletedUserId = state.selectedUserId;
+                const result = await API.delete(`/admin/users/${deletedUserId}`);
+                closeDeleteUserModal();
+                $('details-drawer').classList.remove('open');
+                $('details-drawer').setAttribute('aria-hidden', 'true');
+                state.selectedUserId = null;
+                state.selectedUser = null;
+                state.tabCache = {};
+                showSuccess(result.message || 'Contul utilizatorului a fost șters.');
+                await loadUsers();
+                if (!state.users.length && state.page > 1) {
+                    state.page -= 1;
+                    await loadUsers();
+                }
+            } catch (err) {
+                button.disabled = false;
+                button.textContent = 'Șterge cont';
+                $('delete-user-error').hidden = false;
+                $('delete-user-error').textContent = err.message;
+                showError(err.message);
+            }
+        }
+
         function renderMiniTable(headers, rows) {
             if (!rows.length) return '<div class="empty-state">Nu există date pentru această secțiune.</div>';
             return `
@@ -768,6 +855,11 @@
                 $('details-drawer').setAttribute('aria-hidden', 'true');
                 state.selectedUserId = null;
                 renderUsers();
+            });
+            $('cancel-delete-user').addEventListener('click', closeDeleteUserModal);
+            $('confirm-delete-user').addEventListener('click', deleteSelectedUser);
+            $('delete-user-modal').addEventListener('click', (event) => {
+                if (event.target.id === 'delete-user-modal') closeDeleteUserModal();
             });
         }
 

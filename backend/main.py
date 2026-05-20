@@ -28,6 +28,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from pypdf import PdfReader
 from sqlalchemy import bindparam, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
@@ -4483,6 +4484,121 @@ def admin_revoke_user_sessions(user_id: int, db: Session = Depends(get_db)):
     admin_audit(db, "users", user_id, "revoke_sessions", new_data={"revoked_sessions": revoked_count})
     db.commit()
     return {"success": True, "revoked_sessions": revoked_count}
+
+
+@app.delete("/admin/users/{user_id}")
+def admin_delete_user_account(user_id: int, db: Session = Depends(get_db)):
+    _ensure_registration_schema(db)
+    user = get_admin_user_or_404(db, user_id)
+    try:
+        old_data = serialize_admin_user_detail(db, user)
+    except HTTPException:
+        old_data = {
+            "id": user.id,
+            "email": user.email,
+            "is_active": user.is_active,
+            "email_verified": user.email_verified_at is not None,
+            "created_at": serialize_value(user.created_at),
+            "last_login_at": serialize_value(user.last_login_at),
+        }
+
+    try:
+        profile = db.query(models.UserProfile).filter(models.UserProfile.user_id == user_id).first()
+        profile_id = profile.id if profile else None
+
+        deleted_counts = {
+            "user_sessions": db.query(models.UserSession).filter(models.UserSession.user_id == user_id).delete(synchronize_session=False),
+            "user_email_verifications": db.query(models.UserEmailVerification).filter(models.UserEmailVerification.user_id == user_id).delete(synchronize_session=False),
+            "user_password_resets": db.query(models.UserPasswordReset).filter(models.UserPasswordReset.user_id == user_id).delete(synchronize_session=False),
+            "user_roles": db.query(models.UserRole).filter(models.UserRole.user_id == user_id).delete(synchronize_session=False),
+            "user_interests": db.query(models.UserInterest).filter(models.UserInterest.user_id == user_id).delete(synchronize_session=False),
+            "saved_content": db.query(models.SavedContent).filter(models.SavedContent.user_id == user_id).delete(synchronize_session=False),
+            "user_courses": db.query(models.UserCourse).filter(models.UserCourse.user_id == user_id).delete(synchronize_session=False),
+            "user_event_registrations": db.query(models.UserEventRegistration).filter(models.UserEventRegistration.user_id == user_id).delete(synchronize_session=False),
+            "user_activity_logs": db.query(models.UserActivityLog).filter(models.UserActivityLog.user_id == user_id).delete(synchronize_session=False),
+            "user_emc_point_logs": db.query(models.UserEmcPointLog).filter(models.UserEmcPointLog.user_id == user_id).delete(synchronize_session=False),
+            "user_emc_certificates": db.query(models.UserEmcCertificate).filter(models.UserEmcCertificate.user_id == user_id).delete(synchronize_session=False),
+            "payments": db.query(models.Payment).filter(models.Payment.user_id == user_id).delete(synchronize_session=False),
+        }
+
+        subscription_ids = [
+            row[0]
+            for row in db.query(models.UserSubscription.id)
+            .filter(models.UserSubscription.user_id == user_id)
+            .all()
+        ]
+        if subscription_ids:
+            deleted_counts["subscription_payments"] = (
+                db.query(models.Payment)
+                .filter(models.Payment.subscription_id.in_(subscription_ids))
+                .delete(synchronize_session=False)
+            )
+        deleted_counts["user_subscriptions"] = (
+            db.query(models.UserSubscription)
+            .filter(models.UserSubscription.user_id == user_id)
+            .delete(synchronize_session=False)
+        )
+
+        if profile_id is not None:
+            deleted_counts["user_profile_interests"] = (
+                db.query(models.UserProfileInterest)
+                .filter(models.UserProfileInterest.user_profile_id == profile_id)
+                .delete(synchronize_session=False)
+            )
+            deleted_counts["user_profiles"] = (
+                db.query(models.UserProfile)
+                .filter(models.UserProfile.id == profile_id)
+                .delete(synchronize_session=False)
+            )
+
+        deleted_counts["content_item_revisions_unlinked"] = db.query(models.ContentItemRevision).filter(
+            models.ContentItemRevision.created_by_user_id == user_id
+        ).update({"created_by_user_id": None}, synchronize_session=False)
+        deleted_counts["audit_logs_unlinked"] = db.query(models.AuditLog).filter(models.AuditLog.actor_user_id == user_id).update(
+            {"actor_user_id": None},
+            synchronize_session=False,
+        )
+        deleted_counts["ads_created_by_unlinked"] = db.query(models.Ad).filter(models.Ad.created_by_user_id == user_id).update(
+            {"created_by_user_id": None},
+            synchronize_session=False,
+        )
+        deleted_counts["ads_updated_by_unlinked"] = db.query(models.Ad).filter(models.Ad.updated_by_user_id == user_id).update(
+            {"updated_by_user_id": None},
+            synchronize_session=False,
+        )
+
+        admin_audit(
+            db,
+            "users",
+            user_id,
+            "delete",
+            old_data=old_data,
+            new_data={"deleted_counts": deleted_counts},
+        )
+        db.delete(user)
+        db.commit()
+        logger.info("Admin deleted user account %s (%s)", user_id, old_data.get("email"))
+        return {
+            "success": True,
+            "message": "User account deleted.",
+            "deleted_user_id": user_id,
+            "deleted_counts": deleted_counts,
+        }
+    except IntegrityError as e:
+        db.rollback()
+        logger.exception("User delete blocked by database constraint for user_id=%s", user_id)
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Contul nu poate fi șters deoarece există relații asociate care "
+                "blochează operațiunea. Verificați datele dependente și încercați din nou."
+            ),
+        ) from e
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, detail="Ștergerea contului a eșuat.", status_code=400)
 
 
 @app.get("/admin/users/{user_id}/sessions")

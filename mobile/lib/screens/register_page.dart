@@ -2,11 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 
 import '../services/api_service.dart';
 import '../services/auth_storage.dart';
-import '../theme/pulse_theme.dart';
 import '../utils/validators.dart' as validators;
 import '../widgets/auth_shell.dart';
 import 'email_verification_screen.dart';
@@ -62,6 +62,31 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  static const _backIcon = 'assets/icons/arrow.backward.svg';
+  static const _emailIcon = 'assets/icons/envelope.fill.svg';
+  static const _passwordIcon = 'assets/icons/key.fill.svg';
+  static const _confirmIcon = _passwordIcon;
+  static const _personIcon = 'assets/icons/person.text.rectangle.fill.svg';
+  static const _numbersIcon = 'assets/icons/numbers.rectangle.fill.svg';
+  static const _phoneIcon = 'assets/icons/phone.fill.svg';
+  static const _homeIcon = 'assets/icons/house.svg';
+  static const _countyIcon = 'assets/icons/globe.svg';
+  static const _cityIcon = 'assets/icons/location.fill.svg';
+  static const _occupationIcon = 'assets/icons/case.fill.svg';
+  static const _specializationIcon = 'assets/icons/cross.case.fill.svg';
+  static const _secondarySpecializationIcon =
+      'assets/icons/cross.case.circle.svg';
+  static const _gradeIcon = 'assets/icons/checkmark.seal.fill.svg';
+  static const _institutionIcon = 'assets/icons/building.svg';
+  static const _professionalCodeIcon =
+      'assets/icons/numbers.rectangle.fill.svg';
+  static const _signatureIcon = 'assets/icons/signature.svg';
+  static const _titleIcon = 'assets/icons/graduation.svg';
+  static const _interestsIcon = 'assets/icons/heart.svg';
+  static const _dropdownIcon = 'assets/icons/arrow.right.svg';
+  static const _eyeIcon = 'assets/icons/eye.fill.svg';
+  static const _eyeSlashIcon = 'assets/icons/eye.slash.fill.svg';
+
   final _formKey = GlobalKey<FormState>();
   final _apiService = ApiService();
 
@@ -320,10 +345,8 @@ class _RegisterPageState extends State<RegisterPage> {
         _institutions = results[5];
         _interests = results[6];
 
-        _selectedCountyId = _counties.isNotEmpty ? _counties.first.id : null;
-        _selectedCityId = _filteredCities.isNotEmpty
-            ? _filteredCities.first.id
-            : null;
+        _selectedCountyId = null;
+        _selectedCityId = null;
         _selectedOccupationId = _occupations.isNotEmpty
             ? _occupations.first.id
             : null;
@@ -507,8 +530,7 @@ class _RegisterPageState extends State<RegisterPage> {
         '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}',
       );
       if (!mounted) return;
-      final verificationRequired =
-          data['email_verification_required'] == true;
+      final verificationRequired = data['email_verification_required'] == true;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -521,9 +543,8 @@ class _RegisterPageState extends State<RegisterPage> {
       if (verificationRequired) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => EmailVerificationScreen(
-              email: _emailController.text.trim(),
-            ),
+            builder: (_) =>
+                EmailVerificationScreen(email: _emailController.text.trim()),
           ),
         );
       } else {
@@ -546,15 +567,17 @@ class _RegisterPageState extends State<RegisterPage> {
   InputDecoration _fieldDecoration(
     String label, {
     String? hintText,
-    IconData? icon,
+    String? iconAsset,
   }) {
     return InputDecoration(
       hintText: hintText ?? label,
       floatingLabelBehavior: FloatingLabelBehavior.never,
-      prefixIcon: icon == null
-          ? null
-          : Icon(icon, color: AuthShell.pulsePurple, size: 21),
-      prefixIconConstraints: const BoxConstraints(minWidth: 42, minHeight: 58),
+      prefixIcon: iconAsset == null ? null : _decorativeIconSlot(iconAsset),
+      prefixIconConstraints: const BoxConstraints(
+        minWidth: 44,
+        maxWidth: 44,
+        minHeight: 58,
+      ),
       filled: true,
       fillColor: AuthShell.fieldFill,
       isDense: false,
@@ -592,6 +615,60 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
+  Widget _svgIcon(
+    String asset, {
+    double size = 19,
+    Color color = AuthShell.pulsePurple,
+  }) {
+    return SvgPicture.asset(
+      asset,
+      width: size,
+      height: size,
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+    );
+  }
+
+  Widget _decorativeIconSlot(String asset) {
+    return SizedBox(
+      width: 44,
+      height: 58,
+      child: Center(child: _svgIcon(asset)),
+    );
+  }
+
+  Widget _passwordVisibilityButton({
+    required bool isPasswordVisible,
+    required VoidCallback? onPressed,
+  }) {
+    return SizedBox(
+      width: 48,
+      height: 58,
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 48, height: 58),
+        icon: Opacity(
+          opacity: 0.62,
+          child: _svgIcon(
+            isPasswordVisible ? _eyeSlashIcon : _eyeIcon,
+            size: 20,
+            color: AuthShell.pulsePurple,
+          ),
+        ),
+        onPressed: onPressed,
+      ),
+    );
+  }
+
+  Widget _dropdownArrowIcon() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: RotatedBox(
+        quarterTurns: 1,
+        child: _svgIcon(_dropdownIcon, size: 18),
+      ),
+    );
+  }
+
   Widget _textField({
     required TextEditingController controller,
     required String label,
@@ -605,11 +682,13 @@ class _RegisterPageState extends State<RegisterPage> {
     int? maxLength,
     String? helperText,
     String? hintText,
-    IconData? icon,
+    String? iconAsset,
     int maxLines = 1,
+    double bottomPadding = 12,
+    bool reserveHelperSpace = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.only(bottom: bottomPadding),
       child: TextFormField(
         controller: controller,
         keyboardType: keyboardType,
@@ -625,23 +704,23 @@ class _RegisterPageState extends State<RegisterPage> {
           fontWeight: FontWeight.w600,
         ),
         validator: validator,
-        decoration: _fieldDecoration(label, hintText: hintText, icon: icon)
-            .copyWith(
-              helperText: helperText,
+        decoration:
+            _fieldDecoration(
+              label,
+              hintText: hintText,
+              iconAsset: iconAsset,
+            ).copyWith(
+              helperText: helperText ?? (reserveHelperSpace ? ' ' : null),
               counterText: '',
               suffixIcon: showPasswordToggle
-                  ? IconButton(
-                      icon: Icon(
-                        isPasswordVisible
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                      ),
-                      color: AuthShell.pulsePurple,
+                  ? _passwordVisibilityButton(
+                      isPasswordVisible: isPasswordVisible,
                       onPressed: onTogglePassword,
                     )
                   : null,
               suffixIconConstraints: const BoxConstraints(
-                minWidth: 42,
+                minWidth: 48,
+                maxWidth: 48,
                 minHeight: 58,
               ),
             ),
@@ -655,18 +734,26 @@ class _RegisterPageState extends State<RegisterPage> {
     required List<_OptionItem> options,
     required ValueChanged<int?> onChanged,
     bool required = true,
+    bool enabled = true,
     String? emptyHint,
-    IconData? icon,
+    String? hintText,
+    String? helperText,
+    String? iconAsset,
   }) {
+    if (!enabled) {
+      return _disabledDropdownField(
+        label: label,
+        hintText: hintText ?? label,
+        helperText: helperText,
+        iconAsset: iconAsset,
+      );
+    }
+
     if (options.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Text(
-          emptyHint ?? 'Nu există opțiuni disponibile pentru $label.',
-          style: TextStyle(
-            color: required ? Colors.red.shade700 : PulseTheme.textSecondary,
-          ),
-        ),
+      return _disabledDropdownField(
+        label: label,
+        hintText: emptyHint ?? 'Nu există opțiuni disponibile pentru $label.',
+        iconAsset: iconAsset,
       );
     }
 
@@ -679,8 +766,20 @@ class _RegisterPageState extends State<RegisterPage> {
         key: ValueKey('$label-$effectiveValue-${options.length}'),
         initialValue: effectiveValue,
         isExpanded: true,
-        hint: Text(label, overflow: TextOverflow.ellipsis),
-        decoration: _fieldDecoration(label, icon: icon),
+        icon: _dropdownArrowIcon(),
+        hint: Text(
+          hintText ?? label,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AuthShell.textSecondary,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        decoration: _fieldDecoration(
+          label,
+          iconAsset: iconAsset,
+        ).copyWith(helperText: helperText),
         items: options
             .map(
               (item) => DropdownMenuItem<int>(
@@ -697,6 +796,89 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
+  Widget _disabledDropdownField({
+    required String label,
+    required String hintText,
+    String? helperText,
+    String? iconAsset,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<int>(
+        key: ValueKey('disabled-$label-$hintText'),
+        initialValue: null,
+        isExpanded: true,
+        icon: _dropdownArrowIcon(),
+        hint: Text(
+          hintText,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AuthShell.textSecondary,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        decoration: _fieldDecoration(
+          label,
+          iconAsset: iconAsset,
+        ).copyWith(helperText: helperText, enabled: false),
+        items: const [],
+        onChanged: null,
+      ),
+    );
+  }
+
+  Widget _phoneFieldsRow() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 112,
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('phone-prefix-$_phonePrefix'),
+              initialValue: _phonePrefix,
+              isExpanded: true,
+              icon: _dropdownArrowIcon(),
+              decoration: _fieldDecoration(
+                'Prefix',
+              ).copyWith(helperText: ' ', counterText: ''),
+              items: ['+40', '+373', '+1']
+                  .map(
+                    (prefix) => DropdownMenuItem(
+                      value: prefix,
+                      child: Text(prefix, overflow: TextOverflow.ellipsis),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _phonePrefix = value);
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _textField(
+              controller: _phoneController,
+              label: 'Telefon',
+              validator: _phoneValidator,
+              keyboardType: TextInputType.phone,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]')),
+              ],
+              maxLength: 20,
+              iconAsset: _phoneIcon,
+              bottomPadding: 0,
+              reserveHelperSpace: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _interestPicker() {
     if (_interests.isEmpty) return const SizedBox.shrink();
     return Padding(
@@ -705,7 +887,7 @@ class _RegisterPageState extends State<RegisterPage> {
         decoration: _fieldDecoration(
           'Interese',
           hintText: 'Interese',
-          icon: Icons.interests_outlined,
+          iconAsset: _interestsIcon,
         ),
         child: Wrap(
           spacing: 8,
@@ -753,7 +935,7 @@ class _RegisterPageState extends State<RegisterPage> {
               label: 'Email',
               validator: _emailValidator,
               keyboardType: TextInputType.emailAddress,
-              icon: Icons.mail_outline_rounded,
+              iconAsset: _emailIcon,
             ),
             _textField(
               controller: _passwordController,
@@ -763,7 +945,7 @@ class _RegisterPageState extends State<RegisterPage> {
               isPasswordVisible: _showPassword,
               onTogglePassword: () =>
                   setState(() => _showPassword = !_showPassword),
-              icon: Icons.lock_outline_rounded,
+              iconAsset: _passwordIcon,
             ),
             _textField(
               controller: _confirmPasswordController,
@@ -773,7 +955,7 @@ class _RegisterPageState extends State<RegisterPage> {
               isPasswordVisible: _showConfirmPassword,
               onTogglePassword: () =>
                   setState(() => _showConfirmPassword = !_showConfirmPassword),
-              icon: Icons.verified_user_outlined,
+              iconAsset: _confirmIcon,
             ),
           ],
         ),
@@ -788,13 +970,13 @@ class _RegisterPageState extends State<RegisterPage> {
               controller: _firstNameController,
               label: 'Nume',
               validator: (value) => _requiredValidator(value, label: 'Nume'),
-              icon: Icons.person_outline_rounded,
+              iconAsset: _personIcon,
             ),
             _textField(
               controller: _lastNameController,
               label: 'Prenume',
               validator: (value) => _requiredValidator(value, label: 'Prenume'),
-              icon: Icons.badge_outlined,
+              iconAsset: _personIcon,
             ),
             _textField(
               controller: _cnpController,
@@ -803,61 +985,16 @@ class _RegisterPageState extends State<RegisterPage> {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               maxLength: 13,
-              icon: Icons.numbers_rounded,
+              iconAsset: _numbersIcon,
             ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 112,
-                    child: DropdownButtonFormField<String>(
-                      key: ValueKey('phone-prefix-$_phonePrefix'),
-                      initialValue: _phonePrefix,
-                      isExpanded: true,
-                      decoration: _fieldDecoration('Prefix'),
-                      items: ['+40', '+373', '+1']
-                          .map(
-                            (prefix) => DropdownMenuItem(
-                              value: prefix,
-                              child: Text(
-                                prefix,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => _phonePrefix = value);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _textField(
-                      controller: _phoneController,
-                      label: 'Telefon',
-                      validator: _phoneValidator,
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]')),
-                      ],
-                      maxLength: 20,
-                      icon: Icons.phone_outlined,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _phoneFieldsRow(),
             _textField(
               controller: _addressController,
               label: 'Adresă corespondență',
               validator: (value) =>
                   _requiredValidator(value, label: 'Adresă corespondență'),
               hintText: 'Stradă, număr, bloc, apartament',
-              icon: Icons.home_outlined,
-              maxLines: 2,
+              iconAsset: _homeIcon,
             ),
             _dropdownField(
               label: 'Județ',
@@ -866,26 +1003,32 @@ class _RegisterPageState extends State<RegisterPage> {
               onChanged: (value) {
                 setState(() {
                   _selectedCountyId = value;
-                  _selectedCityId = _filteredCities.isNotEmpty
-                      ? _filteredCities.first.id
-                      : null;
+                  _selectedCityId = null;
                   _selectedInstitutionId = null;
                 });
               },
-              icon: Icons.map_outlined,
+              hintText: 'Alegeți județul',
+              iconAsset: _countyIcon,
             ),
             _dropdownField(
               label: 'Oraș',
               value: _selectedCityId,
               options: _filteredCities,
+              enabled: _selectedCountyId != null,
               onChanged: (value) {
                 setState(() {
                   _selectedCityId = value;
                   _selectedInstitutionId = null;
                 });
               },
-              emptyHint: 'Nu există orașe pentru județul selectat.',
-              icon: Icons.location_city_outlined,
+              hintText: 'Alegeți orașul',
+              emptyHint: _selectedCountyId == null
+                  ? 'Alegeți județul mai întâi'
+                  : 'Nu există orașe pentru județul selectat.',
+              helperText: _selectedCountyId == null
+                  ? 'Selectați județul pentru a vedea orașele.'
+                  : null,
+              iconAsset: _cityIcon,
             ),
           ],
         ),
@@ -913,7 +1056,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   _professionalCodeController.clear();
                 });
               },
-              icon: Icons.work_outline_rounded,
+              iconAsset: _occupationIcon,
             ),
             _dropdownField(
               label: 'Specializare',
@@ -927,7 +1070,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   }
                 });
               },
-              icon: Icons.medical_services_outlined,
+              iconAsset: _specializationIcon,
             ),
             if (rule.requiresSecondarySpecialization)
               _dropdownField(
@@ -936,7 +1079,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 options: _filteredSecondarySpecializations,
                 onChanged: (value) =>
                     setState(() => _selectedSecondarySpecializationId = value),
-                icon: Icons.add_circle_outline_rounded,
+                iconAsset: _secondarySpecializationIcon,
               ),
             _dropdownField(
               label: 'Grad profesional',
@@ -944,7 +1087,7 @@ class _RegisterPageState extends State<RegisterPage> {
               options: _professionalGrades,
               onChanged: (value) =>
                   setState(() => _selectedProfessionalGradeId = value),
-              icon: Icons.workspace_premium_outlined,
+              iconAsset: _gradeIcon,
             ),
             _dropdownField(
               label: 'Instituție',
@@ -954,7 +1097,7 @@ class _RegisterPageState extends State<RegisterPage> {
               onChanged: (value) =>
                   setState(() => _selectedInstitutionId = value),
               emptyHint: 'Instituția poate fi completată ulterior.',
-              icon: Icons.apartment_rounded,
+              iconAsset: _institutionIcon,
             ),
             if (rule.requiresCuim)
               _textField(
@@ -964,7 +1107,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 maxLength: 10,
-                icon: Icons.confirmation_number_outlined,
+                iconAsset: _professionalCodeIcon,
               ),
             if (rule.requiresCodParafa)
               _textField(
@@ -975,7 +1118,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\-_]')),
                 ],
                 maxLength: 12,
-                icon: Icons.draw_outlined,
+                iconAsset: _signatureIcon,
               ),
             if (rule.requiresRegistrationCode)
               _textField(
@@ -985,7 +1128,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   value,
                   label: rule.registrationCodeLabel,
                 ),
-                icon: Icons.assignment_ind_outlined,
+                iconAsset: _professionalCodeIcon,
               ),
             if (rule.requiresTitluUniversitar)
               Padding(
@@ -994,9 +1137,10 @@ class _RegisterPageState extends State<RegisterPage> {
                   key: ValueKey('titlu-universitar-$_selectedTitluUniversitar'),
                   initialValue: _selectedTitluUniversitar,
                   isExpanded: true,
+                  icon: _dropdownArrowIcon(),
                   decoration: _fieldDecoration(
                     'Titlu universitar',
-                    icon: Icons.school_outlined,
+                    iconAsset: _titleIcon,
                   ),
                   items: _titluriUniversitare
                       .map(
@@ -1099,7 +1243,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     alignment: Alignment.centerLeft,
                     child: IconButton.filledTonal(
                       onPressed: () => Navigator.of(context).maybePop(),
-                      icon: const Icon(Icons.arrow_back_rounded),
+                      icon: _svgIcon(_backIcon, size: 22, color: Colors.white),
                       color: Colors.white,
                       style: IconButton.styleFrom(
                         backgroundColor: Colors.white.withValues(alpha: 0.16),
