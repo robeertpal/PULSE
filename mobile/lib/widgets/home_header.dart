@@ -2,12 +2,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
-import '../screens/notifications_screen.dart';
 
 class HomeHeader extends StatefulWidget {
   final String doctorName;
   final String avatarUrl;
   final int emcPoints;
+  final int unreadNotificationsCount;
+  final VoidCallback? onNotificationsTap;
   final VoidCallback? onSavedTap;
   final VoidCallback? onLogoutTap;
   final VoidCallback? onProfileTap;
@@ -18,7 +19,9 @@ class HomeHeader extends StatefulWidget {
     super.key,
     required this.doctorName,
     this.avatarUrl = '',
-    this.emcPoints = 12,
+    this.emcPoints = 0,
+    this.unreadNotificationsCount = 0,
+    this.onNotificationsTap,
     this.onSavedTap,
     this.onLogoutTap,
     this.onProfileTap,
@@ -88,15 +91,8 @@ class _HomeHeaderState extends State<HomeHeader> {
                 const SizedBox(width: 10),
                 _buildIconButton(
                   'assets/icons/bell.svg',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const NotificationsScreen(),
-                      ),
-                    );
-                  },
-                  hasBadge: true,
+                  onTap: widget.onNotificationsTap ?? () {},
+                  badgeCount: widget.unreadNotificationsCount,
                 ),
                 const SizedBox(width: 8),
                 _buildIconButton(
@@ -208,7 +204,7 @@ class _HomeHeaderState extends State<HomeHeader> {
     String iconPath, {
     required VoidCallback onTap,
     double iconSize = 20,
-    bool hasBadge = false,
+    int badgeCount = 0,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -233,17 +229,28 @@ class _HomeHeaderState extends State<HomeHeader> {
                 ),
               ),
             ),
-            if (hasBadge)
+            if (badgeCount > 0)
               Positioned(
-                right: 8,
-                top: 8,
+                right: badgeCount > 9 ? 3 : 7,
+                top: 5,
                 child: Container(
-                  width: 8,
-                  height: 8,
+                  constraints: const BoxConstraints(minWidth: 16),
+                  height: 16,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: BoxDecoration(
                     color: const Color(0xFFEF4444),
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(999),
                     border: Border.all(color: PulseTheme.surface, width: 1.5),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    badgeCount > 9 ? '9+' : '$badgeCount',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                      height: 1,
+                    ),
                   ),
                 ),
               ),
@@ -260,8 +267,8 @@ class _HomeHeaderState extends State<HomeHeader> {
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Închide',
-      barrierColor: Colors.black.withValues(alpha: 0.05),
-      transitionDuration: const Duration(milliseconds: 250),
+      barrierColor: Colors.black.withValues(alpha: 0.07),
+      transitionDuration: const Duration(milliseconds: 340),
       pageBuilder: (context, animation, secondaryAnimation) {
         return SafeArea(
           child: Align(
@@ -347,15 +354,33 @@ class _HomeHeaderState extends State<HomeHeader> {
         );
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curvedAnimation = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        final fadeAnimation = Tween<double>(
+          begin: 0,
+          end: 1,
+        ).animate(curvedAnimation);
+        final scaleAnimation = Tween<double>(
+          begin: 0.96,
+          end: 1,
+        ).animate(curvedAnimation);
+        final slideAnimation = Tween<Offset>(
+          begin: const Offset(0.04, -0.015),
+          end: Offset.zero,
+        ).animate(curvedAnimation);
+
         return FadeTransition(
-          opacity: animation,
-          child: ScaleTransition(
-            scale: CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutBack,
+          opacity: fadeAnimation,
+          child: SlideTransition(
+            position: slideAnimation,
+            child: ScaleTransition(
+              scale: scaleAnimation,
+              alignment: Alignment.topRight,
+              child: child,
             ),
-            alignment: Alignment.topRight,
-            child: child,
           ),
         );
       },

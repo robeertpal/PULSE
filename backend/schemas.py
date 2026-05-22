@@ -88,6 +88,35 @@ class EmailVerificationResend(BaseModel):
     email: EmailStr
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetVerify(BaseModel):
+    email: EmailStr
+    otp_code: str = Field(min_length=6, max_length=6)
+
+    @field_validator("otp_code", mode="before")
+    @classmethod
+    def strip_otp_code(cls, value):
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+
+class PasswordResetConfirm(BaseModel):
+    email: EmailStr
+    otp_code: str = Field(min_length=6, max_length=6)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("otp_code", mode="before")
+    @classmethod
+    def strip_otp_code(cls, value):
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+
 class AdminLogin(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)

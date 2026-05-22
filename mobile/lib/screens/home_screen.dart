@@ -10,6 +10,7 @@ import '../services/api_service.dart';
 import '../services/auth_storage.dart';
 import 'login_screen.dart';
 import 'content_detail_screen.dart';
+import 'notifications_screen.dart';
 import 'publication_issues_screen.dart';
 import 'profile_screen.dart';
 import 'saved_content_screen.dart';
@@ -52,6 +53,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _contentRequestId = 0;
   String? _errorMessage;
   String _doctorName = 'Medic';
+  int _emcPoints = 0;
+  int _unreadNotificationsCount = 0;
 
   static const int _sectionCount = 10;
   static const List<String> _homeAdPlacements = [
@@ -102,6 +105,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _loadFilterOptions();
     _loadSavedContentIds();
     _loadDoctorName();
+    _loadUnreadNotificationsCount();
+  }
+
+  Future<void> _loadUnreadNotificationsCount() async {
+    final count = await _apiService.getUnreadNotificationCount();
+    if (!mounted) return;
+    setState(() {
+      _unreadNotificationsCount = count;
+    });
   }
 
   Future<void> _loadDoctorName() async {
@@ -119,17 +131,37 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     try {
       final profileData = await _apiService.getMyProfile();
       final freshName = profileData['display_name'] as String?;
+      final totalEmcPoints = _readTotalEmcPoints(profileData);
       if (freshName != null && freshName.trim().isNotEmpty) {
         await _authStorage.saveUserName(freshName.trim());
-        if (mounted) {
-          setState(() {
+      }
+      if (mounted) {
+        setState(() {
+          if (freshName != null && freshName.trim().isNotEmpty) {
             _doctorName = freshName.trim();
-          });
-        }
+          }
+          _emcPoints = totalEmcPoints;
+        });
       }
     } catch (e) {
       debugPrint('Eroare la obținerea numelui medicului din API: $e');
     }
+  }
+
+  int _readTotalEmcPoints(Map<String, dynamic> profileData) {
+    final directValue = profileData['total_emc_points'];
+    if (directValue is int) return directValue;
+    if (directValue is num) return directValue.toInt();
+    if (directValue is String) return int.tryParse(directValue) ?? 0;
+
+    final profile = profileData['profile'];
+    if (profile is Map<String, dynamic>) {
+      final profileValue = profile['total_emc_points'];
+      if (profileValue is int) return profileValue;
+      if (profileValue is num) return profileValue.toInt();
+      if (profileValue is String) return int.tryParse(profileValue) ?? 0;
+    }
+    return 0;
   }
 
   List<int> get _categoryFilterIds => _selectedCategoryIds.toList()..sort();
@@ -287,6 +319,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       MaterialPageRoute(builder: (context) => const SavedContentScreen()),
     );
     _loadSavedContentIds();
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+    );
+    _loadUnreadNotificationsCount();
   }
 
   Future<void> _openProfile() async {
@@ -1182,6 +1222,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               HomeHeader(
                 doctorName: _doctorName,
                 avatarUrl: '',
+                emcPoints: _emcPoints,
+                unreadNotificationsCount: _unreadNotificationsCount,
+                onNotificationsTap: _openNotifications,
                 onSavedTap: _openSavedContent,
                 onProfileTap: _openProfile,
                 onLogoutTap: _logout,

@@ -78,10 +78,7 @@ class ApiService {
     return fallback;
   }
 
-  Exception _friendlyNetworkException(
-    Object error,
-    String actionLabel,
-  ) {
+  Exception _friendlyNetworkException(Object error, String actionLabel) {
     if (error is TimeoutException) {
       return Exception(
         '$actionLabel durează prea mult. Verifică dacă backend-ul rulează pe $baseUrl și încearcă din nou.',
@@ -205,6 +202,96 @@ class ApiService {
     return decoded;
   }
 
+  Future<Map<String, dynamic>> requestPasswordReset({
+    required String email,
+  }) async {
+    late final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/api/password-resets/request'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email}),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (error) {
+      throw _friendlyNetworkException(error, 'trimiterea codului');
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        _responseErrorMessage(response, 'Nu am putut trimite codul.'),
+      );
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Răspuns de resetare neașteptat.');
+    }
+    return decoded;
+  }
+
+  Future<Map<String, dynamic>> verifyPasswordResetCode({
+    required String email,
+    required String otpCode,
+  }) async {
+    late final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/api/password-resets/verify'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email, 'otp_code': otpCode}),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (error) {
+      throw _friendlyNetworkException(error, 'verificarea codului');
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_responseErrorMessage(response, 'Verificare eșuată'));
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Răspuns de verificare neașteptat.');
+    }
+    return decoded;
+  }
+
+  Future<Map<String, dynamic>> confirmPasswordReset({
+    required String email,
+    required String otpCode,
+    required String password,
+  }) async {
+    late final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/api/password-resets/confirm'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'email': email,
+              'otp_code': otpCode,
+              'password': password,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (error) {
+      throw _friendlyNetworkException(error, 'resetarea parolei');
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_responseErrorMessage(response, 'Resetare eșuată'));
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Răspuns de resetare neașteptat.');
+    }
+    return decoded;
+  }
+
   Future<void> logout() async {
     final sessionToken = await _authStorage.getSessionToken();
     if (sessionToken == null || sessionToken.isEmpty) {
@@ -246,6 +333,103 @@ class ApiService {
     } catch (e) {
       debugPrint('Error fetching profile: $e');
       rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getNotifications() async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(Uri.parse('$baseUrl/notifications'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut încărca notificările.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Răspuns notificări neașteptat.');
+      }
+      return decoded.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      debugPrint('Error fetching notifications: $e');
+      rethrow;
+    }
+  }
+
+  Future<int> getUnreadNotificationCount() async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/notifications/unread-count'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 10));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut încărca numărul notificărilor.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Răspuns notificări neașteptat.');
+      }
+      final value = decoded['unread_count'];
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value) ?? 0;
+      return 0;
+    } catch (e) {
+      debugPrint('Error fetching unread notification count: $e');
+      return 0;
+    }
+  }
+
+  Future<void> markNotificationRead(int userNotificationId) async {
+    final headers = await _buildAuthHeaders();
+    final response = await http
+        .patch(
+          Uri.parse('$baseUrl/notifications/$userNotificationId/read'),
+          headers: headers,
+        )
+        .timeout(const Duration(seconds: 10));
+
+    await _handleAuthFailure(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        _responseErrorMessage(
+          response,
+          'Nu am putut marca notificarea citită.',
+        ),
+      );
+    }
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    final headers = await _buildAuthHeaders();
+    final response = await http
+        .patch(Uri.parse('$baseUrl/notifications/read-all'), headers: headers)
+        .timeout(const Duration(seconds: 10));
+
+    await _handleAuthFailure(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        _responseErrorMessage(
+          response,
+          'Nu am putut marca notificările citite.',
+        ),
+      );
     }
   }
 
