@@ -2,6 +2,7 @@ from collections import defaultdict, deque
 import base64
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 from decimal import Decimal
 from email.message import EmailMessage
 import html
@@ -29,7 +30,7 @@ from fastapi.responses import JSONResponse
 from pypdf import PdfReader
 from sqlalchemy import bindparam, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, object_session
 
 from database import get_db
 import models
@@ -37,6 +38,9 @@ from schemas import (
     AdminLogin,
     EmailVerificationResend,
     EmailVerificationVerify,
+    PasswordResetConfirm,
+    PasswordResetRequest,
+    PasswordResetVerify,
     UserCreate,
     UserLogin,
     UserLogout,
@@ -353,6 +357,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 EMAIL_VERIFICATION_EXPIRY_MINUTES = 10
 EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = 60
 EMAIL_VERIFICATION_SUBJECT = "Confirmă adresa de email • pulse"
+PASSWORD_RESET_SUBJECT = "Resetează parola contului pulse"
 
 
 def create_email_otp() -> str:
@@ -372,16 +377,43 @@ def validate_email_otp_code(otp_code: str) -> None:
         raise ValueError("OTP code must contain only digits")
 
 
-def build_email_verification_html(otp_code: str) -> str:
+def elapsed_seconds_since(now: datetime, previous: datetime) -> float:
+    if now.tzinfo is None and previous.tzinfo is not None:
+        now = now.replace(tzinfo=timezone.utc)
+    elif now.tzinfo is not None and previous.tzinfo is None:
+        previous = previous.replace(tzinfo=timezone.utc)
+    return (now - previous).total_seconds()
+
+
+def build_auth_code_email_html(
+    otp_code: str,
+    *,
+    title: str,
+    intro: str,
+    heading: str,
+    description: str,
+    code_label: str,
+    expires_text: str,
+    info_title: str,
+    info_text: str,
+) -> str:
     validate_email_otp_code(otp_code)
     digits = list(otp_code)
     escaped_digits = [html.escape(digit) for digit in digits]
+    escaped_title = html.escape(title)
+    escaped_intro = html.escape(intro)
+    escaped_heading = html.escape(heading)
+    escaped_description = html.escape(description)
+    escaped_code_label = html.escape(code_label)
+    escaped_expires_text = html.escape(expires_text)
+    escaped_info_title = html.escape(info_title)
+    escaped_info_text = html.escape(info_text)
     return f"""<!doctype html>
 <html lang="ro">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Confirmare email pulse</title>
+  <title>{escaped_title}</title>
 </head>
 
 <body style="margin:0;padding:0;background:#f6f2fb;font-family:Arial,Helvetica,sans-serif;">
@@ -396,15 +428,15 @@ def build_email_verification_html(otp_code: str) -> str:
   <img src="https://storageforpulse.blob.core.windows.net/content-images/images/2026/05/icon-iOS-Default-1024x1024@1x.png" width="174" alt="pulse" style="display:block;margin:0 auto 40px;border:0;max-width:174px;height:auto;">
 
   <p style="margin:0 0 18px;color:rgba(255,255,255,0.88);font-size:14px;line-height:1.7;">
-    Bine ai venit în pulse!
+    {escaped_intro}
   </p>
 
   <h1 style="margin:0;color:#ffffff;font-size:46px;line-height:1.04;font-weight:900;letter-spacing:-0.06em;">
-    Mai ai un singur pas.
+    {escaped_heading}
   </h1>
 
   <p style="margin:24px auto 0;max-width:455px;color:rgba(255,255,255,0.94);font-size:16px;line-height:1.8;">
-    Introdu codul de verificare în aplicație pentru a confirma adresa de email și pentru a continua configurarea profilului tău medical.
+    {escaped_description}
   </p>
 </td>
 </tr>
@@ -415,7 +447,7 @@ def build_email_verification_html(otp_code: str) -> str:
 <tr>
 <td style="padding:46px 30px 42px;text-align:center;">
   <p style="margin:0 0 22px;color:#7c3aed;font-size:12px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;">
-    Cod de verificare
+    {escaped_code_label}
   </p>
 
   <table cellspacing="0" cellpadding="0" border="0" align="center">
@@ -435,7 +467,7 @@ def build_email_verification_html(otp_code: str) -> str:
   </table>
 
   <p style="margin:26px 0 0;color:#7b7288;font-size:14px;line-height:1.7;">
-    Codul expiră în 10 minute.
+    {escaped_expires_text}
   </p>
 </td>
 </tr>
@@ -447,10 +479,10 @@ def build_email_verification_html(otp_code: str) -> str:
 <td style="padding:48px 44px 44px;">
   <div style="padding:30px;border-radius:28px;background:#ffffff;border:1px solid #eee8f7;box-shadow:0 14px 34px rgba(36,17,63,0.06);text-align:left;">
     <h3 style="margin:0 0 14px;color:#24113f;font-size:21px;font-weight:900;letter-spacing:-0.04em;">
-      Confirmarea protejează contul tău
+      {escaped_info_title}
     </h3>
     <p style="margin:0;color:#5f5a69;font-size:15px;line-height:1.9;">
-      Folosim această verificare pentru a ne asigura că adresa de email îți aparține. Dacă nu ai solicitat crearea unui cont, poți ignora acest mesaj.
+      {escaped_info_text}
     </p>
   </div>
 </td>
@@ -478,6 +510,34 @@ def build_email_verification_html(otp_code: str) -> str:
 </html>"""
 
 
+def build_email_verification_html(otp_code: str) -> str:
+    return build_auth_code_email_html(
+        otp_code,
+        title="Confirmare email pulse",
+        intro="Bine ai venit în pulse!",
+        heading="Mai ai un singur pas.",
+        description="Introdu codul de verificare în aplicație pentru a confirma adresa de email și pentru a continua configurarea profilului tău medical.",
+        code_label="Cod de verificare",
+        expires_text="Codul expiră în 10 minute.",
+        info_title="Confirmarea protejează contul tău",
+        info_text="Folosim această verificare pentru a ne asigura că adresa de email îți aparține. Dacă nu ai solicitat crearea unui cont, poți ignora acest mesaj.",
+    )
+
+
+def build_password_reset_html(otp_code: str) -> str:
+    return build_auth_code_email_html(
+        otp_code,
+        title="Resetare parolă pulse",
+        intro="Resetare parolă pulse",
+        heading="Setează o parolă nouă.",
+        description="Introdu codul de resetare în aplicație pentru a confirma solicitarea și pentru a seta o parolă nouă pentru contul tău.",
+        code_label="Cod de resetare",
+        expires_text="Codul expiră în 10 minute.",
+        info_title="Resetarea protejează contul tău",
+        info_text="Folosim această verificare pentru a ne asigura că solicitarea de resetare îți aparține. Dacă nu ai solicitat resetarea parolei, poți ignora acest mesaj.",
+    )
+
+
 def send_email_verification_email(to_email: str, otp_code: str) -> None:
     smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
     smtp_port = parse_int_env("SMTP_PORT", 587)
@@ -503,6 +563,31 @@ def send_email_verification_email(to_email: str, otp_code: str) -> None:
         smtp.send_message(message)
 
 
+def send_password_reset_email(to_email: str, otp_code: str) -> None:
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
+    smtp_port = parse_int_env("SMTP_PORT", 587)
+    smtp_user = os.getenv("SMTP_USER", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+    email_from = os.getenv("EMAIL_FROM", smtp_user).strip()
+    if not smtp_host or not smtp_port or not smtp_user or not smtp_password or not email_from:
+        raise RuntimeError("SMTP configuration is incomplete")
+
+    message = EmailMessage()
+    message["Subject"] = PASSWORD_RESET_SUBJECT
+    message["From"] = email_from
+    message["To"] = to_email
+    message.set_content(
+        "Resetare parolă pulse\n\n"
+        f"Codul tău de resetare este {otp_code}. Codul expiră în 10 minute."
+    )
+    message.add_alternative(build_password_reset_html(otp_code), subtype="html")
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as smtp:
+        smtp.starttls()
+        smtp.login(smtp_user, smtp_password)
+        smtp.send_message(message)
+
+
 def create_email_verification(db: Session, user_id: int, to_email: str, now: datetime) -> None:
     otp_code = create_email_otp()
     db.add(
@@ -515,6 +600,19 @@ def create_email_verification(db: Session, user_id: int, to_email: str, now: dat
     )
     db.flush()
     send_email_verification_email(to_email, otp_code)
+
+
+def create_password_reset(db: Session, user_id: int, to_email: str, now: datetime) -> None:
+    otp_code = create_email_otp()
+    db.add(
+        models.UserPasswordReset(
+            user_id=user_id,
+            token_hash=hash_email_otp(otp_code),
+            expires_at=now + timedelta(minutes=EMAIL_VERIFICATION_EXPIRY_MINUTES),
+            created_at=now,
+        )
+    )
+    send_password_reset_email(to_email, otp_code)
 
 
 def create_session_token() -> str:
@@ -865,6 +963,16 @@ def _ensure_registration_schema(db: Session) -> None:
             created_at TIMESTAMPTZ
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS user_password_resets (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            token_hash VARCHAR(255) NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            used_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ
+        )
+        """,
     ]
     for statement in statements:
         db.execute(text(statement))
@@ -876,6 +984,17 @@ def _ensure_registration_schema(db: Session) -> None:
                     pg_get_serial_sequence('user_email_verifications', 'id'),
                     COALESCE((SELECT MAX(id) FROM user_email_verifications), 1),
                     (SELECT COUNT(*) > 0 FROM user_email_verifications)
+                )
+                """
+            )
+        )
+        db.execute(
+            text(
+                """
+                SELECT setval(
+                    pg_get_serial_sequence('user_password_resets', 'id'),
+                    COALESCE((SELECT MAX(id) FROM user_password_resets), 1),
+                    (SELECT COUNT(*) > 0 FROM user_password_resets)
                 )
                 """
             )
@@ -2251,6 +2370,147 @@ def remove_saved_content(
     }
 
 
+def _public_notification_row_to_dict(row) -> dict:
+    item = _notification_row_to_dict(row)
+    item["is_read"] = item.get("read_at") is not None
+    return item
+
+
+@app.get("/notifications")
+def get_my_notifications(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                un.id AS user_notification_id,
+                un.notification_id,
+                un.delivered_at,
+                un.read_at,
+                un.created_at AS assigned_at,
+                n.notification_type::text AS notification_type,
+                n.status::text AS status,
+                n.title,
+                n.description,
+                n.category_id,
+                nc.code AS category_code,
+                nc.name AS category_name,
+                cn.image_url,
+                cn.content_item_id,
+                ci.title AS content_item_title,
+                ci.content_type::text AS content_item_type
+            FROM user_notifications un
+            JOIN notifications n ON n.id = un.notification_id
+            LEFT JOIN notification_categories nc ON nc.id = n.category_id
+            LEFT JOIN content_notifications cn ON cn.notification_id = n.id
+            LEFT JOIN content_items ci ON ci.id = cn.content_item_id
+            WHERE un.user_id = :user_id
+              AND n.status = 'sent'
+            ORDER BY un.delivered_at DESC NULLS LAST, un.created_at DESC, un.id DESC
+            """
+        ),
+        {"user_id": user_id},
+    ).all()
+    return [_public_notification_row_to_dict(row) for row in rows]
+
+
+@app.get("/notifications/unread-count")
+def get_my_unread_notification_count(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    count = db.execute(
+        text(
+            """
+            SELECT COUNT(*)::int
+            FROM user_notifications
+            WHERE user_id = :user_id
+              AND read_at IS NULL
+            """
+        ),
+        {"user_id": user_id},
+    ).scalar_one()
+    return {"unread_count": count}
+
+
+@app.patch("/notifications/{user_notification_id}/read")
+def mark_my_notification_read(
+    user_notification_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    require_rate_limit(request, "notifications_write", "WRITE_RATE_LIMIT_PER_MINUTE", 60)
+    result = db.execute(
+        text(
+            """
+            UPDATE user_notifications
+            SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+            WHERE id = :user_notification_id
+              AND user_id = :user_id
+            RETURNING id
+            """
+        ),
+        {"user_id": user_id, "user_notification_id": user_notification_id},
+    ).first()
+    if result is None:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="Notificarea nu a fost găsită.")
+    db.commit()
+    return {"success": True, "user_notification_id": user_notification_id}
+
+
+@app.patch("/notifications/read-all")
+def mark_all_my_notifications_read(
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    require_rate_limit(request, "notifications_write", "WRITE_RATE_LIMIT_PER_MINUTE", 60)
+    result = db.execute(
+        text(
+            """
+            UPDATE user_notifications
+            SET read_at = CURRENT_TIMESTAMP
+            WHERE user_id = :user_id
+              AND read_at IS NULL
+            """
+        ),
+        {"user_id": user_id},
+    )
+    db.commit()
+    return {"success": True, "updated_count": result.rowcount}
+
+
+@app.post("/notifications/{notification_id}/read")
+def mark_my_notification_read_legacy(
+    notification_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    require_rate_limit(request, "notifications_write", "WRITE_RATE_LIMIT_PER_MINUTE", 60)
+    result = db.execute(
+        text(
+            """
+            UPDATE user_notifications
+            SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+            WHERE user_id = :user_id
+              AND notification_id = :notification_id
+            RETURNING id
+            """
+        ),
+        {"user_id": user_id, "notification_id": notification_id},
+    ).first()
+    if result is None:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="Notificarea nu a fost găsită.")
+    db.commit()
+    return {"success": True, "notification_id": notification_id}
+
+
 @app.get("/ads")
 def get_public_ads(
     placement: Optional[str] = None,
@@ -2590,7 +2850,7 @@ def resend_email_otp(
         .first()
     )
     if latest_verification and latest_verification.created_at:
-        elapsed = (now - latest_verification.created_at).total_seconds()
+        elapsed = elapsed_seconds_since(now, latest_verification.created_at)
         if elapsed < EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS:
             retry_after = int(EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS - elapsed)
             raise HTTPException(
@@ -2605,6 +2865,125 @@ def resend_email_otp(
         "email_verified": False,
         "expires_in_seconds": EMAIL_VERIFICATION_EXPIRY_MINUTES * 60,
     }
+
+
+@app.post("/api/password-resets/request")
+def request_password_reset(
+    payload: PasswordResetRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_rate_limit(request, "password-reset-request", "AUTH_RATE_LIMIT_PER_MINUTE", 10)
+    _ensure_registration_schema(db)
+    user_model = get_user_model()
+    user = db.query(user_model).filter(user_model.email == payload.email).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Contul nu a fost găsit")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Contul este inactiv")
+
+    now = datetime.utcnow()
+    latest_reset = (
+        db.query(models.UserPasswordReset)
+        .filter(models.UserPasswordReset.user_id == user.id)
+        .order_by(models.UserPasswordReset.created_at.desc())
+        .first()
+    )
+    if latest_reset and latest_reset.created_at:
+        elapsed = elapsed_seconds_since(now, latest_reset.created_at)
+        if elapsed < EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS:
+            retry_after = int(EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS - elapsed)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Poți solicita un cod nou peste {retry_after} secunde.",
+            )
+
+    create_password_reset(db, user.id, user.email, now)
+    db.commit()
+    return {
+        "message": "Password reset code sent successfully",
+        "expires_in_seconds": EMAIL_VERIFICATION_EXPIRY_MINUTES * 60,
+    }
+
+
+@app.post("/api/password-resets/verify")
+def verify_password_reset(
+    payload: PasswordResetVerify,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_rate_limit(request, "password-reset-verify", "AUTH_RATE_LIMIT_PER_MINUTE", 10)
+    try:
+        validate_email_otp_code(payload.otp_code)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    user_model = get_user_model()
+    user = db.query(user_model).filter(user_model.email == payload.email).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Contul nu a fost găsit")
+
+    now = datetime.utcnow()
+    reset = (
+        db.query(models.UserPasswordReset)
+        .filter(models.UserPasswordReset.user_id == user.id)
+        .filter(models.UserPasswordReset.used_at.is_(None))
+        .filter(models.UserPasswordReset.expires_at > now)
+        .order_by(models.UserPasswordReset.created_at.desc())
+        .first()
+    )
+    if reset is None:
+        raise HTTPException(status_code=400, detail="Codul a expirat. Solicită un cod nou.")
+    if not secrets.compare_digest(reset.token_hash, hash_email_otp(payload.otp_code)):
+        raise HTTPException(status_code=400, detail="Codul introdus este incorect")
+
+    return {"message": "Password reset code verified", "reset_verified": True}
+
+
+@app.post("/api/password-resets/confirm")
+def confirm_password_reset(
+    payload: PasswordResetConfirm,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_rate_limit(request, "password-reset-confirm", "AUTH_RATE_LIMIT_PER_MINUTE", 10)
+    try:
+        validate_email_otp_code(payload.otp_code)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not payload.password or len(payload.password) < 8:
+        raise HTTPException(status_code=422, detail="Parola trebuie să aibă minimum 8 caractere")
+
+    user_model = get_user_model()
+    user = db.query(user_model).filter(user_model.email == payload.email).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Contul nu a fost găsit")
+
+    now = datetime.utcnow()
+    reset = (
+        db.query(models.UserPasswordReset)
+        .filter(models.UserPasswordReset.user_id == user.id)
+        .filter(models.UserPasswordReset.used_at.is_(None))
+        .filter(models.UserPasswordReset.expires_at > now)
+        .order_by(models.UserPasswordReset.created_at.desc())
+        .first()
+    )
+    if reset is None:
+        raise HTTPException(status_code=400, detail="Codul a expirat. Solicită un cod nou.")
+    if not secrets.compare_digest(reset.token_hash, hash_email_otp(payload.otp_code)):
+        raise HTTPException(status_code=400, detail="Codul introdus este incorect")
+
+    reset.used_at = now
+    user.password_hash = hash_password(payload.password)
+    user.updated_at = now
+    (
+        db.query(models.UserSession)
+        .filter(models.UserSession.user_id == user.id)
+        .filter(models.UserSession.revoked_at.is_(None))
+        .update({"revoked_at": now}, synchronize_session=False)
+    )
+    db.commit()
+    return {"message": "Password reset successfully"}
 
 
 @app.post("/api/login")
@@ -2688,6 +3067,7 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
         "user": serialize_model(user),
         "profile": profile_data,
         "display_name": f"{profile.first_name} {profile.last_name}".strip(),
+        "total_emc_points": getattr(profile, "total_emc_points", 0) or 0,
         "email": user.email,
         "phone": profile.phone,
         "county_name": profile.city.county.name if getattr(profile.city, "county", None) else None,
@@ -2994,6 +3374,26 @@ class AdminSubscriptionCreate(BaseModel):
     status: str = "active"
     auto_renew: bool = False
 
+
+class AdminNotificationCreate(BaseModel):
+    notification_type: str
+    category_id: int = Field(gt=0)
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(min_length=1)
+    image_url: Optional[str] = None
+    content_item_id: Optional[int] = Field(default=None, gt=0)
+    interest_ids: Optional[List[int]] = None
+    user_id: Optional[int] = Field(default=None, gt=0)
+
+
+class AdminNotificationUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(min_length=1)
+    category_id: int = Field(gt=0)
+    image_url: Optional[str] = None
+    content_item_id: Optional[int] = Field(default=None, gt=0)
+    interest_ids: Optional[List[int]] = None
+
 IMAGE_ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 IMAGE_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 PDF_ALLOWED_CONTENT_TYPES = {"application/pdf"}
@@ -3151,6 +3551,18 @@ async def admin_upload_pdf(request: Request, file: UploadFile = File(...)):
         allowed_extensions=PDF_ALLOWED_EXTENSIONS,
     )
 
+
+@app.post("/admin/notifications/upload-image")
+async def admin_upload_notification_image(request: Request, file: UploadFile = File(...)):
+    require_rate_limit(request, "admin_notification_upload", "WRITE_RATE_LIMIT_PER_MINUTE", 60)
+    return await handle_upload(
+        file=file,
+        folder="notification-images",
+        max_size=IMAGE_MAX_SIZE,
+        allowed_content_types=IMAGE_ALLOWED_CONTENT_TYPES,
+        allowed_extensions=IMAGE_ALLOWED_EXTENSIONS,
+    )
+
 class ContentItemBase(BaseModel):
     title: str
     slug: str
@@ -3170,6 +3582,8 @@ class ContentItemBase(BaseModel):
     is_featured: bool = False
     is_active: bool = True
     published_at: Optional[datetime] = None
+    interest_ids: List[int] = Field(default_factory=list)
+    notify_interested_users: bool = False
 
 class ContentItemCreate(ContentItemBase):
     pass
@@ -3406,6 +3820,106 @@ def serialize_content_item(item: models.ContentItem):
     return serialize_model(item, include_relationships=True)
 
 
+def _notification_type_label(value: str) -> str:
+    return {
+        "content": "Notificare de conținut",
+        "account": "Notificare de cont",
+        "system": "Notificare de sistem",
+    }.get(value, value)
+
+
+def _notification_row_to_dict(row) -> dict:
+    data = dict(row._mapping)
+    return {key: serialize_value(value) for key, value in data.items()}
+
+
+def _table_exists(db: Session, table_name: str) -> bool:
+    return bool(db.execute(text("SELECT to_regclass(:table_name)"), {"table_name": table_name}).scalar())
+
+
+def _admin_notification_base_query(where_sql: str = ""):
+    return text(
+        f"""
+        SELECT
+            n.id,
+            n.notification_type::text AS notification_type,
+            n.status::text AS status,
+            n.title,
+            n.description,
+            n.category_id,
+            nc.code AS category_code,
+            nc.name AS category_name,
+            n.created_at,
+            cn.image_url,
+            cn.content_item_id,
+            ci.title AS content_item_title,
+            COUNT(un.id)::int AS delivered_count,
+            COUNT(un.read_at)::int AS read_count
+        FROM notifications n
+        LEFT JOIN notification_categories nc ON nc.id = n.category_id
+        LEFT JOIN content_notifications cn ON cn.notification_id = n.id
+        LEFT JOIN content_items ci ON ci.id = cn.content_item_id
+        LEFT JOIN user_notifications un ON un.notification_id = n.id
+        {where_sql}
+        GROUP BY n.id, nc.code, nc.name, cn.image_url, cn.content_item_id, ci.title
+        ORDER BY n.created_at DESC, n.id DESC
+        """
+    )
+
+
+def _get_admin_notification_detail(db: Session, notification_id: int) -> dict:
+    row = db.execute(
+        _admin_notification_base_query("WHERE n.id = :notification_id"),
+        {"notification_id": notification_id},
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Notificarea nu a fost găsită.")
+
+    notification = _notification_row_to_dict(row)
+    notification["type_label"] = _notification_type_label(notification["notification_type"])
+    notification["interests"] = [
+        _notification_row_to_dict(item)
+        for item in db.execute(
+            text(
+                """
+                SELECT i.id, i.name, i.slug
+                FROM notification_interests ni
+                JOIN interests i ON i.id = ni.interest_id
+                WHERE ni.notification_id = :notification_id
+                ORDER BY i.name
+                """
+            ),
+            {"notification_id": notification_id},
+        ).all()
+    ]
+    notification["recipients"] = [
+        _notification_row_to_dict(item)
+        for item in db.execute(
+            text(
+                """
+                SELECT
+                    un.id,
+                    un.user_id,
+                    u.email,
+                    up.first_name,
+                    up.last_name,
+                    un.delivered_at,
+                    un.read_at,
+                    un.created_at
+                FROM user_notifications un
+                JOIN users u ON u.id = un.user_id
+                LEFT JOIN user_profiles up ON up.user_id = u.id
+                WHERE un.notification_id = :notification_id
+                ORDER BY un.created_at DESC, un.id DESC
+                LIMIT 100
+                """
+            ),
+            {"notification_id": notification_id},
+        ).all()
+    ]
+    return notification
+
+
 def serialize_admin_specialized_content_item(item: models.ContentItem, child_attr: Optional[str] = None):
     data = serialize_model(item)
     if item.category:
@@ -3423,20 +3937,188 @@ def serialize_admin_specialized_content_item(item: models.ContentItem, child_att
     return data
 
 
+def _content_item_interests(db: Session, content_item_id: int) -> list[dict]:
+    if not _table_exists(db, "content_item_interests"):
+        return []
+    rows = db.execute(
+        text(
+            """
+            SELECT i.id, i.name, i.slug
+            FROM content_item_interests cii
+            JOIN interests i ON i.id = cii.interest_id
+            WHERE cii.content_item_id = :content_item_id
+            ORDER BY i.name
+            """
+        ),
+        {"content_item_id": content_item_id},
+    ).all()
+    return [_notification_row_to_dict(row) for row in rows]
+
+
+def apply_content_interests_to_payload(db: Session, payload: dict, content_item_id: int) -> dict:
+    interests = _content_item_interests(db, content_item_id)
+    payload["interests"] = interests
+    payload["interest_ids"] = [item["id"] for item in interests]
+    return payload
+
+
+def resolve_content_interest_ids(db: Session, raw_interest_ids: Optional[List[int]]) -> list[int]:
+    interest_ids = sorted({int(item) for item in (raw_interest_ids or []) if int(item) > 0})
+    if not interest_ids:
+        return []
+    existing_interest_ids = {
+        row.id
+        for row in db.execute(
+            text("SELECT id FROM interests WHERE id IN :interest_ids").bindparams(
+                bindparam("interest_ids", expanding=True)
+            ),
+            {"interest_ids": interest_ids},
+        ).all()
+    }
+    missing_interest_ids = sorted(set(interest_ids) - existing_interest_ids)
+    if missing_interest_ids:
+        raise HTTPException(status_code=422, detail=f"Interese invalide: {missing_interest_ids}")
+    return interest_ids
+
+
+def save_content_item_interests(db: Session, content_item_id: int, raw_interest_ids: Optional[List[int]]):
+    interest_ids = resolve_content_interest_ids(db, raw_interest_ids)
+    db.execute(
+        text("DELETE FROM content_item_interests WHERE content_item_id = :content_item_id"),
+        {"content_item_id": content_item_id},
+    )
+    if interest_ids:
+        db.execute(
+            text(
+                """
+                INSERT INTO content_item_interests (content_item_id, interest_id)
+                SELECT :content_item_id, id
+                FROM interests
+                WHERE id IN :interest_ids
+                ON CONFLICT DO NOTHING
+                """
+            ).bindparams(bindparam("interest_ids", expanding=True)),
+            {"content_item_id": content_item_id, "interest_ids": interest_ids},
+        )
+    return interest_ids
+
+
+def create_interested_users_content_notification(db: Session, item: models.ContentItem, interest_ids: list[int]):
+    if not interest_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="Selectează cel puțin un interes pentru a trimite notificarea utilizatorilor interesați.",
+        )
+    content_type = serialize_value(item.content_type)
+    category = db.execute(
+        text(
+            """
+            SELECT id
+            FROM notification_categories
+            WHERE notification_type = 'content'
+              AND code = :code
+            LIMIT 1
+            """
+        ),
+        {"code": content_type},
+    ).first()
+    if category is None:
+        raise HTTPException(status_code=422, detail=f"Nu există categorie de notificare pentru tipul {content_type}.")
+
+    image_url = item.thumbnail_url or item.hero_image_url
+    description = item.short_description or item.title
+    notification_id = db.execute(
+        text(
+            """
+            INSERT INTO notifications (notification_type, category_id, status, title, description)
+            VALUES ('content', :category_id, 'sent', :title, :description)
+            RETURNING id
+            """
+        ),
+        {
+            "category_id": category._mapping["id"],
+            "title": item.title,
+            "description": description,
+        },
+    ).scalar_one()
+    db.execute(
+        text(
+            """
+            INSERT INTO content_notifications (notification_id, image_url, content_item_id)
+            VALUES (:notification_id, :image_url, :content_item_id)
+            """
+        ),
+        {
+            "notification_id": notification_id,
+            "image_url": image_url,
+            "content_item_id": item.id,
+        },
+    )
+    db.execute(
+        text(
+            """
+            INSERT INTO notification_interests (notification_id, interest_id)
+            SELECT :notification_id, id
+            FROM interests
+            WHERE id IN :interest_ids
+            ON CONFLICT DO NOTHING
+            """
+        ).bindparams(bindparam("interest_ids", expanding=True)),
+        {"notification_id": notification_id, "interest_ids": interest_ids},
+    )
+    if _table_exists(db, "user_interests"):
+        db.execute(
+            text(
+                """
+                INSERT INTO user_notifications (user_id, notification_id, delivered_at)
+                SELECT DISTINCT ui.user_id, :notification_id, CURRENT_TIMESTAMP
+                FROM user_interests ui
+                WHERE ui.interest_id IN :interest_ids
+                ON CONFLICT (user_id, notification_id) DO NOTHING
+                """
+            ).bindparams(bindparam("interest_ids", expanding=True)),
+            {"notification_id": notification_id, "interest_ids": interest_ids},
+        )
+    if _table_exists(db, "user_profile_interests"):
+        db.execute(
+            text(
+                """
+                INSERT INTO user_notifications (user_id, notification_id, delivered_at)
+                SELECT DISTINCT up.user_id, :notification_id, CURRENT_TIMESTAMP
+                FROM user_profiles up
+                JOIN user_profile_interests upi ON upi.user_profile_id = up.id
+                WHERE upi.interest_id IN :interest_ids
+                ON CONFLICT (user_id, notification_id) DO NOTHING
+                """
+            ).bindparams(bindparam("interest_ids", expanding=True)),
+            {"notification_id": notification_id, "interest_ids": interest_ids},
+        )
+    return notification_id
+
+
 def create_content_item(db: Session, item: BaseModel, expected_type: str):
     data = content_item_data(item)
     data["content_type"] = expected_type
     db_item = models.ContentItem(**normalize_content_item_data(data))
     db.add(db_item)
     db.flush()
+    interest_ids = save_content_item_interests(db, db_item.id, getattr(item, "interest_ids", []))
+    if getattr(item, "notify_interested_users", False):
+        create_interested_users_content_notification(db, db_item, interest_ids)
     return db_item
 
 
 def update_content_item(db_item: models.ContentItem, item: BaseModel, expected_type: str):
+    db = object_session(db_item)
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database session unavailable for content item update")
     data = content_item_data(item, exclude_unset=True)
     data["content_type"] = expected_type
     for key, value in normalize_content_item_data(data).items():
         setattr(db_item, key, value)
+    interest_ids = save_content_item_interests(db, db_item.id, getattr(item, "interest_ids", []))
+    if getattr(item, "notify_interested_users", False):
+        create_interested_users_content_notification(db, db_item, interest_ids)
 
 
 def get_content_item_or_404(db: Session, content_item_id: int):
@@ -3879,9 +4561,469 @@ def get_admin_dashboard_stats(db: Session = Depends(get_db)):
 def admin_get_content_items(db: Session = Depends(get_db)):
     try:
         items = db.query(models.ContentItem).order_by(models.ContentItem.created_at.desc()).all()
-        return [serialize_content_item(item) for item in items]
+        return [apply_content_interests_to_payload(db, serialize_content_item(item), item.id) for item in items]
     except Exception as e:
         raise_safe_error(e)
+
+
+@app.get("/admin/notifications")
+def admin_get_notifications(
+    search: Optional[str] = Query(default=None),
+    notification_type: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    try:
+        clauses = []
+        params = {}
+        if search:
+            params["search"] = f"%{search.strip()}%"
+            clauses.append("(n.title ILIKE :search OR n.description ILIKE :search)")
+        if notification_type:
+            params["notification_type"] = notification_type
+            clauses.append("n.notification_type::text = :notification_type")
+        if status:
+            params["status"] = status
+            clauses.append("n.status::text = :status")
+
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = db.execute(_admin_notification_base_query(where_sql), params).all()
+        return [
+            _notification_row_to_dict(row) | {"type_label": _notification_type_label(row._mapping["notification_type"])}
+            for row in rows
+        ]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/admin/notifications/{notification_id}")
+def admin_get_notification(notification_id: int, db: Session = Depends(get_db)):
+    try:
+        return _get_admin_notification_detail(db, notification_id)
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+def _validate_notification_category(db: Session, category_id: int, notification_type: str):
+    category = db.execute(
+        text(
+            """
+            SELECT id, notification_type::text AS notification_type
+            FROM notification_categories
+            WHERE id = :category_id
+            """
+        ),
+        {"category_id": category_id},
+    ).first()
+    if category is None:
+        raise HTTPException(status_code=422, detail="Categoria notificării este invalidă.")
+    if category._mapping["notification_type"] != notification_type:
+        raise HTTPException(status_code=422, detail="Categoria nu corespunde tipului de notificare selectat.")
+    return category
+
+
+def _resolve_notification_interest_ids(db: Session, raw_interest_ids: Optional[List[int]]) -> list[int]:
+    interest_ids = sorted({int(item) for item in (raw_interest_ids or []) if int(item) > 0})
+    if not interest_ids:
+        raise HTTPException(status_code=422, detail="Selectează cel puțin un interes.")
+    existing_interest_ids = {
+        row.id
+        for row in db.execute(
+            text("SELECT id FROM interests WHERE id IN :interest_ids").bindparams(
+                bindparam("interest_ids", expanding=True)
+            ),
+            {"interest_ids": interest_ids},
+        ).all()
+    }
+    missing_interest_ids = sorted(set(interest_ids) - existing_interest_ids)
+    if missing_interest_ids:
+        raise HTTPException(status_code=422, detail=f"Interese invalide: {missing_interest_ids}")
+    return interest_ids
+
+
+@app.post("/admin/notifications")
+def admin_create_notification(payload: AdminNotificationCreate, db: Session = Depends(get_db)):
+    notification_type = payload.notification_type.strip().lower()
+    if notification_type not in {"content", "account", "system"}:
+        raise HTTPException(status_code=422, detail="Tip notificare invalid.")
+
+    title = payload.title.strip()
+    description = payload.description.strip()
+    if not title or not description:
+        raise HTTPException(status_code=422, detail="Titlul și descrierea sunt obligatorii.")
+
+    try:
+        _validate_notification_category(db, payload.category_id, notification_type)
+
+        notification_id = db.execute(
+            text(
+                """
+                INSERT INTO notifications (notification_type, category_id, status, title, description)
+                VALUES (CAST(:notification_type AS notification_type), :category_id, 'draft', :title, :description)
+                RETURNING id
+                """
+            ),
+            {
+                "notification_type": notification_type,
+                "category_id": payload.category_id,
+                "title": title,
+                "description": description,
+            },
+        ).scalar_one()
+
+        if notification_type == "content":
+            if not payload.content_item_id:
+                raise HTTPException(status_code=422, detail="Content item este obligatoriu pentru notificările de conținut.")
+            interest_ids = _resolve_notification_interest_ids(db, payload.interest_ids)
+
+            content_exists = db.execute(
+                text("SELECT 1 FROM content_items WHERE id = :content_item_id"),
+                {"content_item_id": payload.content_item_id},
+            ).first()
+            if content_exists is None:
+                raise HTTPException(status_code=422, detail="Content item invalid.")
+
+            db.execute(
+                text(
+                    """
+                    INSERT INTO content_notifications (notification_id, image_url, content_item_id)
+                    VALUES (:notification_id, :image_url, :content_item_id)
+                    """
+                ),
+                {
+                    "notification_id": notification_id,
+                    "image_url": payload.image_url,
+                    "content_item_id": payload.content_item_id,
+                },
+            )
+            db.execute(
+                text(
+                    """
+                    INSERT INTO notification_interests (notification_id, interest_id)
+                    SELECT :notification_id, id
+                    FROM interests
+                    WHERE id IN :interest_ids
+                    ON CONFLICT (notification_id, interest_id) DO NOTHING
+                    """
+                ).bindparams(bindparam("interest_ids", expanding=True)),
+                {"notification_id": notification_id, "interest_ids": interest_ids},
+            )
+
+            delivered_count = 0
+            if _table_exists(db, "user_interests"):
+                delivered_count = db.execute(
+                    text(
+                        """
+                        INSERT INTO user_notifications (user_id, notification_id, delivered_at)
+                        SELECT DISTINCT ui.user_id, :notification_id, CURRENT_TIMESTAMP
+                        FROM user_interests ui
+                        WHERE ui.interest_id IN :interest_ids
+                        ON CONFLICT (user_id, notification_id) DO NOTHING
+                        """
+                    ).bindparams(bindparam("interest_ids", expanding=True)),
+                    {"notification_id": notification_id, "interest_ids": interest_ids},
+                ).rowcount
+
+            if delivered_count == 0 and _table_exists(db, "user_profile_interests"):
+                delivered_count = db.execute(
+                    text(
+                        """
+                        INSERT INTO user_notifications (user_id, notification_id, delivered_at)
+                        SELECT DISTINCT up.user_id, :notification_id, CURRENT_TIMESTAMP
+                        FROM user_profiles up
+                        JOIN user_profile_interests upi ON upi.user_profile_id = up.id
+                        WHERE upi.interest_id IN :interest_ids
+                        ON CONFLICT (user_id, notification_id) DO NOTHING
+                        """
+                    ).bindparams(bindparam("interest_ids", expanding=True)),
+                    {"notification_id": notification_id, "interest_ids": interest_ids},
+                ).rowcount
+
+        elif notification_type == "account":
+            if not payload.user_id:
+                raise HTTPException(status_code=422, detail="Utilizatorul țintă este obligatoriu.")
+            user_exists = db.execute(text("SELECT 1 FROM users WHERE id = :user_id"), {"user_id": payload.user_id}).first()
+            if user_exists is None:
+                raise HTTPException(status_code=422, detail="Utilizator invalid.")
+            db.execute(
+                text(
+                    """
+                    INSERT INTO user_notifications (user_id, notification_id, delivered_at)
+                    VALUES (:user_id, :notification_id, CURRENT_TIMESTAMP)
+                    ON CONFLICT (user_id, notification_id) DO NOTHING
+                    """
+                ),
+                {"user_id": payload.user_id, "notification_id": notification_id},
+            )
+
+        else:
+            db.execute(
+                text(
+                    """
+                    INSERT INTO user_notifications (user_id, notification_id, delivered_at)
+                    SELECT id, :notification_id, CURRENT_TIMESTAMP
+                    FROM users
+                    WHERE is_active = TRUE
+                    ON CONFLICT (user_id, notification_id) DO NOTHING
+                    """
+                ),
+                {"notification_id": notification_id},
+            )
+
+        db.execute(
+            text("UPDATE notifications SET status = 'sent' WHERE id = :notification_id"),
+            {"notification_id": notification_id},
+        )
+        db.commit()
+        return _get_admin_notification_detail(db, notification_id)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.patch("/admin/notifications/{notification_id}")
+def admin_update_notification(notification_id: int, payload: AdminNotificationUpdate, db: Session = Depends(get_db)):
+    try:
+        notification = db.execute(
+            text(
+                """
+                SELECT id, notification_type::text AS notification_type
+                FROM notifications
+                WHERE id = :notification_id
+                """
+            ),
+            {"notification_id": notification_id},
+        ).first()
+        if notification is None:
+            raise HTTPException(status_code=404, detail="Notificarea nu a fost găsită.")
+
+        notification_type = notification._mapping["notification_type"]
+        _validate_notification_category(db, payload.category_id, notification_type)
+        title = payload.title.strip()
+        description = payload.description.strip()
+        if not title or not description:
+            raise HTTPException(status_code=422, detail="Titlul și descrierea sunt obligatorii.")
+
+        db.execute(
+            text(
+                """
+                UPDATE notifications
+                SET title = :title,
+                    description = :description,
+                    category_id = :category_id
+                WHERE id = :notification_id
+                """
+            ),
+            {
+                "title": title,
+                "description": description,
+                "category_id": payload.category_id,
+                "notification_id": notification_id,
+            },
+        )
+
+        if notification_type == "content":
+            if not payload.content_item_id:
+                raise HTTPException(status_code=422, detail="Content item este obligatoriu pentru notificările de conținut.")
+            content_exists = db.execute(
+                text("SELECT 1 FROM content_items WHERE id = :content_item_id"),
+                {"content_item_id": payload.content_item_id},
+            ).first()
+            if content_exists is None:
+                raise HTTPException(status_code=422, detail="Content item invalid.")
+            interest_ids = _resolve_notification_interest_ids(db, payload.interest_ids)
+
+            db.execute(
+                text(
+                    """
+                    INSERT INTO content_notifications (notification_id, image_url, content_item_id)
+                    VALUES (:notification_id, :image_url, :content_item_id)
+                    ON CONFLICT (notification_id)
+                    DO UPDATE SET
+                        image_url = EXCLUDED.image_url,
+                        content_item_id = EXCLUDED.content_item_id
+                    """
+                ),
+                {
+                    "notification_id": notification_id,
+                    "image_url": payload.image_url,
+                    "content_item_id": payload.content_item_id,
+                },
+            )
+            db.execute(
+                text("DELETE FROM notification_interests WHERE notification_id = :notification_id"),
+                {"notification_id": notification_id},
+            )
+            db.execute(
+                text(
+                    """
+                    INSERT INTO notification_interests (notification_id, interest_id)
+                    SELECT :notification_id, id
+                    FROM interests
+                    WHERE id IN :interest_ids
+                    ON CONFLICT (notification_id, interest_id) DO NOTHING
+                    """
+                ).bindparams(bindparam("interest_ids", expanding=True)),
+                {"notification_id": notification_id, "interest_ids": interest_ids},
+            )
+
+            if _table_exists(db, "user_interests"):
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO user_notifications (user_id, notification_id, delivered_at)
+                        SELECT DISTINCT ui.user_id, :notification_id, CURRENT_TIMESTAMP
+                        FROM user_interests ui
+                        WHERE ui.interest_id IN :interest_ids
+                        ON CONFLICT (user_id, notification_id) DO NOTHING
+                        """
+                    ).bindparams(bindparam("interest_ids", expanding=True)),
+                    {"notification_id": notification_id, "interest_ids": interest_ids},
+                )
+
+            if _table_exists(db, "user_profile_interests"):
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO user_notifications (user_id, notification_id, delivered_at)
+                        SELECT DISTINCT up.user_id, :notification_id, CURRENT_TIMESTAMP
+                        FROM user_profiles up
+                        JOIN user_profile_interests upi ON upi.user_profile_id = up.id
+                        WHERE upi.interest_id IN :interest_ids
+                        ON CONFLICT (user_id, notification_id) DO NOTHING
+                        """
+                    ).bindparams(bindparam("interest_ids", expanding=True)),
+                    {"notification_id": notification_id, "interest_ids": interest_ids},
+                )
+
+        db.commit()
+        return _get_admin_notification_detail(db, notification_id)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.delete("/admin/notifications/{notification_id}")
+def admin_delete_notification(notification_id: int, db: Session = Depends(get_db)):
+    try:
+        result = db.execute(
+            text("DELETE FROM notifications WHERE id = :notification_id RETURNING id"),
+            {"notification_id": notification_id},
+        ).first()
+        if result is None:
+            raise HTTPException(status_code=404, detail="Notificarea nu a fost găsită.")
+        db.commit()
+        return {"success": True, "notification_id": notification_id}
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/admin/notification-options/content-items")
+def admin_get_notification_content_items(search: Optional[str] = Query(default=None), db: Session = Depends(get_db)):
+    try:
+        clauses = ["deleted_at IS NULL"]
+        params = {}
+        if search:
+            params["search"] = f"%{search.strip()}%"
+            clauses.append("(title ILIKE :search OR slug ILIKE :search)")
+        rows = db.execute(
+            text(
+                f"""
+                SELECT id, title, slug, content_type::text AS content_type, status::text AS status, hero_image_url, thumbnail_url
+                FROM content_items
+                WHERE {' AND '.join(clauses)}
+                ORDER BY published_at DESC NULLS LAST, created_at DESC NULLS LAST, title ASC
+                LIMIT 250
+                """
+            ),
+            params,
+        ).all()
+        return [_notification_row_to_dict(row) for row in rows]
+    except Exception as e:
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/admin/notification-options/interests")
+def admin_get_notification_interests(db: Session = Depends(get_db)):
+    try:
+        rows = db.execute(text("SELECT id, name, slug FROM interests ORDER BY name")).all()
+        return [_notification_row_to_dict(row) for row in rows]
+    except Exception as e:
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/admin/notification-options/categories")
+def admin_get_notification_categories(
+    notification_type: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    normalized_type = notification_type.strip().lower()
+    if normalized_type not in {"content", "account", "system"}:
+        raise HTTPException(status_code=422, detail="Tip notificare invalid.")
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT id, notification_type::text AS notification_type, code, name, created_at
+                FROM notification_categories
+                WHERE notification_type = CAST(:notification_type AS notification_type)
+                ORDER BY id
+                """
+            ),
+            {"notification_type": normalized_type},
+        ).all()
+        return [_notification_row_to_dict(row) for row in rows]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/admin/notification-options/users")
+def admin_get_notification_users(search: Optional[str] = Query(default=None), db: Session = Depends(get_db)):
+    try:
+        params = {}
+        where_sql = ""
+        if search:
+            params["search"] = f"%{search.strip()}%"
+            where_sql = """
+                WHERE u.email ILIKE :search
+                   OR up.first_name ILIKE :search
+                   OR up.last_name ILIKE :search
+            """
+        rows = db.execute(
+            text(
+                f"""
+                SELECT
+                    u.id,
+                    u.email,
+                    u.is_active,
+                    up.first_name,
+                    up.last_name,
+                    CONCAT_WS(' ', up.first_name, up.last_name) AS full_name
+                FROM users u
+                LEFT JOIN user_profiles up ON up.user_id = u.id
+                {where_sql}
+                ORDER BY up.last_name ASC NULLS LAST, up.first_name ASC NULLS LAST, u.email ASC
+                LIMIT 250
+                """
+            ),
+            params,
+        ).all()
+        return [_notification_row_to_dict(row) for row in rows]
+    except Exception as e:
+        raise_safe_error(e, status_code=400)
 
 
 @app.get("/admin/articles")
@@ -3902,7 +5044,7 @@ def admin_get_articles(db: Session = Depends(get_db)):
             )
             .all()
         )
-        return [serialize_admin_specialized_content_item(item) for item in items]
+        return [apply_content_interests_to_payload(db, serialize_admin_specialized_content_item(item), item.id) for item in items]
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
@@ -3927,7 +5069,7 @@ def admin_get_news(db: Session = Depends(get_db)):
             )
             .all()
         )
-        return [serialize_admin_specialized_content_item(item) for item in items]
+        return [apply_content_interests_to_payload(db, serialize_admin_specialized_content_item(item), item.id) for item in items]
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
@@ -3939,9 +5081,13 @@ def admin_create_content_item(item: ContentItemCreate, db: Session = Depends(get
     try:
         db_item = models.ContentItem(**normalize_content_item_data(content_item_data(item)))
         db.add(db_item)
+        db.flush()
+        interest_ids = save_content_item_interests(db, db_item.id, item.interest_ids)
+        if item.notify_interested_users:
+            create_interested_users_content_notification(db, db_item, interest_ids)
         db.commit()
         db.refresh(db_item)
-        return serialize_content_item(db_item)
+        return apply_content_interests_to_payload(db, serialize_content_item(db_item), db_item.id)
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):
@@ -3953,6 +5099,7 @@ def admin_get_content_item(id: int, db: Session = Depends(get_db)):
     try:
         item = get_content_item_or_404(db, id)
         data = serialize_content_item(item)
+        apply_content_interests_to_payload(db, data, item.id)
         if item.event:
             apply_current_price_to_payload(data, get_current_price_by_event_id(db, item.event.id))
             apply_next_price_change_to_payload(
@@ -3974,10 +5121,13 @@ def admin_update_content_item(id: int, item: ContentItemUpdate, db: Session = De
 
         for key, value in update_data.items():
             setattr(db_item, key, value)
-            
+
+        interest_ids = save_content_item_interests(db, db_item.id, item.interest_ids)
+        if item.notify_interested_users:
+            create_interested_users_content_notification(db, db_item, interest_ids)
         db.commit()
         db.refresh(db_item)
-        return serialize_content_item(db_item)
+        return apply_content_interests_to_payload(db, serialize_content_item(db_item), db_item.id)
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):
@@ -5608,9 +6758,13 @@ def admin_get_events(db: Session = Depends(get_db)):
         )
         price_by_content_item_id = get_current_prices_by_content_item_ids(db, [item.id for item in items])
         return [
-            apply_current_price_to_payload(
-                serialize_admin_specialized_content_item(item, "event"),
-                price_by_content_item_id.get(item.id),
+            apply_content_interests_to_payload(
+                db,
+                apply_current_price_to_payload(
+                    serialize_admin_specialized_content_item(item, "event"),
+                    price_by_content_item_id.get(item.id),
+                ),
+                item.id,
             )
             for item in items
         ]
@@ -5631,7 +6785,7 @@ def admin_create_event(item: EventAdminPayload, db: Session = Depends(get_db)):
         save_event_partner_links(db, db_event.id, item.partners)
         db.commit()
         db.refresh(db_item)
-        return serialize_admin_specialized_content_item(db_item, "event")
+        return apply_content_interests_to_payload(db, serialize_admin_specialized_content_item(db_item, "event"), db_item.id)
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):
@@ -5656,7 +6810,7 @@ def admin_update_event(content_item_id: int, item: EventAdminPayload, db: Sessio
         save_event_partner_links(db, db_event.id, item.partners)
         db.commit()
         db.refresh(db_item)
-        return serialize_admin_specialized_content_item(db_item, "event")
+        return apply_content_interests_to_payload(db, serialize_admin_specialized_content_item(db_item, "event"), db_item.id)
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):
@@ -5683,7 +6837,7 @@ def admin_get_courses(db: Session = Depends(get_db)):
             )
             .all()
         )
-        return [serialize_admin_specialized_content_item(item, "course") for item in items]
+        return [apply_content_interests_to_payload(db, serialize_admin_specialized_content_item(item, "course"), item.id) for item in items]
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
@@ -5699,7 +6853,7 @@ def admin_create_course(item: CourseAdminPayload, db: Session = Depends(get_db))
         db.add(db_course)
         db.commit()
         db.refresh(db_item)
-        return serialize_content_item(db_item)
+        return apply_content_interests_to_payload(db, serialize_content_item(db_item), db_item.id)
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):
@@ -5725,7 +6879,7 @@ def admin_update_course(content_item_id: int, item: CourseAdminPayload, db: Sess
         update_course_details(db_course, item.course)
         db.commit()
         db.refresh(db_item)
-        return serialize_content_item(db_item)
+        return apply_content_interests_to_payload(db, serialize_content_item(db_item), db_item.id)
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):
@@ -5754,7 +6908,7 @@ def admin_get_publications(db: Session = Depends(get_db)):
             )
             .all()
         )
-        return [serialize_admin_specialized_content_item(item, "publication") for item in items]
+        return [apply_content_interests_to_payload(db, serialize_admin_specialized_content_item(item, "publication"), item.id) for item in items]
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
@@ -5818,7 +6972,7 @@ def admin_create_publication(item: PublicationAdminPayload, db: Session = Depend
         save_publication_author_links(db, db_publication.id, item.authors)
         db.commit()
         db.refresh(db_item)
-        return serialize_admin_specialized_content_item(db_item, "publication")
+        return apply_content_interests_to_payload(db, serialize_admin_specialized_content_item(db_item, "publication"), db_item.id)
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):
@@ -5888,7 +7042,7 @@ def admin_update_publication(content_item_id: int, item: PublicationAdminPayload
         save_publication_author_links(db, db_publication.id, item.authors)
         db.commit()
         db.refresh(db_item)
-        return serialize_admin_specialized_content_item(db_item, "publication")
+        return apply_content_interests_to_payload(db, serialize_admin_specialized_content_item(db_item, "publication"), db_item.id)
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException):

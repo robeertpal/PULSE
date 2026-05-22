@@ -1,30 +1,130 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../services/api_service.dart';
+import '../services/auth_storage.dart';
 import '../widgets/home_header.dart';
 import '../theme/pulse_theme.dart';
 import '../widgets/emc_badge.dart';
+import 'content_detail_screen.dart';
+import 'login_screen.dart';
+import 'profile_screen.dart';
+import 'saved_content_screen.dart';
 
-enum NotificationType { emc, course, system, event }
+enum NotificationType {
+  emc,
+  course,
+  event,
+  article,
+  news,
+  publication,
+  system,
+  account,
+}
 
 class NotificationItem {
-  final String id;
+  final int id;
+  final int notificationId;
   final String title;
   final String body;
   final String time;
+  final String notificationType;
   final NotificationType type;
+  final String categoryCode;
+  final String categoryName;
+  final String? imageUrl;
+  final int? contentItemId;
   bool isRead;
   final int? emcPoints;
 
   NotificationItem({
     required this.id,
+    required this.notificationId,
     required this.title,
     required this.body,
     required this.time,
+    required this.notificationType,
     required this.type,
+    required this.categoryCode,
+    required this.categoryName,
+    this.imageUrl,
+    this.contentItemId,
     this.isRead = false,
     this.emcPoints,
   });
+
+  factory NotificationItem.fromJson(Map<String, dynamic> json) {
+    final categoryCode = (json['category_code'] as String?) ?? '';
+    final notificationType = (json['notification_type'] as String?) ?? '';
+    return NotificationItem(
+      id: _readInt(json['user_notification_id']) ?? _readInt(json['id']) ?? 0,
+      notificationId: _readInt(json['notification_id']) ?? 0,
+      title: (json['title'] as String?) ?? 'Notificare',
+      body: (json['description'] as String?) ?? '',
+      time: _formatRelativeTime(json['delivered_at'] ?? json['assigned_at']),
+      notificationType: notificationType,
+      type: _mapType(notificationType, categoryCode),
+      categoryCode: categoryCode,
+      categoryName:
+          (json['category_name'] as String?) ??
+          _fallbackCategoryName(categoryCode),
+      imageUrl: json['image_url'] as String?,
+      contentItemId: _readInt(json['content_item_id']),
+      isRead: json['is_read'] == true || json['read_at'] != null,
+    );
+  }
+
+  static int? _readInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  static NotificationType _mapType(
+    String notificationType,
+    String categoryCode,
+  ) {
+    if (categoryCode == 'emc') return NotificationType.emc;
+    if (categoryCode == 'course') return NotificationType.course;
+    if (categoryCode == 'event') return NotificationType.event;
+    if (categoryCode == 'article') return NotificationType.article;
+    if (categoryCode == 'news') return NotificationType.news;
+    if (categoryCode == 'publication') return NotificationType.publication;
+    if (notificationType == 'account') return NotificationType.account;
+    return NotificationType.system;
+  }
+
+  static String _fallbackCategoryName(String code) {
+    const names = {
+      'emc': 'Puncte EMC',
+      'profile': 'Profil',
+      'security': 'Securitate',
+      'subscription': 'Abonament',
+      'maintenance': 'Mentenanță',
+      'announcement': 'Anunț',
+      'update': 'Actualizare',
+      'news': 'Știri',
+      'article': 'Articole',
+      'event': 'Evenimente',
+      'course': 'Cursuri',
+      'publication': 'Reviste',
+    };
+    return names[code] ?? 'Notificare';
+  }
+
+  static String _formatRelativeTime(dynamic value) {
+    if (value is! String || value.isEmpty) return 'Acum';
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) return value;
+    final diff = DateTime.now().difference(parsed.toLocal());
+    if (diff.inMinutes < 1) return 'Acum';
+    if (diff.inMinutes < 60) return 'Acum ${diff.inMinutes} min';
+    if (diff.inHours < 24) return 'Acum ${diff.inHours} ore';
+    if (diff.inDays == 1) return 'Ieri';
+    if (diff.inDays < 7) return 'Acum ${diff.inDays} zile';
+    return '${parsed.day.toString().padLeft(2, '0')}.${parsed.month.toString().padLeft(2, '0')}.${parsed.year}';
+  }
 }
 
 class NotificationsScreen extends StatefulWidget {
@@ -38,49 +138,14 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     with SingleTickerProviderStateMixin {
   int _selectedFilterIndex = 0;
   final List<String> _filters = ['Toate', 'Necitite', 'Puncte EMC'];
-  final Set<String> _expandedIds = {};
-
-  // Mock Date
-  final List<NotificationItem> _allNotifications = [
-    NotificationItem(
-      id: '1',
-      title: 'Au fost adăugate 15 Puncte EMC!',
-      body:
-          'Felicitări pentru finalizarea modulului "Managementul Durerii Cronice". Punctele au fost adăugate în portofoliul tău profesional.',
-      time: 'Acum 2 ore',
-      type: NotificationType.emc,
-      isRead: false,
-    ),
-    NotificationItem(
-      id: '2',
-      title: 'Curs nou disponibil',
-      body:
-          'Te-ar putea interesa un nou curs: "Imunoterapia în Oncologie - Update 2026".',
-      time: 'Acum 5 ore',
-      type: NotificationType.course,
-      isRead: false,
-      emcPoints: 12,
-    ),
-    NotificationItem(
-      id: '3',
-      title: 'Actualizare sistem PULSE',
-      body:
-          'Platforma a fost actualizată pentru a fi mai fluidă și mai stabilă. Verifică noile secțiuni!',
-      time: 'Ieri, 14:30',
-      type: NotificationType.system,
-      isRead: true,
-    ),
-    NotificationItem(
-      id: '4',
-      title: 'Reminder Eveniment',
-      body:
-          'Simpozionul de Medicină Internă începe mâine dimineață la ora 09:00. Pregătește-te de conferință!',
-      time: '29 Martie',
-      type: NotificationType.event,
-      isRead: true,
-      emcPoints: 5,
-    ),
-  ];
+  final Set<int> _expandedIds = {};
+  final ApiService _apiService = ApiService();
+  final AuthStorage _authStorage = AuthStorage();
+  String _doctorName = 'Medic';
+  int _emcPoints = 0;
+  bool _isLoadingNotifications = true;
+  String? _notificationsError;
+  final List<NotificationItem> _allNotifications = [];
 
   late AnimationController _animController;
 
@@ -91,6 +156,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..forward();
+    _loadDoctorName();
+    _loadNotifications();
   }
 
   @override
@@ -112,7 +179,138 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     return _allNotifications;
   }
 
-  void _toggleExpand(String id) {
+  Future<void> _loadDoctorName() async {
+    final cachedName = await _authStorage.getUserName();
+    if (cachedName != null && cachedName.trim().isNotEmpty && mounted) {
+      setState(() {
+        _doctorName = cachedName.trim();
+      });
+    }
+
+    try {
+      final profileData = await _apiService.getMyProfile();
+      final freshName = profileData['display_name'] as String?;
+      final totalEmcPoints = _readTotalEmcPoints(profileData);
+      if (freshName != null && freshName.trim().isNotEmpty) {
+        await _authStorage.saveUserName(freshName.trim());
+      }
+      if (mounted) {
+        setState(() {
+          if (freshName != null && freshName.trim().isNotEmpty) {
+            _doctorName = freshName.trim();
+          }
+          _emcPoints = totalEmcPoints;
+        });
+      }
+    } catch (e) {
+      debugPrint('Eroare la obținerea numelui medicului din API: $e');
+    }
+  }
+
+  int _readTotalEmcPoints(Map<String, dynamic> profileData) {
+    final directValue = profileData['total_emc_points'];
+    if (directValue is int) return directValue;
+    if (directValue is num) return directValue.toInt();
+    if (directValue is String) return int.tryParse(directValue) ?? 0;
+
+    final profile = profileData['profile'];
+    if (profile is Map<String, dynamic>) {
+      final profileValue = profile['total_emc_points'];
+      if (profileValue is int) return profileValue;
+      if (profileValue is num) return profileValue.toInt();
+      if (profileValue is String) return int.tryParse(profileValue) ?? 0;
+    }
+    return 0;
+  }
+
+  Future<void> _loadNotifications() async {
+    setState(() {
+      _isLoadingNotifications = true;
+      _notificationsError = null;
+    });
+    try {
+      final rows = await _apiService.getNotifications();
+      final items = rows.map(NotificationItem.fromJson).toList();
+      if (!mounted) return;
+      setState(() {
+        _allNotifications
+          ..clear()
+          ..addAll(items);
+        _isLoadingNotifications = false;
+      });
+      _animController.forward(from: 0.0);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingNotifications = false;
+        _notificationsError = 'Nu am putut încărca notificările.';
+      });
+    }
+  }
+
+  Future<void> _openContent(NotificationItem item) async {
+    final contentItemId = item.contentItemId;
+    if (contentItemId == null) return;
+    await _markRead(item.id);
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ContentDetailScreen(contentItemId: contentItemId),
+      ),
+    );
+  }
+
+  Future<void> _openProfileFromNotification(NotificationItem item) async {
+    await _markRead(item.id);
+    if (!mounted) return;
+    await _openProfile();
+  }
+
+  Future<void> _markRead(int userNotificationId) async {
+    final idx = _allNotifications.indexWhere((n) => n.id == userNotificationId);
+    if (idx == -1 || _allNotifications[idx].isRead) return;
+    setState(() {
+      _allNotifications[idx].isRead = true;
+    });
+    try {
+      await _apiService.markNotificationRead(userNotificationId);
+    } catch (e) {
+      debugPrint('Nu am putut marca notificarea citită: $e');
+    }
+  }
+
+  Future<void> _openSavedContent() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SavedContentScreen()),
+    );
+  }
+
+  Future<void> _openProfile() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ProfileScreen()),
+    );
+  }
+
+  Future<void> _logout() async {
+    try {
+      await _apiService.logout();
+    } catch (e) {
+      debugPrint('Logout request failed: $e');
+    }
+
+    await _authStorage.clearSession();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
+
+  void _toggleExpand(int id) {
+    int? userNotificationIdToMark;
     setState(() {
       if (_expandedIds.contains(id)) {
         _expandedIds.remove(id);
@@ -121,13 +319,21 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         final idx = _allNotifications.indexWhere((n) => n.id == id);
         if (idx != -1 && !_allNotifications[idx].isRead) {
           _allNotifications[idx].isRead = true;
+          userNotificationIdToMark = _allNotifications[idx].id;
         }
       }
     });
+    if (userNotificationIdToMark != null) {
+      _apiService.markNotificationRead(userNotificationIdToMark!).catchError((
+        e,
+      ) {
+        debugPrint('Nu am putut marca notificarea citită: $e');
+      });
+    }
     HapticFeedback.lightImpact();
   }
 
-  void _deleteNotification(String id) {
+  void _deleteNotification(int id) {
     setState(() {
       _allNotifications.removeWhere((n) => n.id == id);
     });
@@ -182,10 +388,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Același header ca pe pagina principală
-                const HomeHeader(doctorName: 'Robert'),
-
-                // Back Button & Title
+                HomeHeader(
+                  doctorName: _doctorName,
+                  avatarUrl: '',
+                  emcPoints: _emcPoints,
+                  onNotificationsTap: () {},
+                  onSavedTap: _openSavedContent,
+                  onProfileTap: _openProfile,
+                  onLogoutTap: _logout,
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24.0,
@@ -227,31 +438,39 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
                 // Conținutul paginii cu scroll
                 Expanded(
-                  child: CustomScrollView(
-                    physics: const BouncingScrollPhysics(
-                      parent: AlwaysScrollableScrollPhysics(),
-                    ),
-                    slivers: [
-                      _buildFilters(),
-                      if (items.isEmpty)
-                        _buildEmptyState()
-                      else
-                        SliverPadding(
-                          padding: const EdgeInsets.only(bottom: 40),
-                          sliver: SliverList(
-                            delegate: SliverChildBuilderDelegate((
-                              context,
-                              index,
-                            ) {
-                              final notification = items[index];
-                              return _buildAnimatedNotificationCard(
-                                notification,
+                  child: RefreshIndicator(
+                    color: PulseTheme.primary,
+                    onRefresh: _loadNotifications,
+                    child: CustomScrollView(
+                      physics: const BouncingScrollPhysics(
+                        parent: AlwaysScrollableScrollPhysics(),
+                      ),
+                      slivers: [
+                        _buildFilters(),
+                        if (_isLoadingNotifications)
+                          _buildLoadingState()
+                        else if (_notificationsError != null)
+                          _buildErrorState()
+                        else if (items.isEmpty)
+                          _buildEmptyState()
+                        else
+                          SliverPadding(
+                            padding: const EdgeInsets.only(bottom: 40),
+                            sliver: SliverList(
+                              delegate: SliverChildBuilderDelegate((
+                                context,
                                 index,
-                              );
-                            }, childCount: items.length),
+                              ) {
+                                final notification = items[index];
+                                return _buildAnimatedNotificationCard(
+                                  notification,
+                                  index,
+                                );
+                              }, childCount: items.length),
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -403,6 +622,45 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 
+  Widget _buildLoadingState() {
+    return const SliverFillRemaining(
+      hasScrollBody: false,
+      child: Center(
+        child: CircularProgressIndicator(color: PulseTheme.primary),
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return SliverFillRemaining(
+      hasScrollBody: false,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                _notificationsError ?? 'A apărut o eroare.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: PulseTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: _loadNotifications,
+                child: const Text('Încearcă din nou'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildAnimatedNotificationCard(NotificationItem item, int index) {
     return SlideTransition(
       position: Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero)
@@ -436,6 +694,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     final bool isExpanded = _expandedIds.contains(item.id);
     Color iconColor;
     String iconPath;
+    final isContentNotification = item.notificationType == 'content';
+    final contentBadgeIconPath = _contentBadgeIconPath(item.categoryCode);
 
     switch (item.type) {
       case NotificationType.emc:
@@ -449,6 +709,22 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       case NotificationType.event:
         iconColor = const Color(0xFF10B981);
         iconPath = 'assets/icons/events.svg';
+        break;
+      case NotificationType.article:
+        iconColor = const Color(0xFF2563EB);
+        iconPath = 'assets/icons/book.pages.svg';
+        break;
+      case NotificationType.news:
+        iconColor = const Color(0xFFEF4444);
+        iconPath = 'assets/icons/newspaper.svg';
+        break;
+      case NotificationType.publication:
+        iconColor = const Color(0xFF7C3AED);
+        iconPath = 'assets/icons/books.svg';
+        break;
+      case NotificationType.account:
+        iconColor = const Color(0xFF059669);
+        iconPath = 'assets/icons/person.text.rectangle.fill.svg';
         break;
       case NotificationType.system:
         iconColor = const Color(0xFFF59E0B);
@@ -550,47 +826,82 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                       ),
                                     ],
                                   ),
-                                  child: Center(
-                                    child: SvgPicture.asset(
-                                      iconPath,
+                                  clipBehavior: Clip.antiAlias,
+                                  child:
+                                      isContentNotification &&
+                                          (item.imageUrl ?? '').isNotEmpty
+                                      ? Image.network(
+                                          item.imageUrl!,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) =>
+                                                  Center(
+                                                    child: SvgPicture.asset(
+                                                      iconPath,
+                                                      width: 24,
+                                                      height: 24,
+                                                      colorFilter:
+                                                          ColorFilter.mode(
+                                                            iconColor,
+                                                            BlendMode.srcIn,
+                                                          ),
+                                                    ),
+                                                  ),
+                                        )
+                                      : Center(
+                                          child: SvgPicture.asset(
+                                            iconPath,
+                                            width: 24,
+                                            height: 24,
+                                            colorFilter: ColorFilter.mode(
+                                              iconColor,
+                                              BlendMode.srcIn,
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                                if (isContentNotification &&
+                                    contentBadgeIconPath != null)
+                                  Positioned(
+                                    top: -5,
+                                    left: -5,
+                                    child: Container(
                                       width: 24,
                                       height: 24,
-                                      colorFilter: ColorFilter.mode(
-                                        iconColor,
-                                        BlendMode.srcIn,
+                                      decoration: BoxDecoration(
+                                        color: PulseTheme.surface.withValues(
+                                          alpha: 0.86,
+                                        ),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.72,
+                                          ),
+                                          width: 1,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(
+                                              alpha: 0.10,
+                                            ),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  top: -4,
-                                  left: -4,
-                                  child: Container(
-                                    width: 26,
-                                    height: 26,
-                                    decoration: BoxDecoration(
-                                      color: iconColor,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: item.isRead
-                                            ? PulseTheme.surface
-                                            : PulseTheme.surfaceElevated,
-                                        width: 2.5,
-                                      ),
-                                    ),
-                                    child: Center(
-                                      child: SvgPicture.asset(
-                                        iconPath,
-                                        width: 14,
-                                        height: 14,
-                                        colorFilter: const ColorFilter.mode(
-                                          Colors.white,
-                                          BlendMode.srcIn,
+                                      child: Center(
+                                        child: SvgPicture.asset(
+                                          contentBadgeIconPath,
+                                          width: 13,
+                                          height: 13,
+                                          colorFilter: ColorFilter.mode(
+                                            iconColor,
+                                            BlendMode.srcIn,
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                ),
                                 Positioned(
                                   bottom: 0,
                                   right: 0,
@@ -639,6 +950,26 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                               alpha: 0.8,
                                             )
                                           : PulseTheme.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: iconColor.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      item.categoryName,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: iconColor,
+                                        letterSpacing: -0.1,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -701,42 +1032,53 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                   height: 1.45,
                                 ),
                               ),
-                              const SizedBox(height: 16),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: PulseTheme.primary.withValues(
-                                    alpha: 0.1,
+                              if (isContentNotification ||
+                                  item.type == NotificationType.emc) ...[
+                                const SizedBox(height: 16),
+                                GestureDetector(
+                                  onTap: isContentNotification
+                                      ? () => _openContent(item)
+                                      : () =>
+                                            _openProfileFromNotification(item),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: PulseTheme.primary.withValues(
+                                        alpha: 0.1,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          isContentNotification
+                                              ? 'Află mai multe'
+                                              : 'Vezi profilul',
+                                          style: const TextStyle(
+                                            color: PulseTheme.primary,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        SvgPicture.asset(
+                                          'assets/icons/arrow.right.svg',
+                                          width: 14,
+                                          height: 14,
+                                          colorFilter: const ColorFilter.mode(
+                                            PulseTheme.primary,
+                                            BlendMode.srcIn,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Text(
-                                      'Află mai multe',
-                                      style: TextStyle(
-                                        color: PulseTheme.primary,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    SvgPicture.asset(
-                                      'assets/icons/arrow.right.svg',
-                                      width: 14,
-                                      height: 14,
-                                      colorFilter: const ColorFilter.mode(
-                                        PulseTheme.primary,
-                                        BlendMode.srcIn,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                              ],
                             ],
                           ),
                         ),
@@ -750,5 +1092,22 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         ),
       ),
     );
+  }
+
+  String? _contentBadgeIconPath(String categoryCode) {
+    switch (categoryCode) {
+      case 'news':
+        return 'assets/icons/newspaper.svg';
+      case 'article':
+        return 'assets/icons/book.pages.svg';
+      case 'event':
+        return 'assets/icons/calendar.svg';
+      case 'course':
+        return 'assets/icons/graduation.svg';
+      case 'publication':
+        return 'assets/icons/books.svg';
+      default:
+        return null;
+    }
   }
 }

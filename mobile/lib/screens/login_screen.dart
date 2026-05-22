@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../services/auth_storage.dart';
 import '../widgets/auth_shell.dart';
 import 'home_screen.dart';
+import 'password_reset_screen.dart';
 import 'register_page.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -287,6 +288,35 @@ class _LoginScreenState extends State<LoginScreen> {
                                 'Parolă',
                                 _passwordIcon,
                                 suffixIcon: _passwordVisibilityButton(),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: _isSubmitting
+                                    ? null
+                                    : () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => PasswordResetScreen(
+                                              initialEmail: _emailController
+                                                  .text
+                                                  .trim(),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AuthShell.pulsePurple,
+                                  padding: const EdgeInsets.only(top: 8),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: const Text(
+                                  'Ți-ai uitat parola?',
+                                  style: TextStyle(fontWeight: FontWeight.w800),
+                                ),
                               ),
                             ),
                             const SizedBox(height: 24),

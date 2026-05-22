@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notificări - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper notifications-page">
+            <div class="header-actions">
+                <div>
+                    <h2>Notificări</h2>
+                    <p class="page-subtitle">Compune, previzualizează și trimite notificări medicale cu targetare precisă.</p>
+                </div>
+                <button class="btn btn-primary" id="create-notification-btn">Creează notificare</button>
+            </div>
+
+            <div id="alert-box" class="alert"></div>
+
+            <section class="admin-panel filters-panel">
+                <div class="filters-grid notification-filters">
+                    <div class="form-group wide">
+                        <label for="search-input">Căutare</label>
+                        <input id="search-input" type="search" placeholder="Titlu sau descriere">
+                    </div>
+                    <div class="form-group">
+                        <label for="type-filter">Tip</label>
+                        <select id="type-filter">
+                            <option value="">Toate tipurile</option>
+                            <option value="content">Conținut</option>
+                            <option value="account">Cont</option>
+                            <option value="system">Sistem</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="status-filter">Status</label>
+                        <select id="status-filter">
+                            <option value="">Toate statusurile</option>
+                            <option value="draft">Draft</option>
+                            <option value="sent">Trimis</option>
+                            <option value="cancelled">Anulat</option>
+                        </select>
+                    </div>
+                    <div class="form-group filter-action">
+                        <button class="btn" id="refresh-btn">Reîmprospătează</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="admin-panel">
+                <div class="table-toolbar">
+                    <div id="notifications-count" class="muted">Se încarcă...</div>
+                </div>
+                <div class="table-scroll">
+                    <table class="enterprise-table notifications-table">
+                        <thead>
+                            <tr>
+                                <th>Notificare</th>
+                                <th>Tip</th>
+                                <th>Categorie</th>
+                                <th>Status</th>
+                                <th>Conținut</th>
+                                <th>Livrate</th>
+                                <th>Citite</th>
+                                <th>Create</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="notifications-body">
+                            <tr><td colspan="9">Se încarcă...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <aside id="details-drawer" class="details-drawer notification-drawer" aria-hidden="true">
+                <div class="drawer-header">
+                    <div>
+                        <div class="drawer-eyebrow">Detalii notificare</div>
+                        <h3 id="drawer-title">Selectează o notificare</h3>
+                        <p id="drawer-subtitle" class="muted"></p>
+                    </div>
+                    <button class="icon-btn" id="close-drawer" aria-label="Închide">×</button>
+                </div>
+                <div id="drawer-content" class="drawer-content"></div>
+            </aside>
+
+            <div id="wizard-modal" class="modal-backdrop notification-modal" aria-hidden="true">
+                <div class="notification-wizard" role="dialog" aria-modal="true" aria-labelledby="wizard-title">
+                    <div class="wizard-header">
+                        <div>
+                            <div class="drawer-eyebrow">Notificare nouă</div>
+                            <h3 id="wizard-title">Creează notificare</h3>
+                        </div>
+                        <button class="icon-btn" id="close-wizard" aria-label="Închide">×</button>
+                    </div>
+
+                    <div class="wizard-steps" id="wizard-steps"></div>
+
+                    <div id="wizard-error" class="alert error"></div>
+                    <div id="wizard-success" class="success-state" hidden>
+                        <strong>Notificare trimisă</strong>
+                        <span>Notificarea a fost livrată și salvată cu statusul trimis.</span>
+                    </div>
+
+                    <div class="wizard-layout">
+                        <form id="notification-form" class="wizard-form">
+                            <section id="step-type" class="wizard-step-panel"></section>
+                            <section id="step-details" class="wizard-step-panel"></section>
+                            <section id="step-confirm" class="wizard-step-panel"></section>
+                        </form>
+
+                        <aside class="preview-panel notification-preview-panel">
+                            <div class="preview-panel-header">
+                                <span>Previzualizare live</span>
+                                <span id="preview-type" class="badge content">content</span>
+                            </div>
+                            <div id="notification-preview" class="notification-preview-card"></div>
+                        </aside>
+                    </div>
+
+                    <div class="wizard-actions">
+                        <button class="btn" id="wizard-back" type="button">Înapoi</button>
+                        <button class="btn btn-primary" id="wizard-next" type="button">Înainte</button>
+                        <button class="btn btn-primary" id="wizard-submit" type="button">Trimite notificarea</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="edit-modal" class="modal-backdrop notification-modal" aria-hidden="true">
+                <div class="notification-wizard" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+                    <div class="wizard-header">
+                        <div>
+                            <div class="drawer-eyebrow">Editare notificare</div>
+                            <h3 id="edit-title">Editează notificarea</h3>
+                            <p id="edit-subtitle" class="muted"></p>
+                        </div>
+                        <button class="icon-btn" id="close-edit" aria-label="Închide">×</button>
+                    </div>
+                    <div id="edit-error" class="alert error"></div>
+                    <div class="wizard-layout">
+                        <form id="edit-form" class="wizard-form"></form>
+                        <aside class="preview-panel notification-preview-panel">
+                            <div class="preview-panel-header">
+                                <span>Previzualizare live</span>
+                                <span id="edit-preview-type" class="badge content">conținut</span>
+                            </div>
+                            <div id="edit-preview" class="notification-preview-card"></div>
+                        </aside>
+                    </div>
+                    <div class="wizard-actions">
+                        <button class="btn" id="cancel-edit" type="button">Anulează</button>
+                        <button class="btn btn-primary" id="save-edit" type="button">Salvează modificările</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="delete-modal" class="modal-backdrop" aria-hidden="true">
+                <div class="confirm-modal destructive-modal" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+                    <div class="modal-kicker">Confirmare ștergere</div>
+                    <h3 id="delete-title">Șterge notificarea?</h3>
+                    <p>Notificarea va dispărea și din lista utilizatorilor. Datele asociate vor fi șterse automat.</p>
+                    <div id="delete-summary" class="delete-user-summary"></div>
+                    <div id="delete-error" class="modal-error" hidden></div>
+                    <div class="modal-actions">
+                        <button class="btn" id="cancel-delete" type="button">Anulează</button>
+                        <button class="btn btn-destructive" id="confirm-delete" type="button">Șterge notificarea</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/notifications.js"></script>
+</body>
+</html>

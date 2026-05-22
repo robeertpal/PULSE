@@ -6,12 +6,16 @@ let draggedEventPartnerId = null;
 let allAuthors = [];
 let selectedPublicationAuthors = [];
 let draggedPublicationAuthorId = null;
+let allInterests = [];
+let selectedContentInterestIds = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
     UI.init('content', 'Adaugă / Editează Conținut');
 
     const contentType = document.getElementById('content_type');
     contentType.addEventListener('change', toggleDetailsSections);
+    document.getElementById('interest_search').addEventListener('input', renderContentInterests);
+    document.getElementById('notify_interested_users').addEventListener('change', updateNotifyInterestsWarning);
     document.getElementById('event_future_price_type').addEventListener('change', syncFuturePriceAmountState);
     ['hero_image_url', 'thumbnail_url', 'publication_logo_url'].forEach(inputId => {
         document.getElementById(inputId).addEventListener('input', () => updateImagePreview(inputId));
@@ -78,12 +82,13 @@ function generateSlug() {
 }
 
 async function loadReferenceData() {
-    const [categories, specializations, cities, partners, authors] = await Promise.all([
+    const [categories, specializations, cities, partners, authors, interests] = await Promise.all([
         API.get('/admin/categories'),
         API.get('/admin/specializations'),
         API.get('/admin/cities'),
         API.get('/admin/event-partners'),
         API.get('/authors'),
+        API.get('/admin/interests'),
     ]);
 
     fillSelect('category_id', categories, 'Fără categorie');
@@ -91,6 +96,8 @@ async function loadReferenceData() {
     fillSelect('event_city_id', cities, 'Fără oraș');
     allEventPartners = partners || [];
     allAuthors = authors || [];
+    allInterests = interests || [];
+    renderContentInterests();
     renderEventPartners([]);
     renderPublicationAuthors([]);
 }
@@ -104,6 +111,74 @@ function fillSelect(id, items, emptyLabel) {
         option.textContent = item.name;
         select.appendChild(option);
     });
+}
+
+function renderContentInterests() {
+    const list = document.getElementById('content_interests_list');
+    const selected = document.getElementById('selected_content_interests');
+    if (!list || !selected) return;
+
+    const term = document.getElementById('interest_search').value.trim().toLowerCase();
+    const visibleInterests = allInterests.filter(interest => {
+        const name = (interest.name || '').toLowerCase();
+        const slug = (interest.slug || '').toLowerCase();
+        return !term || name.includes(term) || slug.includes(term);
+    });
+
+    if (!visibleInterests.length) {
+        list.innerHTML = '<div class="muted">Nu există interese pentru căutarea curentă.</div>';
+    } else {
+        list.innerHTML = visibleInterests.map(interest => `
+            <label>
+                <input type="checkbox" class="content-interest-checkbox" value="${interest.id}" ${selectedContentInterestIds.includes(Number(interest.id)) ? 'checked' : ''}>
+                <span>${escapeHTML(interest.name)}</span>
+            </label>
+        `).join('');
+        list.querySelectorAll('.content-interest-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                const interestId = Number(checkbox.value);
+                if (checkbox.checked && !selectedContentInterestIds.includes(interestId)) {
+                    selectedContentInterestIds.push(interestId);
+                }
+                if (!checkbox.checked) {
+                    selectedContentInterestIds = selectedContentInterestIds.filter(id => id !== interestId);
+                }
+                renderContentInterests();
+                updateNotifyInterestsWarning();
+            });
+        });
+    }
+
+    const selectedInterests = selectedContentInterestIds
+        .map(id => allInterests.find(interest => Number(interest.id) === id))
+        .filter(Boolean);
+    if (!selectedInterests.length) {
+        selected.classList.add('empty');
+        selected.innerHTML = '<span class="muted">Niciun interes selectat.</span>';
+    } else {
+        selected.classList.remove('empty');
+        selected.innerHTML = selectedInterests.map(interest => `
+            <button type="button" class="chip selected" data-interest-id="${interest.id}">
+                ${escapeHTML(interest.name)} <span aria-hidden="true">×</span>
+            </button>
+        `).join('');
+        selected.querySelectorAll('[data-interest-id]').forEach(button => {
+            button.addEventListener('click', () => {
+                const interestId = Number(button.dataset.interestId);
+                selectedContentInterestIds = selectedContentInterestIds.filter(id => id !== interestId);
+                renderContentInterests();
+                updateNotifyInterestsWarning();
+            });
+        });
+    }
+    updateNotifyInterestsWarning();
+}
+
+function updateNotifyInterestsWarning() {
+    const warning = document.getElementById('notify_interests_warning');
+    const checkbox = document.getElementById('notify_interested_users');
+    if (!warning || !checkbox) return;
+    warning.style.display = checkbox.checked && selectedContentInterestIds.length === 0 ? 'block' : 'none';
 }
 
 function toggleDetailsSections() {
@@ -135,6 +210,8 @@ async function loadContentData(id) {
         document.getElementById('is_active').checked = data.is_active !== false;
         updateImagePreview('hero_image_url');
         updateImagePreview('thumbnail_url');
+        selectedContentInterestIds = (data.interest_ids || []).map(Number).filter(Boolean);
+        renderContentInterests();
 
         fillCourseFields(data.course || {});
         fillEventFields(data.event || {});
@@ -846,6 +923,8 @@ function buildContentPayload() {
         is_featured: document.getElementById('is_featured').checked,
         is_active: document.getElementById('is_active').checked,
         published_at: dateTimeOrNull('published_at'),
+        interest_ids: selectedContentInterestIds.slice(),
+        notify_interested_users: document.getElementById('notify_interested_users').checked,
     };
 }
 
@@ -914,6 +993,9 @@ function validatePayload(payload) {
     }
     if (payload.content_type === 'event' && (!payload.event.start_date || !payload.event.end_date)) {
         throw new Error('Evenimentele au nevoie de data de început și data de sfârșit.');
+    }
+    if (payload.notify_interested_users && (!payload.interest_ids || payload.interest_ids.length === 0)) {
+        throw new Error('Selectează cel puțin un interes pentru a trimite notificarea utilizatorilor interesați.');
     }
 }
 
