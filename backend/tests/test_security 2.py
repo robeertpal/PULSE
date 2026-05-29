@@ -1,5 +1,6 @@
 import os
 from types import SimpleNamespace
+from unittest.mock import patch
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_security.db")
 os.environ.setdefault("ENVIRONMENT", "development")
@@ -127,3 +128,29 @@ def test_register_rejects_invalid_payload_before_db_access():
     )
 
     assert response.status_code == 422
+
+
+def test_email_verification_delivery_failure_can_be_non_fatal():
+    class FakeDb:
+        def __init__(self):
+            self.added = []
+
+        def add(self, value):
+            self.added.append(value)
+
+        def flush(self):
+            pass
+
+    fake_db = FakeDb()
+
+    with patch("main.send_email_verification_email", side_effect=RuntimeError("smtp down")):
+        sent = main.create_email_verification(
+            fake_db,
+            user_id=123,
+            to_email="doctor@example.com",
+            now=main.datetime.utcnow(),
+            raise_on_email_error=False,
+        )
+
+    assert sent is False
+    assert len(fake_db.added) == 1

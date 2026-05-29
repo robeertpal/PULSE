@@ -94,11 +94,19 @@ DEFAULT_LOCAL_ORIGINS = ",".join(
         "http://127.0.0.1:5000",
     ]
 )
-DEFAULT_PRODUCTION_ORIGINS = "https://pulse-medichub.web.app"
+REQUIRED_PRODUCTION_ORIGINS = [
+    "https://pulse-medichub.web.app",
+    "https://pulse-medichub.firebaseapp.com",
+]
+DEFAULT_PRODUCTION_ORIGINS = ",".join(REQUIRED_PRODUCTION_ORIGINS)
 allowed_origins = parse_csv_env(
     "ALLOWED_ORIGINS",
     DEFAULT_PRODUCTION_ORIGINS if IS_PRODUCTION else f"{DEFAULT_LOCAL_ORIGINS},{DEFAULT_PRODUCTION_ORIGINS}",
 )
+if IS_PRODUCTION:
+    for required_origin in REQUIRED_PRODUCTION_ORIGINS:
+        if required_origin not in allowed_origins:
+            allowed_origins.append(required_origin)
 if "*" in allowed_origins and IS_PRODUCTION:
     raise RuntimeError("ALLOWED_ORIGINS must not contain '*' in production")
 
@@ -157,10 +165,13 @@ async def security_middleware(request: Request, call_next):
 async def safe_http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code >= 500:
         logger.exception("HTTP %s on %s: %s", exc.status_code, request.url.path, exc.detail)
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": "Internal server error"},
-            headers=exc.headers,
+        return add_cors_headers_for_origin(
+            request,
+            JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": "Internal server error"},
+                headers=exc.headers,
+            ),
         )
     return await http_exception_handler(request, exc)
 
@@ -168,7 +179,26 @@ async def safe_http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled error on %s", request.url.path)
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    return add_cors_headers_for_origin(
+        request,
+        JSONResponse(status_code=500, content={"detail": "Internal server error"}),
+    )
+
+
+def add_cors_headers_for_origin(request: Request, response: JSONResponse) -> JSONResponse:
+    origin = request.headers.get("origin")
+    if not origin:
+        return response
+
+    is_allowed_origin = origin in allowed_origins
+    if not is_allowed_origin and not IS_PRODUCTION:
+        is_allowed_origin = re.match(r"^http://(localhost|127\.0\.0\.1):\d+$", origin) is not None
+
+    if is_allowed_origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    return response
 
 
 def serialize_value(value):
@@ -588,7 +618,14 @@ def send_password_reset_email(to_email: str, otp_code: str) -> None:
         smtp.send_message(message)
 
 
-def create_email_verification(db: Session, user_id: int, to_email: str, now: datetime) -> None:
+def create_email_verification(
+    db: Session,
+    user_id: int,
+    to_email: str,
+    now: datetime,
+    *,
+    raise_on_email_error: bool = True,
+) -> bool:
     otp_code = create_email_otp()
     db.add(
         models.UserEmailVerification(
@@ -599,7 +636,14 @@ def create_email_verification(db: Session, user_id: int, to_email: str, now: dat
         )
     )
     db.flush()
-    send_email_verification_email(to_email, otp_code)
+    try:
+        send_email_verification_email(to_email, otp_code)
+    except Exception:
+        logger.exception("Email verification delivery failed for user_id=%s", user_id)
+        if raise_on_email_error:
+            raise
+        return False
+    return True
 
 
 def create_password_reset(db: Session, user_id: int, to_email: str, now: datetime) -> None:
@@ -2777,13 +2821,20 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
                 created_at=now,
             )
         )
-    create_email_verification(db, user.id, user.email, now)
+    email_verification_sent = create_email_verification(
+        db,
+        user.id,
+        user.email,
+        now,
+        raise_on_email_error=False,
+    )
     db.commit()
 
     return {
         "message": "User registered successfully",
         "user_id": user.id,
         "email_verification_required": True,
+        "email_verification_sent": email_verification_sent,
     }
 
 
