@@ -519,32 +519,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildHomeTabSwitch() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.78),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: PulseTheme.borderLight),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
-                spreadRadius: -8,
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildHomeTabOption('Acasă', 0),
-              const SizedBox(width: 28),
-              _buildHomeTabOption('For You', 1),
-            ],
-          ),
-        ),
+      padding: const EdgeInsets.only(top: 4, bottom: 18),
+      child: Row(
+        children: [
+          Expanded(child: _buildHomeTabOption('Acasă', 0)),
+          Expanded(child: _buildHomeTabOption('For You', 1)),
+        ],
       ),
     );
   }
@@ -564,22 +544,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
           letterSpacing: 0,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label),
-            const SizedBox(height: 6),
-            AnimatedContainer(
-              duration: PulseTheme.animFast,
-              curve: PulseTheme.animCurve,
-              width: isSelected ? 34 : 0,
-              height: 3,
-              decoration: BoxDecoration(
-                gradient: isSelected ? PulseTheme.primaryGradient : null,
-                borderRadius: BorderRadius.circular(999),
-              ),
+        child: SizedBox(
+          height: 48,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label),
+                const SizedBox(height: 7),
+                AnimatedContainer(
+                  duration: PulseTheme.animFast,
+                  curve: PulseTheme.animCurve,
+                  width: isSelected ? 38 : 0,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    gradient: isSelected ? PulseTheme.primaryGradient : null,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -1146,8 +1131,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 8),
-        _buildContentFilters(),
-
         _animatedSection(
           1,
           FeaturedCard(
@@ -1289,6 +1272,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 8),
+          _buildContentFilters(),
           _buildHomeTabSwitch(),
           if (_selectedHomeTab == 0) _buildAcasaFeed() else _buildForYouContent(),
         ],
