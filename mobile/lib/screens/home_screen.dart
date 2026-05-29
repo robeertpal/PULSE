@@ -30,6 +30,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _selectedIndex = 0; // Bottom nav index
+  int _selectedHomeTab = 0;
   late AnimationController _entranceController;
   late List<Animation<double>> _fadeAnimations;
   late List<Animation<Offset>> _slideAnimations;
@@ -506,6 +507,154 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return FadeTransition(
       opacity: _fadeAnimations[index],
       child: SlideTransition(position: _slideAnimations[index], child: child),
+    );
+  }
+
+  void _selectHomeTab(int index) {
+    if (_selectedHomeTab == index) return;
+    setState(() {
+      _selectedHomeTab = index;
+    });
+  }
+
+  Widget _buildHomeTabSwitch() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.78),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: PulseTheme.borderLight),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+                spreadRadius: -8,
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildHomeTabOption('Acasă', 0),
+              const SizedBox(width: 28),
+              _buildHomeTabOption('For You', 1),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeTabOption(String label, int index) {
+    final isSelected = _selectedHomeTab == index;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _selectHomeTab(index),
+      child: AnimatedDefaultTextStyle(
+        duration: PulseTheme.animFast,
+        curve: PulseTheme.animCurve,
+        style: TextStyle(
+          color: isSelected ? PulseTheme.textPrimary : PulseTheme.textTertiary,
+          fontSize: 16,
+          fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
+          letterSpacing: 0,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label),
+            const SizedBox(height: 6),
+            AnimatedContainer(
+              duration: PulseTheme.animFast,
+              curve: PulseTheme.animCurve,
+              width: isSelected ? 34 : 0,
+              height: 3,
+              decoration: BoxDecoration(
+                gradient: isSelected ? PulseTheme.primaryGradient : null,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildForYouContent() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 26, 20, 120),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(24, 26, 24, 28),
+        decoration: BoxDecoration(
+          color: PulseTheme.surface,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: PulseTheme.borderLight),
+          boxShadow: [
+            BoxShadow(
+              color: PulseTheme.primary.withValues(alpha: 0.08),
+              blurRadius: 28,
+              offset: const Offset(0, 16),
+              spreadRadius: -16,
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                gradient: PulseTheme.primaryGradient,
+                shape: BoxShape.circle,
+                boxShadow: PulseTheme.coloredShadow(PulseTheme.primary),
+              ),
+              child: const Icon(
+                Icons.auto_awesome,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'For You',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: PulseTheme.textPrimary,
+                fontSize: 26,
+                fontWeight: FontWeight.w900,
+                height: 1.15,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Recomandări personalizate',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: PulseTheme.primary,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'În curând vei vedea aici cursuri, reviste, evenimente și articole recomandate pentru profilul tău medical.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: PulseTheme.textSecondary,
+                fontSize: 15,
+                height: 1.45,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1133,16 +1282,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Main Home Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Widget _buildHomeContent() {
-    return RefreshIndicator(
-      color: PulseTheme.primary,
-      onRefresh: _loadData,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: BouncingScrollPhysics(),
-        ),
-        child: _buildAcasaFeed(),
+    final scrollView = SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHomeTabSwitch(),
+          if (_selectedHomeTab == 0) _buildAcasaFeed() else _buildForYouContent(),
+        ],
       ),
     );
+
+    if (_selectedHomeTab == 0) {
+      return RefreshIndicator(
+        color: PulseTheme.primary,
+        onRefresh: _loadData,
+        child: scrollView,
+      );
+    }
+
+    return scrollView;
   }
 
   Widget _buildCategoryContent({
