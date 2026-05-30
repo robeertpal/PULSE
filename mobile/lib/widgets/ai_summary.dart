@@ -72,9 +72,9 @@ class AiSummaryButton extends StatelessWidget {
       child: FilledButton(
         onPressed: isLoading ? null : onGenerate,
         style: FilledButton.styleFrom(
-          backgroundColor: PulseTheme.textPrimary,
+          backgroundColor: PulseTheme.primary,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: PulseTheme.textPrimary.withValues(
+          disabledBackgroundColor: PulseTheme.primary.withValues(
             alpha: 0.62,
           ),
           disabledForegroundColor: Colors.white,
@@ -134,7 +134,7 @@ class _AiSummaryContent extends StatelessWidget {
             Text(
               'Rezumat AI',
               style: TextStyle(
-                color: _editorialNavy,
+                color: PulseTheme.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.w900,
               ),
@@ -156,7 +156,7 @@ class _AiSummaryContent extends StatelessWidget {
           const Text(
             'Idei cheie',
             style: TextStyle(
-              color: _editorialNavy,
+              color: PulseTheme.textPrimary,
               fontWeight: FontWeight.w900,
             ),
           ),

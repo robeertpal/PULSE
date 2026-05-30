@@ -78,10 +78,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: PulseTheme.surface.withValues(alpha: 0.82),
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: PulseTheme.borderLight),
-                      boxShadow: PulseTheme.cardShadow,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.10),
+                      ),
+                      boxShadow: PulseTheme.softGlowShadow,
                     ),
                     child: Row(
                       children: [
@@ -95,7 +97,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           padding: const EdgeInsets.all(3),
                           child: Container(
                             decoration: const BoxDecoration(
-                              color: Colors.white,
+                              color: PulseTheme.surface,
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
@@ -163,9 +165,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: PulseTheme.surface.withValues(alpha: 0.82),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: PulseTheme.borderLight),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
         boxShadow: PulseTheme.cardShadow,
       ),
       child: Column(
