@@ -1,5 +1,6 @@
 from collections import defaultdict, deque
 import base64
+from dataclasses import dataclass
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -74,6 +75,13 @@ def parse_int_env(name: str, default: int) -> int:
         return default
 
 
+def parse_bool_env(name: str, default: bool = False) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def docs_enabled() -> bool:
     return os.getenv("ENABLE_API_DOCS", "true" if not IS_PRODUCTION else "false").strip().lower() == "true"
 
@@ -85,6 +93,91 @@ app = FastAPI(
     openapi_url="/openapi.json" if docs_enabled() else None,
 )
 logger = logging.getLogger("pulse.admin")
+
+
+@dataclass(frozen=True)
+class SmtpConfig:
+    host: str
+    port: int
+    user: str
+    password: str
+    email_from: str
+    use_ssl: bool
+    use_starttls: bool
+    timeout_seconds: int
+    from_env_name: str
+
+    @property
+    def missing_fields(self) -> list[str]:
+        missing = []
+        if not self.host:
+            missing.append("SMTP_HOST")
+        if not self.port:
+            missing.append("SMTP_PORT")
+        if not self.user:
+            missing.append("SMTP_USER")
+        if not self.password:
+            missing.append("SMTP_PASSWORD")
+        if not self.email_from:
+            missing.append("SMTP_FROM/FROM_EMAIL/EMAIL_FROM")
+        return missing
+
+
+def first_configured_env(names: list[str], default: str = "") -> tuple[str, str]:
+    for name in names:
+        value = os.getenv(name)
+        if value is not None and value.strip():
+            return value.strip(), name
+    return default.strip(), ""
+
+
+def get_smtp_config() -> SmtpConfig:
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
+    smtp_port = parse_int_env("SMTP_PORT", 587)
+    smtp_user = os.getenv("SMTP_USER", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+    email_from, from_env_name = first_configured_env(
+        ["SMTP_FROM", "FROM_EMAIL", "EMAIL_FROM"],
+        smtp_user,
+    )
+    use_ssl = parse_bool_env("SMTP_USE_SSL", smtp_port == 465)
+    use_starttls = parse_bool_env("SMTP_STARTTLS", not use_ssl)
+    if use_ssl:
+        use_starttls = False
+    return SmtpConfig(
+        host=smtp_host,
+        port=smtp_port,
+        user=smtp_user,
+        password=smtp_password,
+        email_from=email_from,
+        use_ssl=use_ssl,
+        use_starttls=use_starttls,
+        timeout_seconds=parse_int_env("SMTP_TIMEOUT_SECONDS", 20),
+        from_env_name=from_env_name or "SMTP_USER",
+    )
+
+
+def log_smtp_config_status() -> None:
+    config = get_smtp_config()
+    logger.info(
+        "SMTP config status environment=%s host=%s port=%s ssl=%s starttls=%s "
+        "user_configured=%s password_configured=%s from=%s from_env=%s missing=%s",
+        ENVIRONMENT,
+        config.host or "<missing>",
+        config.port,
+        config.use_ssl,
+        config.use_starttls,
+        bool(config.user),
+        bool(config.password),
+        config.email_from or "<missing>",
+        config.from_env_name,
+        ",".join(config.missing_fields) or "none",
+    )
+
+
+@app.on_event("startup")
+def log_startup_smtp_config() -> None:
+    log_smtp_config_status()
 
 DEFAULT_LOCAL_ORIGINS = ",".join(
     [
@@ -388,8 +481,8 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 EMAIL_VERIFICATION_EXPIRY_MINUTES = 10
 EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = 60
-EMAIL_VERIFICATION_SUBJECT = "Confirmă adresa de email • pulse"
-PASSWORD_RESET_SUBJECT = "Resetează parola contului pulse"
+EMAIL_VERIFICATION_SUBJECT = "Confirmă adresa de email"
+PASSWORD_RESET_SUBJECT = "Resetează parola contului"
 
 
 def create_email_otp() -> str:
@@ -570,60 +663,95 @@ def build_password_reset_html(otp_code: str) -> str:
     )
 
 
-def send_email_verification_email(to_email: str, otp_code: str) -> None:
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
-    smtp_port = parse_int_env("SMTP_PORT", 587)
-    smtp_user = os.getenv("SMTP_USER", "").strip()
-    smtp_password = os.getenv("SMTP_PASSWORD", "")
-    email_from = os.getenv("EMAIL_FROM", smtp_user).strip()
-    if not smtp_host or not smtp_port or not smtp_user or not smtp_password or not email_from:
-        if not IS_PRODUCTION:
-            logger.warning("Skipping email verification delivery because SMTP is not configured")
-            return
-        raise RuntimeError("SMTP configuration is incomplete")
+def send_smtp_email(
+    *,
+    email_type: str,
+    to_email: str,
+    subject: str,
+    text_content: str,
+    html_content: str,
+) -> None:
+    config = get_smtp_config()
+    logger.info(
+        "SMTP email send attempt type=%s recipient=%s host=%s port=%s ssl=%s starttls=%s from=%s",
+        email_type,
+        to_email,
+        config.host or "<missing>",
+        config.port,
+        config.use_ssl,
+        config.use_starttls,
+        config.email_from or "<missing>",
+    )
+    missing_fields = config.missing_fields
+    if missing_fields:
+        message = f"SMTP configuration is incomplete: missing {', '.join(missing_fields)}"
+        logger.error("SMTP email send failed type=%s recipient=%s error=%s", email_type, to_email, message)
+        raise RuntimeError(message)
 
     message = EmailMessage()
-    message["Subject"] = EMAIL_VERIFICATION_SUBJECT
-    message["From"] = email_from
+    message["Subject"] = subject
+    message["From"] = config.email_from
     message["To"] = to_email
-    message.set_content(
-        "Bine ai venit în pulse!\n\n"
-        f"Codul tău de verificare este {otp_code}. Codul expiră în 10 minute."
-    )
-    message.add_alternative(build_email_verification_html(otp_code), subtype="html")
+    message.set_content(text_content)
+    message.add_alternative(html_content, subtype="html")
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as smtp:
-        smtp.starttls()
-        smtp.login(smtp_user, smtp_password)
-        smtp.send_message(message)
+    try:
+        if config.use_ssl:
+            with smtplib.SMTP_SSL(config.host, config.port, timeout=config.timeout_seconds) as smtp:
+                smtp.login(config.user, config.password)
+                smtp.send_message(message)
+        else:
+            with smtplib.SMTP(config.host, config.port, timeout=config.timeout_seconds) as smtp:
+                if config.use_starttls:
+                    smtp.starttls()
+                smtp.login(config.user, config.password)
+                smtp.send_message(message)
+    except Exception as exc:
+        logger.exception(
+            "SMTP email send failed type=%s recipient=%s host=%s port=%s ssl=%s starttls=%s error=%r",
+            email_type,
+            to_email,
+            config.host,
+            config.port,
+            config.use_ssl,
+            config.use_starttls,
+            exc,
+        )
+        raise
+
+    logger.info(
+        "SMTP email send succeeded type=%s recipient=%s host=%s port=%s",
+        email_type,
+        to_email,
+        config.host,
+        config.port,
+    )
+
+
+def send_email_verification_email(to_email: str, otp_code: str) -> None:
+    send_smtp_email(
+        email_type="email_verification",
+        to_email=to_email,
+        subject=EMAIL_VERIFICATION_SUBJECT,
+        text_content=(
+            "Bine ai venit în pulse!\n\n"
+            f"Codul tău de verificare este {otp_code}. Codul expiră în 10 minute."
+        ),
+        html_content=build_email_verification_html(otp_code),
+    )
 
 
 def send_password_reset_email(to_email: str, otp_code: str) -> None:
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
-    smtp_port = parse_int_env("SMTP_PORT", 587)
-    smtp_user = os.getenv("SMTP_USER", "").strip()
-    smtp_password = os.getenv("SMTP_PASSWORD", "")
-    email_from = os.getenv("EMAIL_FROM", smtp_user).strip()
-    if not smtp_host or not smtp_port or not smtp_user or not smtp_password or not email_from:
-        if not IS_PRODUCTION:
-            logger.warning("Skipping password reset email delivery because SMTP is not configured")
-            return
-        raise RuntimeError("SMTP configuration is incomplete")
-
-    message = EmailMessage()
-    message["Subject"] = PASSWORD_RESET_SUBJECT
-    message["From"] = email_from
-    message["To"] = to_email
-    message.set_content(
-        "Resetare parolă pulse\n\n"
-        f"Codul tău de resetare este {otp_code}. Codul expiră în 10 minute."
+    send_smtp_email(
+        email_type="password_reset",
+        to_email=to_email,
+        subject=PASSWORD_RESET_SUBJECT,
+        text_content=(
+            "Resetare parolă pulse\n\n"
+            f"Codul tău de resetare este {otp_code}. Codul expiră în 10 minute."
+        ),
+        html_content=build_password_reset_html(otp_code),
     )
-    message.add_alternative(build_password_reset_html(otp_code), subtype="html")
-
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as smtp:
-        smtp.starttls()
-        smtp.login(smtp_user, smtp_password)
-        smtp.send_message(message)
 
 
 def create_email_verification(
@@ -3458,13 +3586,21 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
                 created_at=now,
             )
         )
-    email_verification_sent = create_email_verification(
-        db,
-        user.id,
-        user.email,
-        now,
-        raise_on_email_error=False,
-    )
+    try:
+        email_verification_sent = create_email_verification(
+            db,
+            user.id,
+            user.email,
+            now,
+            raise_on_email_error=IS_PRODUCTION,
+        )
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Registration failed because email verification could not be delivered user_id=%s", user.id)
+        raise HTTPException(
+            status_code=503,
+            detail="Contul nu a fost creat deoarece emailul de verificare nu a putut fi trimis. Încearcă din nou.",
+        ) from exc
     db.commit()
 
     return {
@@ -3546,7 +3682,15 @@ def resend_email_otp(
                 detail=f"Poți solicita un cod nou peste {retry_after} secunde.",
             )
 
-    create_email_verification(db, user.id, user.email, now)
+    try:
+        create_email_verification(db, user.id, user.email, now)
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Email verification resend failed because email could not be delivered user_id=%s", user.id)
+        raise HTTPException(
+            status_code=503,
+            detail="Codul de verificare nu a putut fi trimis. Încearcă din nou.",
+        ) from exc
     db.commit()
     return {
         "message": "Verification code resent successfully",
@@ -3586,7 +3730,15 @@ def request_password_reset(
                 detail=f"Poți solicita un cod nou peste {retry_after} secunde.",
             )
 
-    create_password_reset(db, user.id, user.email, now)
+    try:
+        create_password_reset(db, user.id, user.email, now)
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Password reset request failed because email could not be delivered user_id=%s", user.id)
+        raise HTTPException(
+            status_code=503,
+            detail="Codul de resetare nu a putut fi trimis. Încearcă din nou.",
+        ) from exc
     db.commit()
     return {
         "message": "Password reset code sent successfully",
