@@ -493,6 +493,7 @@ class _ContentCardState extends State<ContentCard>
         MaterialPageRoute(
           builder: (context) => PublicationIssuesScreen(
             publicationId: widget.publicationId!,
+            contentItemId: widget.id,
             publicationName: widget.title,
             contentTitle: widget.contentTitle,
             contentShortDescription: widget.contentShortDescription,
