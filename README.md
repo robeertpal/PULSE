@@ -386,16 +386,21 @@ AZURE_STORAGE_CONNECTION_STRING=...
 AZURE_STORAGE_CONTAINER_NAME=...
 AZURE_STORAGE_PUBLIC_BASE_URL=...
 ENVIRONMENT=production
-SMTP_HOST=...
+EMAIL_PROVIDER=brevo_smtp
+SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=587
-SMTP_USER=...
-SMTP_PASSWORD=...
-SMTP_FROM=...
+SMTP_USER=<BREVO_SMTP_LOGIN>
+SMTP_PASSWORD=<BREVO_SMTP_PASSWORD>
 SMTP_STARTTLS=true
-SMTP_FORCE_IPV4=true
+SMTP_USE_SSL=false
+SMTP_FORCE_IPV4=false
+EMAIL_FROM=pulse.medichub@gmail.com
+SMTP_FROM=pulse.medichub@gmail.com
+FROM_EMAIL=pulse.medichub@gmail.com
+EMAIL_FROM_NAME=PULSE
 ```
 
-Pentru SMTP se recomandă `SMTP_PORT=587` cu `SMTP_STARTTLS=true` sau `SMTP_PORT=465` cu `SMTP_USE_SSL=true`, în funcție de provider. În production, backend-ul forțează implicit IPv4 pentru SMTP ca să evite rutele IPv6 indisponibile pe Render; păstrează `SMTP_FORCE_IPV4=true` pentru Gmail dacă apare `OSError: [Errno 101] Network is unreachable`. După deploy, logurile Render trebuie să includă `SMTP config status` cu `missing=none` și `SMTP IPv4 connection resolved`; la fiecare trimitere apar loguri `SMTP email send attempt`, `SMTP email send succeeded` sau `SMTP email send failed`.
+Pentru Brevo SMTP se folosește `EMAIL_PROVIDER=brevo_smtp`, `SMTP_PORT=587`, `SMTP_STARTTLS=true` și `SMTP_USE_SSL=false`. `SMTP_FORCE_IPV4=false` este suficient pentru Brevo, dar rămâne disponibil dacă providerul are probleme de rutare. Senderul `pulse.medichub@gmail.com` trebuie verificat în Brevo la Senders. După deploy, logurile Render trebuie să includă `SMTP config status` cu `provider=brevo_smtp`, `missing=none` și `password_configured=True`; la fiecare trimitere apar loguri `SMTP email send attempt`, `SMTP email send succeeded` sau `SMTP email send failed`.
 
 Schimbările în `backend/` necesită, în general, redeploy pe Render. Schimbările limitate la Flutter, ManagementSystem, CSS/JS static sau workflow-uri Firebase nu necesită deploy pe Render, cu excepția cazului în care contractul API se schimbă.
 
