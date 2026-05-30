@@ -14,11 +14,11 @@ import '../widgets/emc_badge.dart';
 import '../widgets/favorite_button.dart';
 import '../widgets/skeleton_loading.dart';
 
-const Color _editorialNavy = Color(0xFF102A43);
-const Color _medicalTeal = Color(0xFF0F766E);
-const Color _softGold = Color(0xFFC8A14A);
+const Color _editorialNavy = Color(0xFFF8FBFF);
+const Color _medicalTeal = Color(0xFF38BDF8);
+const Color _softGold = Color(0xFF8B5CF6);
 const Color _warmCanvas = PulseTheme.background;
-const Color _warmSurface = Colors.white;
+const Color _warmSurface = PulseTheme.surface;
 const String _bookPagesIconAsset = 'assets/icons/book.pages.svg';
 const String _globeIconAsset = 'assets/icons/globe.svg';
 const String _checkmarkIconAsset = 'assets/icons/checkmark.svg';
@@ -613,7 +613,7 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                         ),
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.white,
-                          foregroundColor: _editorialNavy,
+                          foregroundColor: PulseTheme.background,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 15),
                           shape: RoundedRectangleBorder(
@@ -757,6 +757,7 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                   _morePublications[index],
                   cardWidth: 240,
                   margin: const EdgeInsets.only(right: 16),
+                  darkMode: true,
                 );
               },
             ),
@@ -1093,7 +1094,7 @@ class _PublicationAuthorsCarouselState
                   decoration: BoxDecoration(
                     color: _currentPage == index
                         ? PulseTheme.magazineContent
-                        : const Color(0xFFD7DEE8),
+                        : PulseTheme.borderLight,
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
@@ -1116,7 +1117,7 @@ class _AuthorCarouselButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: onTap == null
-          ? const Color(0xFFE2E8F0)
+          ? PulseTheme.borderLight
           : _medicalTeal.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
@@ -1148,12 +1149,12 @@ class _PublicationAuthorCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAFBFC),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: PulseTheme.surfaceElevated.withValues(alpha: 0.82),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: 0.20),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -1865,7 +1866,7 @@ class _PdfPreviewCardState extends State<PdfPreviewCard> {
               borderRadius: BorderRadius.circular(22),
               child: Container(
                 height: 320,
-                decoration: const BoxDecoration(color: Color(0xFFF3F4F0)),
+                decoration: const BoxDecoration(color: PulseTheme.surface),
                 child: Stack(
                   children: [
                     Positioned.fill(
@@ -2464,7 +2465,7 @@ class _IssueFallback extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFE7F3F1), Color(0xFFFFF8E6)],
+          colors: [Color(0xFF0D1730), Color(0xFF1A2746)],
         ),
       ),
       child: const Center(child: _BookPagesIcon(color: _medicalTeal, size: 36)),
@@ -2619,11 +2620,11 @@ class _YearChip extends StatelessWidget {
         selected: selected,
         onSelected: (_) => onTap(),
         showCheckmark: false,
-        selectedColor: _editorialNavy,
+        selectedColor: PulseTheme.primary,
         backgroundColor: _warmSurface,
         side: BorderSide(
           color: selected
-              ? _editorialNavy
+              ? PulseTheme.primaryLight
               : _medicalTeal.withValues(alpha: 0.12),
         ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),

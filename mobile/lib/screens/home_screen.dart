@@ -620,6 +620,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
   }
 
+  void _toggleFiltersPanel() {
+    setState(() {
+      _filtersExpanded = !_filtersExpanded;
+    });
+  }
+
   Widget _buildHomeTabSwitch() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
@@ -1222,7 +1228,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildContentFilters() {
-    if (_categories.isEmpty && _specializations.isEmpty) {
+    if (_selectedIndex != 0 ||
+        _selectedHomeTab != 0 ||
+        !_filtersExpanded ||
+        (_categories.isEmpty && _specializations.isEmpty)) {
       return const SizedBox.shrink();
     }
 
@@ -1850,6 +1859,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 onProfileTap: _openProfile,
                 onLogoutTap: _logout,
                 darkMode: true,
+                onFilterTap: _toggleFiltersPanel,
+                activeFilterCount: _activeFilterCount,
+                filtersExpanded: _filtersExpanded,
+                showFilterButton:
+                    _selectedIndex == 0 &&
+                    _selectedHomeTab == 0 &&
+                    (_categories.isNotEmpty || _specializations.isNotEmpty),
               ),
             ),
             // Conținutul paginii cu tranziții
