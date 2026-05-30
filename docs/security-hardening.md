@@ -127,18 +127,14 @@ Configurează în Render aceleași valori necesare backend-ului:
 - `ADMIN_USERNAME`: email/user admin pentru ManagementSystem. Necesar local și Render.
 - `ADMIN_PASSWORD_HASH`: hash PBKDF2 pentru parola admin. Necesar local și Render.
 - `ADMIN_SESSION_TTL_MINUTES`: TTL token admin. Necesar local și Render.
-- `EMAIL_PROVIDER=brevo_smtp`: providerul de email tranzacțional pentru Render. `smtp` rămâne suportat pentru SMTP generic.
-- `SMTP_HOST=smtp-relay.brevo.com`: hostul Brevo SMTP pentru codurile de verificare/resetare. Necesar Render.
-- `SMTP_PORT=587`: portul Brevo SMTP cu STARTTLS. Necesar Render.
-- `SMTP_USER`: loginul SMTP generat de Brevo, de forma `...@smtp-brevo.com`. Necesar Render.
-- `SMTP_PASSWORD`: parola SMTP generată de Brevo. Necesar Render.
+- `EMAIL_PROVIDER=brevo_api`: providerul de email tranzacțional pentru Render. `smtp` și `brevo_smtp` rămân suportate doar ca fallback/local.
+- `BREVO_API_KEY`: cheia Brevo Transactional Email API. Necesar Render.
+- `BREVO_API_TIMEOUT_SECONDS`: timeout HTTPS către Brevo API, implicit `20`.
 - `EMAIL_FROM`: adresa expeditorului verificată în Brevo Senders, de exemplu `pulse.medichub@gmail.com`. Necesar Render.
 - `SMTP_FROM` sau `FROM_EMAIL`: fallback pentru adresa expeditorului dacă `EMAIL_FROM` lipsește.
 - `EMAIL_FROM_NAME=PULSE`: numele afișat în headerul `From`.
 - `EMAIL_REPLY_TO`: adresa pentru răspunsuri, fallback la `EMAIL_FROM`. Recomandat `pulse.medichub@gmail.com`.
-- `SMTP_STARTTLS=true`: Brevo pe portul `587` cere STARTTLS.
-- `SMTP_USE_SSL=false`: Brevo pe portul `587` nu folosește SSL direct.
-- `SMTP_FORCE_IPV4=false`: recomandat pentru Brevo; poate fi activat doar dacă apar probleme de rutare.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_STARTTLS`, `SMTP_USE_SSL`, `SMTP_FORCE_IPV4`: folosite doar pentru providerii fallback SMTP, nu pentru `brevo_api`.
 - `SMTP_TIMEOUT_SECONDS`: timeout conexiune SMTP, implicit `20`.
 - `AZURE_STORAGE_CONNECTION_STRING`: secret Azure Storage. Necesar local și Render, valoarea vine din Azure.
 - `AZURE_STORAGE_CONTAINER_NAME`: container Azure. Necesar local și Render.
@@ -158,8 +154,8 @@ Configurează în Render aceleași valori necesare backend-ului:
 - Health check path rămâne `/health`.
 - Python version recomandat: 3.12 sau versiunea folosită deja de Render.
 - Activează auto-deploy GitHub pe branch-ul existent.
-- Verifică logurile Render pentru linia `SMTP config status`: trebuie să arate `provider=brevo_smtp`, `missing=none`, `host=smtp-relay.brevo.com`, `port=587`, `starttls=True`, `ssl=False`, `force_ipv4=False`, `reply_to=...` și `password_configured=True`, fără să afișeze parola.
-- Dacă trimiterea emailului eșuează, logurile backend trebuie să conțină `SMTP email send failed` cu providerul, recipientul, subiectul, hostul, portul, durata în milisecunde și excepția exactă. Verifică apoi în providerul SMTP că acceptă conexiuni din Render.
+- Verifică logurile Render pentru linia `Email config status`: trebuie să arate `provider=brevo_api`, `missing=none`, `brevo_api_key_configured=True`, `from=...`, `reply_to=...` și `brevo_api_timeout_seconds=...`, fără să afișeze cheia.
+- Dacă trimiterea emailului eșuează, logurile backend trebuie să conțină `Brevo API email send failed` cu providerul, recipientul, subiectul, status code/body Brevo când există, durata în milisecunde și excepția exactă.
 - Senderul `EMAIL_FROM` trebuie verificat în Brevo la Senders, altfel Brevo poate refuza trimiterea.
 - Verifică logurile Render să nu afișeze valori secrete din `.env`.
 

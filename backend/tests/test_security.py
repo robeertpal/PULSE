@@ -201,6 +201,82 @@ class SecurityTests(unittest.TestCase):
         self.assertFalse(config.use_ssl)
         self.assertFalse(config.force_ipv4)
 
+    def test_brevo_api_sends_via_https_not_smtp(self):
+        response = MagicMock()
+        response.status_code = 201
+        response.text = '{"messageId":"abc-123"}'
+        response.json.return_value = {"messageId": "abc-123"}
+
+        with patch.dict(
+            os.environ,
+            {
+                "EMAIL_PROVIDER": "brevo_api",
+                "BREVO_API_KEY": "brevo-key",
+                "BREVO_API_TIMEOUT_SECONDS": "7",
+                "EMAIL_FROM": "pulse.medichub@gmail.com",
+                "EMAIL_FROM_NAME": "PULSE",
+                "EMAIL_REPLY_TO": "reply@example.com",
+            },
+            clear=True,
+        ), patch("main.httpx.post", return_value=response) as post, patch("main.smtplib.SMTP") as smtp, patch(
+            "main.smtplib.SMTP_SSL"
+        ) as smtp_ssl:
+            main.send_email(
+                email_type="test",
+                to_email="doctor@example.com",
+                subject="Test subject",
+                text_content="Plain text",
+                html_content="<p>HTML</p>",
+            )
+
+        smtp.assert_not_called()
+        smtp_ssl.assert_not_called()
+        post.assert_called_once()
+        _, kwargs = post.call_args
+        self.assertEqual(kwargs["headers"]["api-key"], "brevo-key")
+        self.assertEqual(kwargs["timeout"], 7)
+        self.assertEqual(kwargs["json"]["sender"], {"name": "PULSE", "email": "pulse.medichub@gmail.com"})
+        self.assertEqual(kwargs["json"]["to"], [{"email": "doctor@example.com"}])
+        self.assertEqual(kwargs["json"]["replyTo"], {"email": "reply@example.com"})
+        self.assertEqual(kwargs["json"]["subject"], "Test subject")
+        self.assertEqual(kwargs["json"]["htmlContent"], "<p>HTML</p>")
+        self.assertEqual(kwargs["json"]["textContent"], "Plain text")
+
+    def test_brevo_api_non_2xx_raises_with_status_and_body(self):
+        response = MagicMock()
+        response.status_code = 401
+        response.text = '{"message":"invalid api key"}'
+        response.json.return_value = {"message": "invalid api key"}
+
+        with patch.dict(
+            os.environ,
+            {
+                "EMAIL_PROVIDER": "brevo_api",
+                "BREVO_API_KEY": "bad-key",
+                "EMAIL_FROM": "pulse.medichub@gmail.com",
+            },
+            clear=True,
+        ), patch("main.httpx.post", return_value=response):
+            with self.assertRaisesRegex(RuntimeError, "status 401"):
+                main.send_email(
+                    email_type="test",
+                    to_email="doctor@example.com",
+                    subject="Test",
+                    text_content="Plain",
+                    html_content="<p>HTML</p>",
+                )
+
+    def test_brevo_api_requires_api_key_and_email_from(self):
+        with patch.dict(os.environ, {"EMAIL_PROVIDER": "brevo_api"}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "BREVO_API_KEY"):
+                main.send_email(
+                    email_type="test",
+                    to_email="doctor@example.com",
+                    subject="Test",
+                    text_content="Plain",
+                    html_content="<p>HTML</p>",
+                )
+
     def test_bool_env_parses_false_values_as_false(self):
         false_values = ["false", "0", "no", "off", ""]
         for value in false_values:
