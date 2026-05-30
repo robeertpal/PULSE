@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -74,6 +74,12 @@ class UserInterestsUpdate(BaseModel):
 
 class UserLogout(BaseModel):
     session_token: str = Field(min_length=16, max_length=512)
+
+
+class UserActivityCreate(BaseModel):
+    action_type: str = Field(min_length=1, max_length=100)
+    content_item_id: Optional[int] = Field(default=None, gt=0)
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
 class EmailVerificationVerify(BaseModel):

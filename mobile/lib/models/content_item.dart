@@ -13,6 +13,8 @@ class ContentItem {
   final String? tag; // Virtual field for UI
   final int? emcCredits;
   final String? contentUrl;
+  final int? categoryId;
+  final int? specializationId;
   final String? categoryName;
   final String? specializationName;
   final DateTime? startDate;
@@ -55,6 +57,8 @@ class ContentItem {
     this.tag,
     this.emcCredits,
     this.contentUrl,
+    this.categoryId,
+    this.specializationId,
     this.categoryName,
     this.specializationName,
     this.startDate,
@@ -175,6 +179,8 @@ class ContentItem {
       tag: derivedTag,
       emcCredits: credits,
       contentUrl: url,
+      categoryId: json['category_id'],
+      specializationId: json['specialization_id'],
       categoryName: json['category_name'],
       specializationName: json['specialization_name'],
       startDate: parseDate(json['start_date'] ?? json['event']?['start_date']),

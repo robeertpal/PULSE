@@ -12,6 +12,7 @@ class ContentSection extends StatelessWidget {
   final Color categoryColor;
   final bool editorialLayout;
   final Widget? featuredChild;
+  final bool darkMode;
 
   const ContentSection({
     super.key,
@@ -24,6 +25,7 @@ class ContentSection extends StatelessWidget {
     required this.categoryColor,
     this.editorialLayout = false,
     this.featuredChild,
+    this.darkMode = false,
   });
 
   @override
@@ -47,7 +49,7 @@ class ContentSection extends StatelessWidget {
                 width: 86,
                 height: 86,
                 colorFilter: ColorFilter.mode(
-                  categoryColor.withValues(alpha: 0.12),
+                  categoryColor.withValues(alpha: darkMode ? 0.18 : 0.12),
                   BlendMode.srcIn,
                 ),
               ),
@@ -105,6 +107,7 @@ class ContentSection extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: darkMode ? Colors.white : null,
                   fontWeight: FontWeight.w900,
                   letterSpacing: -0.4,
                 ),
@@ -115,8 +118,19 @@ class ContentSection extends StatelessWidget {
                   width: 48,
                   height: 2,
                   decoration: BoxDecoration(
-                    color: categoryColor.withValues(alpha: 0.34),
+                    color: categoryColor.withValues(
+                      alpha: darkMode ? 0.86 : 0.34,
+                    ),
                     borderRadius: BorderRadius.circular(999),
+                    boxShadow: darkMode
+                        ? [
+                            BoxShadow(
+                              color: categoryColor.withValues(alpha: 0.42),
+                              blurRadius: 14,
+                              spreadRadius: -3,
+                            ),
+                          ]
+                        : null,
                   ),
                 ),
               ],
@@ -130,10 +144,14 @@ class ContentSection extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: categoryColor.withValues(alpha: 0.08),
+                color: categoryColor.withValues(
+                  alpha: darkMode ? 0.16 : 0.08,
+                ),
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
-                  color: categoryColor.withValues(alpha: 0.14),
+                  color: categoryColor.withValues(
+                    alpha: darkMode ? 0.32 : 0.14,
+                  ),
                   width: 1,
                 ),
               ),
@@ -173,7 +191,7 @@ class ContentSection extends StatelessWidget {
     required double rightPadding,
   }) {
     return SizedBox(
-      height: 300,
+      height: darkMode ? 260 : 300,
       child: children.isEmpty
           ? Padding(
               padding: EdgeInsets.only(left: leftPadding),

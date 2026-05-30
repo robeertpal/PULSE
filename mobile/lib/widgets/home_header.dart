@@ -7,25 +7,37 @@ class HomeHeader extends StatefulWidget {
   final String doctorName;
   final String avatarUrl;
   final int emcPoints;
+  final int savedCount;
   final int unreadNotificationsCount;
   final VoidCallback? onNotificationsTap;
   final VoidCallback? onSavedTap;
   final VoidCallback? onLogoutTap;
   final VoidCallback? onProfileTap;
+  final VoidCallback? onFilterTap;
+  final int activeFilterCount;
+  final bool filtersExpanded;
+  final bool showFilterButton;
 
   final bool compactMode;
+  final bool darkMode;
 
   const HomeHeader({
     super.key,
     required this.doctorName,
     this.avatarUrl = '',
     this.emcPoints = 0,
+    this.savedCount = 0,
     this.unreadNotificationsCount = 0,
     this.onNotificationsTap,
     this.onSavedTap,
     this.onLogoutTap,
     this.onProfileTap,
+    this.onFilterTap,
+    this.activeFilterCount = 0,
+    this.filtersExpanded = false,
+    this.showFilterButton = false,
     this.compactMode = false,
+    this.darkMode = false,
   });
 
   @override
@@ -42,8 +54,13 @@ class _HomeHeaderState extends State<HomeHeader> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryText = widget.darkMode ? Colors.white : PulseTheme.textPrimary;
+    final secondaryText = widget.darkMode
+        ? const Color(0xFFB9C5E4)
+        : PulseTheme.textSecondary;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -64,20 +81,20 @@ class _HomeHeaderState extends State<HomeHeader> {
                   children: [
                     Text(
                       _getTimeGreeting(),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: PulseTheme.textSecondary,
+                        color: secondaryText,
                         letterSpacing: -0.1,
                       ),
                     ),
                     const SizedBox(height: 1),
                     Text(
                       'Dr. ${widget.doctorName}',
-                      style: const TextStyle(
-                        fontSize: 20,
+                      style: TextStyle(
+                        fontSize: widget.darkMode ? 17 : 20,
                         fontWeight: FontWeight.w800,
-                        color: PulseTheme.textPrimary,
+                        color: primaryText,
                         letterSpacing: -0.5,
                         height: 1.2,
                       ),
@@ -89,6 +106,12 @@ class _HomeHeaderState extends State<HomeHeader> {
               _buildEmcChip(),
               if (!widget.compactMode) ...[
                 const SizedBox(width: 10),
+                _buildIconButton(
+                  'assets/icons/heart.svg',
+                  onTap: widget.onSavedTap ?? () {},
+                  badgeCount: widget.savedCount,
+                ),
+                const SizedBox(width: 8),
                 _buildIconButton(
                   'assets/icons/bell.svg',
                   onTap: widget.onNotificationsTap ?? () {},
@@ -105,15 +128,22 @@ class _HomeHeaderState extends State<HomeHeader> {
           ),
           if (!widget.compactMode) ...[
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Explorează noutățile medicale de azi.',
               style: TextStyle(
-                color: PulseTheme.textSecondary,
+                color: secondaryText,
                 fontWeight: FontWeight.w500,
                 fontSize: 13.5,
                 letterSpacing: -0.1,
               ),
             ),
+            if (widget.showFilterButton && widget.onFilterTap != null) ...[
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: _buildFilterButton(),
+              ),
+            ],
           ],
         ],
       ),
@@ -123,8 +153,8 @@ class _HomeHeaderState extends State<HomeHeader> {
   // â”€â”€ Premium Avatar with gradient ring â”€â”€
   Widget _buildAvatar() {
     return Container(
-      width: 48,
-      height: 48,
+      width: widget.darkMode ? 42 : 48,
+      height: widget.darkMode ? 42 : 48,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: PulseTheme.avatarRingGradient,
@@ -138,9 +168,9 @@ class _HomeHeaderState extends State<HomeHeader> {
       ),
       padding: const EdgeInsets.all(2.5),
       child: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: PulseTheme.surface,
+          color: widget.darkMode ? const Color(0xFF0B1530) : PulseTheme.surface,
         ),
         child: ClipOval(
           child: widget.avatarUrl.isNotEmpty
@@ -159,26 +189,34 @@ class _HomeHeaderState extends State<HomeHeader> {
   }
 
   Widget _buildAvatarPlaceholder() {
+    final iconColor = widget.darkMode
+        ? const Color(0xFFB9C5E4)
+        : PulseTheme.textSecondary;
+
     return Center(
       child: SvgPicture.asset(
         'assets/icons/people.svg',
         width: 22,
         height: 22,
-        colorFilter: const ColorFilter.mode(
-          PulseTheme.textSecondary,
-          BlendMode.srcIn,
-        ),
+        colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
       ),
     );
   }
 
   // â”€â”€ EMC Points Chip â”€â”€
   Widget _buildEmcChip() {
+    final textColor = widget.darkMode ? Colors.white : PulseTheme.textPrimary;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: PulseTheme.border.withValues(alpha: 0.35),
+        color: widget.darkMode
+            ? Colors.white.withValues(alpha: 0.08)
+            : PulseTheme.border.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(20),
+        border: widget.darkMode
+            ? Border.all(color: Colors.white.withValues(alpha: 0.10))
+            : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -187,8 +225,8 @@ class _HomeHeaderState extends State<HomeHeader> {
           const SizedBox(width: 6),
           Text(
             '${widget.emcPoints}',
-            style: const TextStyle(
-              color: PulseTheme.textPrimary,
+            style: TextStyle(
+              color: textColor,
               fontWeight: FontWeight.w800,
               fontSize: 14,
               letterSpacing: -0.3,
@@ -206,6 +244,8 @@ class _HomeHeaderState extends State<HomeHeader> {
     double iconSize = 20,
     int badgeCount = 0,
   }) {
+    final iconColor = widget.darkMode ? Colors.white : PulseTheme.textPrimary;
+
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -213,8 +253,22 @@ class _HomeHeaderState extends State<HomeHeader> {
         width: 38,
         height: 38,
         decoration: BoxDecoration(
-          color: PulseTheme.border.withValues(alpha: 0.35),
+          color: widget.darkMode
+              ? Colors.white.withValues(alpha: 0.08)
+              : PulseTheme.border.withValues(alpha: 0.35),
           shape: BoxShape.circle,
+          border: widget.darkMode
+              ? Border.all(color: Colors.white.withValues(alpha: 0.12))
+              : null,
+          boxShadow: widget.darkMode
+              ? [
+                  BoxShadow(
+                    color: PulseTheme.primary.withValues(alpha: 0.16),
+                    blurRadius: 18,
+                    spreadRadius: -8,
+                  ),
+                ]
+              : null,
         ),
         child: Stack(
           children: [
@@ -223,10 +277,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                 iconPath,
                 height: iconSize,
                 width: iconSize,
-                colorFilter: const ColorFilter.mode(
-                  PulseTheme.textPrimary,
-                  BlendMode.srcIn,
-                ),
+                colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
               ),
             ),
             if (badgeCount > 0)
@@ -240,7 +291,12 @@ class _HomeHeaderState extends State<HomeHeader> {
                   decoration: BoxDecoration(
                     color: const Color(0xFFEF4444),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: PulseTheme.surface, width: 1.5),
+                    border: Border.all(
+                      color: widget.darkMode
+                          ? const Color(0xFF0B1530)
+                          : PulseTheme.surface,
+                      width: 1.5,
+                    ),
                   ),
                   alignment: Alignment.center,
                   child: Text(
@@ -262,12 +318,103 @@ class _HomeHeaderState extends State<HomeHeader> {
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Premium Dropdown Menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+  Widget _buildFilterButton() {
+    final borderColor = widget.filtersExpanded
+        ? PulseTheme.primaryLight.withValues(alpha: 0.52)
+        : Colors.white.withValues(alpha: 0.14);
+    final backgroundColor = widget.filtersExpanded
+        ? PulseTheme.primary.withValues(alpha: 0.18)
+        : Colors.white.withValues(alpha: 0.08);
+
+    return GestureDetector(
+      onTap: widget.onFilterTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: PulseTheme.animFast,
+        curve: PulseTheme.animCurve,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: widget.darkMode
+              ? backgroundColor
+              : PulseTheme.border.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: widget.darkMode ? borderColor : PulseTheme.border,
+          ),
+          boxShadow: widget.darkMode
+              ? [
+                  BoxShadow(
+                    color: PulseTheme.primaryLight.withValues(alpha: 0.12),
+                    blurRadius: 18,
+                    spreadRadius: -10,
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.tune_rounded,
+              color: widget.darkMode ? Colors.white : PulseTheme.textPrimary,
+              size: 17,
+            ),
+            const SizedBox(width: 7),
+            Text(
+              'Filtreaz\u0103',
+              style: TextStyle(
+                color: widget.darkMode ? Colors.white : PulseTheme.textPrimary,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.1,
+              ),
+            ),
+            if (widget.activeFilterCount > 0) ...[
+              const SizedBox(width: 7),
+              Container(
+                constraints: const BoxConstraints(minWidth: 18),
+                height: 18,
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                decoration: BoxDecoration(
+                  gradient: PulseTheme.primaryGradient,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '${widget.activeFilterCount}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(width: 4),
+            AnimatedRotation(
+              turns: widget.filtersExpanded ? 0.5 : 0,
+              duration: PulseTheme.animFast,
+              child: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: widget.darkMode
+                    ? const Color(0xFFB9C5E4)
+                    : PulseTheme.textSecondary,
+                size: 17,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showPremiumMenu(BuildContext context) {
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Închide',
-      barrierColor: Colors.black.withValues(alpha: 0.07),
+      barrierColor: Colors.black.withValues(alpha: widget.darkMode ? 0.34 : 0.07),
       transitionDuration: const Duration(milliseconds: 340),
       pageBuilder: (context, animation, secondaryAnimation) {
         return SafeArea(
@@ -285,10 +432,14 @@ class _HomeHeaderState extends State<HomeHeader> {
                       width: 230,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.75),
+                        color: widget.darkMode
+                            ? PulseTheme.surface.withValues(alpha: 0.88)
+                            : Colors.white.withValues(alpha: 0.75),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.6),
+                          color: widget.darkMode
+                              ? Colors.white.withValues(alpha: 0.12)
+                              : Colors.white.withValues(alpha: 0.6),
                           width: 1,
                         ),
                         boxShadow: [
@@ -332,7 +483,9 @@ class _HomeHeaderState extends State<HomeHeader> {
                             ),
                             child: Divider(
                               height: 1,
-                              color: Colors.black.withValues(alpha: 0.06),
+                              color: widget.darkMode
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : Colors.black.withValues(alpha: 0.06),
                             ),
                           ),
                           _buildDropdownItem(

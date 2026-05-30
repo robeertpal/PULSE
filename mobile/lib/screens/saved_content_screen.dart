@@ -138,6 +138,7 @@ class _SavedContentScreenState extends State<SavedContentScreen> {
                 onDetailClosed: _loadSavedContent,
                 cardWidth: double.infinity,
                 margin: EdgeInsets.zero,
+                darkMode: true,
               ),
             ),
           );
@@ -154,7 +155,8 @@ class _SavedContentScreenState extends State<SavedContentScreen> {
       backgroundColor: PulseTheme.background,
       appBar: AppBar(
         title: const Text('Salvate'),
-        backgroundColor: PulseTheme.background,
+        backgroundColor: Colors.transparent,
+        foregroundColor: PulseTheme.textPrimary,
         elevation: 0,
       ),
       body: SafeArea(child: _buildBody()),

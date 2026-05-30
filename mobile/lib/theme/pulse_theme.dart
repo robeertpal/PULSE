@@ -5,14 +5,14 @@ class PulseTheme {
   static const Color primary = Color(0xFF2563EB);
   static const Color primaryLight = Color(0xFF60A5FA);
   static const Color primaryDark = Color(0xFF1D4ED8);
-  static const Color background = Color(0xFFF8FAFC);
-  static const Color surface = Colors.white;
-  static const Color surfaceElevated = Color(0xFFFFFFFF);
-  static const Color textPrimary = Color(0xFF0F172A);
-  static const Color textSecondary = Color(0xFF64748B);
-  static const Color textTertiary = Color(0xFF94A3B8);
-  static const Color border = Color(0xFFE2E8F0);
-  static const Color borderLight = Color(0xFFF1F5F9);
+  static const Color background = Color(0xFF050B1A);
+  static const Color surface = Color(0xFF0D1730);
+  static const Color surfaceElevated = Color(0xFF101B37);
+  static const Color textPrimary = Color(0xFFF8FBFF);
+  static const Color textSecondary = Color(0xFFB9C5E4);
+  static const Color textTertiary = Color(0xFF7180A6);
+  static const Color border = Color(0xFF263455);
+  static const Color borderLight = Color(0xFF1A2746);
 
   // â”€â”€ Category Palette â”€â”€
   static const Color magazineContent = Color(0xFF10B981);
@@ -31,9 +31,9 @@ class PulseTheme {
     begin: Alignment(-1.0, -0.3),
     end: Alignment(1.0, 0.3),
     colors: [
-      Color(0xFFE2E8F0),
-      Color(0xFFF8FAFC),
-      Color(0xFFE2E8F0),
+      Color(0xFF101B37),
+      Color(0xFF1A2746),
+      Color(0xFF101B37),
     ],
     stops: [0.0, 0.5, 1.0],
   );
@@ -47,16 +47,31 @@ class PulseTheme {
   // â”€â”€ Shadows â”€â”€
   static List<BoxShadow> get cardShadow => [
     BoxShadow(
-      color: Colors.black.withValues(alpha: 0.04),
-      blurRadius: 16,
-      offset: const Offset(0, 4),
+      color: Colors.black.withValues(alpha: 0.28),
+      blurRadius: 22,
+      offset: const Offset(0, 12),
+      spreadRadius: -12,
+    ),
+    BoxShadow(
+      color: primary.withValues(alpha: 0.10),
+      blurRadius: 22,
+      offset: const Offset(0, 8),
+      spreadRadius: -18,
+    ),
+  ];
+
+  static List<BoxShadow> get softGlowShadow => [
+    BoxShadow(
+      color: primaryLight.withValues(alpha: 0.16),
+      blurRadius: 26,
+      offset: const Offset(0, 12),
       spreadRadius: 0,
     ),
     BoxShadow(
-      color: Colors.black.withValues(alpha: 0.02),
-      blurRadius: 6,
-      offset: const Offset(0, 2),
-      spreadRadius: 0,
+      color: Colors.black.withValues(alpha: 0.32),
+      blurRadius: 26,
+      offset: const Offset(0, 14),
+      spreadRadius: -14,
     ),
   ];
 
@@ -80,13 +95,16 @@ class PulseTheme {
     return ThemeData(
       primaryColor: primary,
       scaffoldBackgroundColor: background,
-      colorScheme: const ColorScheme.light(
-        primary: primary,
+      colorScheme: const ColorScheme.dark(
+        primary: primaryLight,
+        secondary: Color(0xFF8B5CF6),
         surface: surface,
+        onSurface: textPrimary,
+        error: Color(0xFFEF4444),
       ),
       fontFamily: 'Avenir',
       appBarTheme: const AppBarTheme(
-        backgroundColor: background,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: IconThemeData(color: textPrimary),
         titleTextStyle: TextStyle(

@@ -61,35 +61,61 @@ class ApiService {
     return parts.join('&');
   }
 
+  String _trimmedResponseBody(String body) {
+    const maxBodyLength = 1200;
+    if (body.length <= maxBodyLength) return body;
+    return '${body.substring(0, maxBodyLength)}...';
+  }
+
+  String _requestDiagnostics({
+    required String url,
+    required int statusCode,
+    required String body,
+  }) {
+    final trimmedBody = _trimmedResponseBody(body);
+    return 'URL apelat: $url\nStatus code: $statusCode\nBody backend: ${trimmedBody.isEmpty ? '(gol)' : trimmedBody}';
+  }
+
   String _responseErrorMessage(http.Response response, String fallback) {
+    final url = response.request?.url.toString() ?? baseUrl;
+    var message = fallback;
     try {
       final decoded = json.decode(response.body);
       if (decoded is Map<String, dynamic>) {
         final detail = decoded['detail'];
-        if (detail is String && detail.isNotEmpty) return detail;
-        final message = decoded['message'];
-        if (message is String && message.isNotEmpty) return message;
+        if (detail is String && detail.isNotEmpty) message = detail;
+        final backendMessage = decoded['message'];
+        if (backendMessage is String && backendMessage.isNotEmpty) {
+          return '$backendMessage\n${_requestDiagnostics(url: url, statusCode: response.statusCode, body: response.body)}';
+        }
         final error = decoded['error'];
-        if (error is String && error.isNotEmpty) return error;
+        if (error is String && error.isNotEmpty) message = error;
       }
     } catch (_) {
       // Keep the caller's friendly fallback when the backend body is not JSON.
     }
-    return fallback;
+    return '$message\n${_requestDiagnostics(url: url, statusCode: response.statusCode, body: response.body)}';
   }
 
-  Exception _friendlyNetworkException(Object error, String actionLabel) {
+  Exception _friendlyNetworkException(
+    Object error,
+    String actionLabel, {
+    String? url,
+  }) {
+    final requestUrl = url ?? baseUrl;
     if (error is TimeoutException) {
       return Exception(
-        '$actionLabel durează prea mult. Verifică dacă backend-ul rulează pe $baseUrl și încearcă din nou.',
+        '$actionLabel durează prea mult.\nURL apelat: $requestUrl\nTip eroare: TimeoutException\nDetalii: Verifică dacă backend-ul rulează pe $baseUrl și încearcă din nou.',
       );
     }
     if (error is http.ClientException) {
       return Exception(
-        'Nu mă pot conecta la backend pentru $actionLabel. Verifică dacă serverul API rulează pe $baseUrl și dacă pagina Flutter este deschisă cu un URL permis de CORS.',
+        'Nu mă pot conecta la backend pentru $actionLabel.\nURL apelat: $requestUrl\nTip eroare: ${error.runtimeType}\nDetalii: ${error.message}\nVerifică dacă serverul API rulează pe $baseUrl și dacă pagina Flutter este deschisă cu un URL permis de CORS.',
       );
     }
-    return Exception('$actionLabel a eșuat. Te rugăm să încerci din nou.');
+    return Exception(
+      '$actionLabel a eșuat.\nURL apelat: $requestUrl\nTip eroare: ${error.runtimeType}\nDetalii: $error',
+    );
   }
 
   Future<void> _handleAuthFailure(http.Response response) async {
@@ -126,19 +152,28 @@ class ApiService {
 
   Future<Map<String, dynamic>> register(Map<String, dynamic> payload) async {
     late final http.Response response;
+    final url = '$baseUrl/api/register';
     try {
       response = await http
           .post(
-            Uri.parse('$baseUrl/api/register'),
+            Uri.parse(url),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(payload),
           )
           .timeout(const Duration(seconds: 35));
     } catch (error) {
-      throw _friendlyNetworkException(error, 'înregistrarea contului');
+      debugPrint('Register network error: url=$url error=$error');
+      throw _friendlyNetworkException(
+        error,
+        'înregistrarea contului',
+        url: url,
+      );
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      debugPrint(
+        'Register backend error: ${_requestDiagnostics(url: url, statusCode: response.statusCode, body: response.body)}',
+      );
       throw Exception(_responseErrorMessage(response, 'Înregistrare eșuată'));
     }
 
@@ -725,6 +760,69 @@ class ApiService {
       categoryIds: categoryIds,
       specializationIds: specializationIds,
     );
+  }
+
+  Future<Map<String, dynamic>> getForYouRecommendations({
+    int limit = 20,
+  }) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final uri = Uri.parse(
+        '$_baseUrl/for-you',
+      ).replace(queryParameters: {'limit': limit.toString()});
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 20));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut încărca recomandările personalizate.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Răspuns For You neașteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching For You recommendations: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> trackUserActivity({
+    required String actionType,
+    int? contentItemId,
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/user-activity'),
+            headers: {...headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'action_type': actionType,
+              if (contentItemId != null) 'content_item_id': contentItemId,
+              'metadata': metadata ?? <String, dynamic>{},
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        debugPrint(
+          'Activity tracking ignored: '
+          '${_requestDiagnostics(url: response.request?.url.toString() ?? baseUrl, statusCode: response.statusCode, body: response.body)}',
+        );
+      }
+    } catch (e) {
+      debugPrint('Activity tracking ignored: $e');
+    }
   }
 
   Future<Map<String, dynamic>> getContentItemDetail(int contentItemId) async {

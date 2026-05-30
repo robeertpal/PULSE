@@ -51,12 +51,39 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   String? _aiSummaryError;
   Set<int> _savedContentIds = {};
   List<ContentItem> _recommendations = [];
+  DateTime? _openedAt;
+  bool _didTrackView = false;
 
   @override
   void initState() {
     super.initState();
     _isSaved = widget.initiallySaved;
     _loadDetail();
+  }
+
+  @override
+  void dispose() {
+    final item = _item;
+    final openedAt = _openedAt;
+    if (item != null && openedAt != null) {
+      final timeSpentSeconds = DateTime.now().difference(openedAt).inSeconds;
+      if (timeSpentSeconds > 0) {
+        final estimatedReadSeconds = _estimatedReadSeconds(item);
+        unawaited(
+          _apiService.trackUserActivity(
+            actionType: 'content_dwell',
+            contentItemId: item.id,
+            metadata: _activityMetadataFor(
+              item,
+              source: 'content_detail',
+              timeSpentSeconds: timeSpentSeconds,
+              estimatedReadSeconds: estimatedReadSeconds,
+            ),
+          ),
+        );
+      }
+    }
+    super.dispose();
   }
 
   Future<void> _loadDetail() async {
@@ -75,6 +102,17 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
 
       final item = ContentItem.fromJson(detail);
       final recommendations = await _loadRecommendationsFor(item);
+      if (!_didTrackView) {
+        _didTrackView = true;
+        _openedAt = DateTime.now();
+        unawaited(
+          _apiService.trackUserActivity(
+            actionType: 'content_view',
+            contentItemId: item.id,
+            metadata: _activityMetadataFor(item, source: 'content_detail'),
+          ),
+        );
+      }
 
       if (!mounted) return;
       setState(() {
@@ -91,6 +129,47 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         _errorMessage = 'Nu am putut incarca detaliile.';
       });
     }
+  }
+
+  int _estimatedReadSeconds(ContentItem item) {
+    final text = [
+      item.title,
+      item.shortDescription,
+      _cleanBody(item.body),
+    ].whereType<String>().join(' ');
+    final seconds = ((text.length / 1000) * 60).ceil();
+    return seconds.clamp(30, 3600).toInt();
+  }
+
+  Map<String, dynamic> _activityMetadataFor(
+    ContentItem item, {
+    required String source,
+    int? timeSpentSeconds,
+    int? estimatedReadSeconds,
+  }) {
+    final metadata = <String, dynamic>{
+      'content_type': item.contentType,
+      if (item.categoryId != null) 'category_id': item.categoryId,
+      if (item.categoryName != null) 'category_name': item.categoryName,
+      if (item.specializationId != null)
+        'specialization_id': item.specializationId,
+      if (item.specializationName != null)
+        'specialization_name': item.specializationName,
+      if (item.authorName != null) 'author_name': item.authorName,
+      'source': source,
+    };
+
+    if (timeSpentSeconds != null) {
+      metadata['time_spent_seconds'] = timeSpentSeconds;
+    }
+    if (estimatedReadSeconds != null) {
+      metadata['estimated_read_seconds'] = estimatedReadSeconds;
+      if (timeSpentSeconds != null && estimatedReadSeconds > 0) {
+        metadata['completion_ratio'] = (timeSpentSeconds / estimatedReadSeconds)
+            .clamp(0.0, 1.0);
+      }
+    }
+    return metadata;
   }
 
   Future<List<ContentItem>> _loadRecommendationsFor(ContentItem item) async {
@@ -817,7 +896,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     return Text(
       text,
       style: const TextStyle(
-        color: Color(0xFF334155),
+        color: PulseTheme.textSecondary,
         fontSize: 17,
         height: 1.58,
         fontWeight: FontWeight.w600,
@@ -833,7 +912,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
       text,
       style: TextStyle(
         color: value.trim().isNotEmpty
-            ? const Color(0xFF1F2937)
+            ? PulseTheme.textPrimary
             : PulseTheme.textSecondary,
         fontSize: 17,
         height: 1.68,
@@ -847,7 +926,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: PulseTheme.surfaceElevated.withValues(alpha: 0.86),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: PulseTheme.borderLight),
       ),
@@ -882,7 +961,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: PulseTheme.surfaceElevated.withValues(alpha: 0.86),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: PulseTheme.borderLight),
       ),
@@ -915,7 +994,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
             child: LinearProgressIndicator(
               minHeight: 8,
               value: clamped / 100,
-              backgroundColor: const Color(0xFFE2E8F0),
+              backgroundColor: PulseTheme.borderLight,
               valueColor: const AlwaysStoppedAnimation(Color(0xFF0E7490)),
             ),
           ),
@@ -1159,6 +1238,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                 onSaveToggle: _toggleRecommendationSaved,
                 cardWidth: 240,
                 margin: const EdgeInsets.only(right: 16),
+                darkMode: true,
               );
             },
           ),
@@ -1191,9 +1271,14 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.fromLTRB(22, 42, 22, 34),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFFFEFC),
-                      borderRadius: BorderRadius.only(
+                    decoration: BoxDecoration(
+                      color: PulseTheme.surface.withValues(alpha: 0.96),
+                      border: Border(
+                        top: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.10),
+                        ),
+                      ),
+                      borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(36),
                         topRight: Radius.circular(36),
                       ),
@@ -1379,7 +1464,7 @@ class _EventPartnerCarouselState extends State<_EventPartnerCarousel> {
                 decoration: BoxDecoration(
                   color: _currentPage == index
                       ? widget.accent.withValues(alpha: 0.72)
-                      : const Color(0xFFD7DEE8),
+                      : PulseTheme.borderLight,
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),

@@ -17,7 +17,7 @@ import re
 import secrets
 import smtplib
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 import httpx
@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from pypdf import PdfReader
-from sqlalchemy import bindparam, text
+from sqlalchemy import bindparam, func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, object_session
 
@@ -43,6 +43,7 @@ from schemas import (
     PasswordResetVerify,
     UserInterestsUpdate,
     UserCreate,
+    UserActivityCreate,
     UserLogin,
     UserLogout,
 )
@@ -95,11 +96,19 @@ DEFAULT_LOCAL_ORIGINS = ",".join(
         "http://127.0.0.1:5000",
     ]
 )
-DEFAULT_PRODUCTION_ORIGINS = "https://pulse-medichub.web.app"
+REQUIRED_PRODUCTION_ORIGINS = [
+    "https://pulse-medichub.web.app",
+    "https://pulse-medichub.firebaseapp.com",
+]
+DEFAULT_PRODUCTION_ORIGINS = ",".join(REQUIRED_PRODUCTION_ORIGINS)
 allowed_origins = parse_csv_env(
     "ALLOWED_ORIGINS",
     DEFAULT_PRODUCTION_ORIGINS if IS_PRODUCTION else f"{DEFAULT_LOCAL_ORIGINS},{DEFAULT_PRODUCTION_ORIGINS}",
 )
+if IS_PRODUCTION:
+    for required_origin in REQUIRED_PRODUCTION_ORIGINS:
+        if required_origin not in allowed_origins:
+            allowed_origins.append(required_origin)
 if "*" in allowed_origins and IS_PRODUCTION:
     raise RuntimeError("ALLOWED_ORIGINS must not contain '*' in production")
 
@@ -158,10 +167,13 @@ async def security_middleware(request: Request, call_next):
 async def safe_http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code >= 500:
         logger.exception("HTTP %s on %s: %s", exc.status_code, request.url.path, exc.detail)
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": "Internal server error"},
-            headers=exc.headers,
+        return add_cors_headers_for_origin(
+            request,
+            JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": "Internal server error"},
+                headers=exc.headers,
+            ),
         )
     return await http_exception_handler(request, exc)
 
@@ -169,7 +181,26 @@ async def safe_http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled error on %s", request.url.path)
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    return add_cors_headers_for_origin(
+        request,
+        JSONResponse(status_code=500, content={"detail": "Internal server error"}),
+    )
+
+
+def add_cors_headers_for_origin(request: Request, response: JSONResponse) -> JSONResponse:
+    origin = request.headers.get("origin")
+    if not origin:
+        return response
+
+    is_allowed_origin = origin in allowed_origins
+    if not is_allowed_origin and not IS_PRODUCTION:
+        is_allowed_origin = re.match(r"^http://(localhost|127\.0\.0\.1):\d+$", origin) is not None
+
+    if is_allowed_origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    return response
 
 
 def serialize_value(value):
@@ -595,7 +626,14 @@ def send_password_reset_email(to_email: str, otp_code: str) -> None:
         smtp.send_message(message)
 
 
-def create_email_verification(db: Session, user_id: int, to_email: str, now: datetime) -> None:
+def create_email_verification(
+    db: Session,
+    user_id: int,
+    to_email: str,
+    now: datetime,
+    *,
+    raise_on_email_error: bool = True,
+) -> bool:
     otp_code = create_email_otp()
     db.add(
         models.UserEmailVerification(
@@ -606,7 +644,14 @@ def create_email_verification(db: Session, user_id: int, to_email: str, now: dat
         )
     )
     db.flush()
-    send_email_verification_email(to_email, otp_code)
+    try:
+        send_email_verification_email(to_email, otp_code)
+    except Exception:
+        logger.exception("Email verification delivery failed for user_id=%s", user_id)
+        if raise_on_email_error:
+            raise
+        return False
+    return True
 
 
 def create_password_reset(db: Session, user_id: int, to_email: str, now: datetime) -> None:
@@ -1767,6 +1812,635 @@ def raise_safe_error(exc: Exception, detail: str = "Request failed", status_code
     raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
+ALLOWED_USER_ACTIVITY_ACTIONS = {
+    "content_view",
+    "content_dwell",
+    "content_save",
+    "content_unsave",
+    "publication_open",
+    "publication_issue_open",
+    "publication_pdf_open",
+    "course_open",
+    "course_enrollment_click",
+    "event_open",
+    "event_registration_click",
+    "filter_used",
+}
+CONTENT_ITEM_ACTIVITY_ACTIONS = {
+    "content_view",
+    "content_dwell",
+    "content_save",
+    "content_unsave",
+    "course_open",
+    "course_enrollment_click",
+    "event_open",
+    "event_registration_click",
+}
+ACTIVITY_METADATA_KEYS = {
+    "content_type",
+    "category_id",
+    "category_name",
+    "specialization_id",
+    "specialization_name",
+    "author_name",
+    "time_spent_seconds",
+    "estimated_read_seconds",
+    "completion_ratio",
+    "source",
+    "publication_id",
+    "publication_name",
+    "issue_id",
+    "issue_number",
+    "issue_year",
+    "issue_label",
+    "pdf_url_present",
+    "filter_category_ids",
+    "filter_specialization_ids",
+    "scroll_depth_percent",
+}
+SENSITIVE_METADATA_FRAGMENTS = {
+    "password",
+    "token",
+    "secret",
+    "email",
+    "phone",
+    "cnp",
+    "parafa",
+    "cuim",
+}
+
+
+def sanitize_activity_metadata(metadata: Optional[Dict[str, Any]]) -> dict:
+    if not isinstance(metadata, dict):
+        return {}
+
+    cleaned = {}
+    for key, value in metadata.items():
+        key_text = str(key).strip()
+        key_lower = key_text.lower()
+        if not key_text or key_text not in ACTIVITY_METADATA_KEYS:
+            continue
+        if any(fragment in key_lower for fragment in SENSITIVE_METADATA_FRAGMENTS):
+            continue
+
+        if isinstance(value, bool):
+            cleaned[key_text] = value
+        elif isinstance(value, int):
+            cleaned[key_text] = value
+        elif isinstance(value, float):
+            cleaned[key_text] = round(value, 4)
+        elif isinstance(value, str):
+            cleaned[key_text] = value.strip()[:240]
+        elif isinstance(value, list):
+            safe_values = []
+            for item in value[:20]:
+                if isinstance(item, bool):
+                    safe_values.append(item)
+                elif isinstance(item, int):
+                    safe_values.append(item)
+                elif isinstance(item, float):
+                    safe_values.append(round(item, 4))
+                elif isinstance(item, str):
+                    safe_values.append(item.strip()[:120])
+            cleaned[key_text] = safe_values
+
+    return cleaned
+
+
+def _activity_metadata_int(metadata: dict, key: str) -> Optional[int]:
+    value = metadata.get(key)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _activity_metadata_float(metadata: dict, key: str) -> Optional[float]:
+    value = metadata.get(key)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _content_type_value(item: models.ContentItem) -> str:
+    return serialize_value(item.content_type)
+
+
+def _safe_table_exists(db: Session, table_name: str) -> bool:
+    try:
+        return bool(db.execute(text("SELECT to_regclass(:table_name)"), {"table_name": table_name}).scalar())
+    except Exception:
+        return False
+
+
+def _content_interest_ids_by_item_id(db: Session, content_item_ids: list[int]) -> dict[int, set[int]]:
+    if not content_item_ids or not _safe_table_exists(db, "content_item_interests"):
+        return {}
+    rows = db.execute(
+        text(
+            """
+            SELECT content_item_id, interest_id
+            FROM content_item_interests
+            WHERE content_item_id IN :content_item_ids
+            """
+        ).bindparams(bindparam("content_item_ids", expanding=True)),
+        {"content_item_ids": content_item_ids},
+    ).all()
+    result: dict[int, set[int]] = defaultdict(set)
+    for row in rows:
+        result[int(row.content_item_id)].add(int(row.interest_id))
+    return result
+
+
+def _user_interest_ids(db: Session, user_id: int, profile: Optional[models.UserProfile]) -> set[int]:
+    ids = {
+        row.interest_id
+        for row in db.query(models.UserInterest.interest_id)
+        .filter(models.UserInterest.user_id == user_id)
+        .all()
+    }
+    if ids or profile is None:
+        return set(ids)
+    return {
+        row.interest_id
+        for row in db.query(models.UserProfileInterest.interest_id)
+        .filter(models.UserProfileInterest.user_profile_id == profile.id)
+        .all()
+    }
+
+
+def _interest_names(db: Session, interest_ids: set[int]) -> list[str]:
+    if not interest_ids:
+        return []
+    rows = (
+        db.query(models.Interest.name)
+        .filter(models.Interest.id.in_(interest_ids))
+        .order_by(models.Interest.name.asc())
+        .limit(8)
+        .all()
+    )
+    return [row[0] for row in rows if row[0]]
+
+
+def _content_popularity_scores(db: Session, content_item_ids: list[int]) -> dict[int, float]:
+    if not content_item_ids:
+        return {}
+
+    cutoff = datetime.utcnow() - timedelta(days=90)
+    activity_weights = {
+        "content_view": 1.0,
+        "content_dwell": 1.4,
+        "content_save": 4.0,
+        "publication_open": 1.2,
+        "course_open": 1.8,
+        "event_open": 1.8,
+        "course_enrollment_click": 5.0,
+        "event_registration_click": 5.0,
+    }
+    scores: dict[int, float] = defaultdict(float)
+
+    rows = (
+        db.query(
+            models.UserActivityLog.content_item_id,
+            models.UserActivityLog.action_type,
+            func.count(models.UserActivityLog.id),
+        )
+        .filter(models.UserActivityLog.content_item_id.in_(content_item_ids))
+        .filter(models.UserActivityLog.created_at >= cutoff)
+        .group_by(models.UserActivityLog.content_item_id, models.UserActivityLog.action_type)
+        .all()
+    )
+    for content_item_id, action_type, count in rows:
+        if content_item_id is None:
+            continue
+        scores[int(content_item_id)] += activity_weights.get(action_type, 0.4) * float(count)
+
+    saved_rows = (
+        db.query(models.SavedContent.content_item_id, func.count(models.SavedContent.id))
+        .filter(models.SavedContent.content_item_id.in_(content_item_ids))
+        .group_by(models.SavedContent.content_item_id)
+        .all()
+    )
+    for content_item_id, count in saved_rows:
+        scores[int(content_item_id)] += 3.0 * float(count)
+
+    return scores
+
+
+def _freshness_score(item: models.ContentItem) -> float:
+    published_at = item.published_at or item.created_at
+    if not published_at:
+        return 1.0
+    if published_at.tzinfo is not None:
+        published_at = published_at.astimezone(timezone.utc).replace(tzinfo=None)
+    days = max(0, (datetime.utcnow() - published_at).days)
+    if days <= 7:
+        return 12.0
+    if days <= 30:
+        return 8.0
+    if days <= 90:
+        return 5.0
+    if days <= 365:
+        return 2.0
+    return 0.0
+
+
+def _build_for_you_context(db: Session, user_id: int) -> dict:
+    profile = (
+        db.query(models.UserProfile)
+        .options(
+            joinedload(models.UserProfile.specialization),
+            joinedload(models.UserProfile.occupation),
+        )
+        .filter(models.UserProfile.user_id == user_id)
+        .first()
+    )
+    user_interest_ids = _user_interest_ids(db, user_id, profile)
+    recent_logs = (
+        db.query(models.UserActivityLog)
+        .filter(models.UserActivityLog.user_id == user_id)
+        .order_by(models.UserActivityLog.created_at.desc().nullslast())
+        .limit(300)
+        .all()
+    )
+    activity_content_ids = sorted(
+        {
+            log.content_item_id
+            for log in recent_logs
+            if log.content_item_id is not None
+        }
+    )
+    activity_items = {}
+    if activity_content_ids:
+        activity_items = {
+            item.id: item
+            for item in visible_content_card_query(db)
+            .filter(models.ContentItem.id.in_(activity_content_ids))
+            .all()
+        }
+
+    category_preferences: dict[int, float] = defaultdict(float)
+    specialization_preferences: dict[int, float] = defaultdict(float)
+    content_type_preferences: dict[str, float] = defaultdict(float)
+    author_preferences: dict[str, float] = defaultdict(float)
+    seen_content_ids: set[int] = set()
+    negative_content_ids: set[int] = set()
+
+    activity_weights = {
+        "content_view": 1.0,
+        "content_dwell": 1.6,
+        "content_save": 5.0,
+        "content_unsave": -4.0,
+        "publication_open": 1.4,
+        "publication_issue_open": 1.1,
+        "publication_pdf_open": 2.6,
+        "course_open": 2.0,
+        "course_enrollment_click": 5.0,
+        "event_open": 2.0,
+        "event_registration_click": 5.0,
+        "filter_used": 0.6,
+    }
+
+    for log in recent_logs:
+        metadata = log.metadata_json if isinstance(log.metadata_json, dict) else {}
+        content_item = activity_items.get(log.content_item_id)
+        weight = activity_weights.get(log.action_type, 0.5)
+        if log.action_type == "content_dwell":
+            completion_ratio = _activity_metadata_float(metadata, "completion_ratio")
+            time_spent = _activity_metadata_float(metadata, "time_spent_seconds")
+            if completion_ratio is not None:
+                weight += max(0.0, min(completion_ratio, 1.0)) * 2.0
+            if time_spent is not None and time_spent >= 60:
+                weight += 1.0
+        if log.action_type == "content_unsave" and log.content_item_id is not None:
+            negative_content_ids.add(log.content_item_id)
+            continue
+
+        category_id = content_item.category_id if content_item else _activity_metadata_int(metadata, "category_id")
+        specialization_id = (
+            content_item.specialization_id
+            if content_item
+            else _activity_metadata_int(metadata, "specialization_id")
+        )
+        content_type = _content_type_value(content_item) if content_item else str(metadata.get("content_type") or "")
+        author_name = (content_item.author_name if content_item else metadata.get("author_name")) or ""
+
+        if category_id:
+            category_preferences[int(category_id)] += weight
+        if specialization_id:
+            specialization_preferences[int(specialization_id)] += weight
+        if content_type:
+            content_type_preferences[content_type] += weight
+        if author_name:
+            author_preferences[str(author_name).strip().lower()] += weight
+        if log.content_item_id is not None and log.action_type in {
+            "content_view",
+            "content_dwell",
+            "publication_open",
+            "course_open",
+            "event_open",
+        }:
+            seen_content_ids.add(log.content_item_id)
+
+    saved_content_ids = {
+        row.content_item_id
+        for row in db.query(models.SavedContent.content_item_id)
+        .filter(models.SavedContent.user_id == user_id)
+        .all()
+    }
+
+    return {
+        "profile": profile,
+        "profile_specialization_id": profile.specialization_id if profile else None,
+        "profile_specialization_name": profile.specialization.name if profile and profile.specialization else None,
+        "occupation_name": profile.occupation.name if profile and profile.occupation else None,
+        "user_interest_ids": user_interest_ids,
+        "user_interest_names": _interest_names(db, user_interest_ids),
+        "category_preferences": category_preferences,
+        "specialization_preferences": specialization_preferences,
+        "content_type_preferences": content_type_preferences,
+        "author_preferences": author_preferences,
+        "seen_content_ids": seen_content_ids,
+        "negative_content_ids": negative_content_ids,
+        "saved_content_ids": saved_content_ids,
+        "has_activity": bool(recent_logs or saved_content_ids or user_interest_ids),
+    }
+
+
+def _score_for_you_item(
+    item: models.ContentItem,
+    context: dict,
+    popularity_scores: dict[int, float],
+    content_interest_ids: dict[int, set[int]],
+) -> tuple[float, str]:
+    score = 22.0
+    reason_parts = []
+    content_type = _content_type_value(item)
+
+    if item.is_featured:
+        score += 8.0
+        reason_parts.append("este evidențiat editorial")
+
+    if context["profile_specialization_id"] and item.specialization_id == context["profile_specialization_id"]:
+        score += 26.0
+        reason_parts.append("se potrivește specializării tale")
+
+    item_interest_ids = content_interest_ids.get(item.id, set())
+    matched_interests = item_interest_ids.intersection(context["user_interest_ids"])
+    if matched_interests:
+        score += min(22.0, 11.0 + 3.0 * len(matched_interests))
+        reason_parts.append("se potrivește intereselor selectate")
+
+    if item.category_id:
+        score += min(16.0, context["category_preferences"].get(item.category_id, 0.0) * 2.4)
+    if item.specialization_id:
+        score += min(18.0, context["specialization_preferences"].get(item.specialization_id, 0.0) * 2.8)
+    if content_type:
+        type_score = min(12.0, context["content_type_preferences"].get(content_type, 0.0) * 2.0)
+        score += type_score
+        if type_score >= 4:
+            reason_parts.append("este similar cu activitatea ta recentă")
+    if item.author_name:
+        score += min(6.0, context["author_preferences"].get(item.author_name.strip().lower(), 0.0) * 1.2)
+
+    popularity_score = min(16.0, popularity_scores.get(item.id, 0.0))
+    score += popularity_score
+    if popularity_score >= 6:
+        reason_parts.append("este apreciat de comunitate")
+
+    freshness_score = _freshness_score(item)
+    score += freshness_score
+    if freshness_score >= 8:
+        reason_parts.append("este conținut recent")
+
+    if item.id in context["saved_content_ids"]:
+        score += 4.0
+        reason_parts.append("este deja în zona ta de interes")
+    if item.id in context["seen_content_ids"]:
+        score -= 18.0
+    if item.id in context["negative_content_ids"]:
+        score -= 24.0
+
+    if not context["has_activity"]:
+        reason_parts.append("este recomandat ca punct bun de pornire")
+
+    if not reason_parts:
+        reason_parts.append("este relevant pentru activitatea medicală curentă")
+
+    reason = "Recomandat deoarece " + ", ".join(reason_parts[:2]) + "."
+    return score, reason
+
+
+def _diversify_for_you_items(scored_items: list[dict], limit: int) -> list[dict]:
+    remaining = sorted(scored_items, key=lambda item: item["score"], reverse=True)
+    selected = []
+    type_counts: dict[str, int] = defaultdict(int)
+
+    while remaining and len(selected) < limit:
+        best_index = 0
+        best_adjusted_score = None
+        for index, candidate in enumerate(remaining):
+            content_type = candidate["content_type"]
+            diversity_penalty = type_counts[content_type] * 6.0
+            adjusted_score = candidate["score"] - diversity_penalty
+            if best_adjusted_score is None or adjusted_score > best_adjusted_score:
+                best_adjusted_score = adjusted_score
+                best_index = index
+
+        candidate = remaining.pop(best_index)
+        candidate["score"] = max(0.0, candidate["score"] - type_counts[candidate["content_type"]] * 2.0)
+        selected.append(candidate)
+        type_counts[candidate["content_type"]] += 1
+
+    return selected
+
+
+def _parse_ai_reason_response(raw_text: str) -> dict[int, str]:
+    cleaned = (raw_text or "").strip()
+    if not cleaned:
+        return {}
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?", "", cleaned, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"```$", "", cleaned).strip()
+
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return {}
+
+    if isinstance(data, dict):
+        raw_items = data.get("items") or data.get("recommendations") or []
+    elif isinstance(data, list):
+        raw_items = data
+    else:
+        return {}
+
+    reasons = {}
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            content_item_id = int(item.get("content_item_id") or item.get("id"))
+        except (TypeError, ValueError):
+            continue
+        reason = str(item.get("reason") or "").strip()
+        if reason:
+            reasons[content_item_id] = reason[:220]
+    return reasons
+
+
+def _try_generate_for_you_ai_reasons(context: dict, recommendations: list[dict]) -> tuple[dict[int, str], Optional[str]]:
+    provider = os.getenv("AI_PROVIDER", "gemini").strip().lower()
+    api_key = os.getenv("GEMINI_API_KEY")
+    if provider != "gemini" or not api_key or genai is None or not recommendations:
+        return {}, None
+
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    safe_user_context = {
+        "specialization": context.get("profile_specialization_name"),
+        "occupation": context.get("occupation_name"),
+        "interests": context.get("user_interest_names", [])[:6],
+        "preferred_content_types": sorted(
+            context["content_type_preferences"].items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )[:4],
+    }
+    candidates = [
+        {
+            "content_item_id": item["item"].id,
+            "title": item["item"].title,
+            "content_type": item["content_type"],
+            "category": item["item"].category.name if item["item"].category else None,
+            "specialization": item["item"].specialization.name if item["item"].specialization else None,
+            "rule_reason": item["reason"],
+        }
+        for item in recommendations[:5]
+    ]
+    prompt_text = (
+        "Ești un asistent editorial medical. Generează explicații scurte în limba română "
+        "pentru recomandările deja calculate de backend. Nu schimba lista, nu inventa fapte, "
+        "nu oferi diagnostic sau tratament și nu include date personale. Răspunde strict JSON "
+        "cu forma {\"items\":[{\"content_item_id\":123,\"reason\":\"...\"}]}.\n\n"
+        f"Context agregat utilizator: {json.dumps(safe_user_context, ensure_ascii=False)}\n"
+        f"Candidați: {json.dumps(candidates, ensure_ascii=False)}"
+    )
+
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(model=model, contents=prompt_text)
+        return _parse_ai_reason_response(response.text or ""), model
+    except Exception:
+        logger.exception("Gemini For You explanation generation failed")
+        return {}, None
+
+
+@app.post("/user-activity")
+def track_user_activity(
+    payload: UserActivityCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    require_rate_limit(request, "user_activity", "USER_ACTIVITY_RATE_LIMIT_PER_MINUTE", 120)
+    action_type = payload.action_type.strip()
+    if action_type not in ALLOWED_USER_ACTIVITY_ACTIONS:
+        raise HTTPException(status_code=400, detail="Tip de activitate necunoscut.")
+
+    if action_type in CONTENT_ITEM_ACTIVITY_ACTIONS and payload.content_item_id is None:
+        raise HTTPException(status_code=422, detail="content_item_id este necesar pentru această activitate.")
+
+    if payload.content_item_id is not None:
+        get_public_content_item_or_404(db, payload.content_item_id)
+
+    log = models.UserActivityLog(
+        user_id=user_id,
+        action_type=action_type,
+        content_item_id=payload.content_item_id,
+        metadata_json=sanitize_activity_metadata(payload.metadata),
+        created_at=datetime.utcnow(),
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+
+    return {
+        "id": log.id,
+        "action_type": action_type,
+        "content_item_id": payload.content_item_id,
+        "message": "Activity logged",
+    }
+
+
+@app.get("/for-you")
+def get_for_you_recommendations(
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    require_rate_limit(request, "for_you", "READ_RATE_LIMIT_PER_MINUTE", 90)
+    candidates = (
+        visible_content_card_query(db)
+        .order_by(*public_content_ordering())
+        .limit(160)
+        .all()
+    )
+    if not candidates:
+        return {"items": [], "generated_with_ai": False}
+
+    context = _build_for_you_context(db, user_id)
+    candidate_ids = [item.id for item in candidates]
+    popularity_scores = _content_popularity_scores(db, candidate_ids)
+    content_interest_ids = _content_interest_ids_by_item_id(db, candidate_ids)
+
+    scored_items = []
+    for item in candidates:
+        score, reason = _score_for_you_item(item, context, popularity_scores, content_interest_ids)
+        scored_items.append(
+            {
+                "item": item,
+                "content_type": _content_type_value(item),
+                "score": score,
+                "reason": reason,
+            }
+        )
+
+    selected = _diversify_for_you_items(scored_items, limit)
+    ai_reasons, ai_model = _try_generate_for_you_ai_reasons(context, selected)
+    price_by_content_item_id = get_current_prices_by_content_item_ids(
+        db,
+        [entry["item"].id for entry in selected if entry["item"].event],
+    )
+
+    response_items = []
+    for entry in selected:
+        item = entry["item"]
+        content_data = serialize_content_card(item)
+        if item.event:
+            apply_current_price_to_payload(content_data, price_by_content_item_id.get(item.id))
+        ai_reason = ai_reasons.get(item.id)
+        response_items.append(
+            {
+                "content_item": content_data,
+                "score": int(max(0, min(100, round(entry["score"])))),
+                "reason": ai_reason or entry["reason"],
+                "reason_source": "ai_assisted" if ai_reason else "rule_based",
+            }
+        )
+
+    return {
+        "items": response_items,
+        "generated_with_ai": bool(ai_reasons),
+        "model": ai_model,
+    }
+
+
 @app.get("/")
 def root():
     return {
@@ -2784,13 +3458,20 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
                 created_at=now,
             )
         )
-    create_email_verification(db, user.id, user.email, now)
+    email_verification_sent = create_email_verification(
+        db,
+        user.id,
+        user.email,
+        now,
+        raise_on_email_error=False,
+    )
     db.commit()
 
     return {
         "message": "User registered successfully",
         "user_id": user.id,
         "email_verification_required": True,
+        "email_verification_sent": email_verification_sent,
     }
 
 

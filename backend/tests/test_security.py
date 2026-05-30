@@ -126,6 +126,31 @@ class SecurityTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 422)
 
+    def test_email_verification_delivery_failure_can_be_non_fatal(self):
+        class FakeDb:
+            def __init__(self):
+                self.added = []
+
+            def add(self, value):
+                self.added.append(value)
+
+            def flush(self):
+                pass
+
+        fake_db = FakeDb()
+
+        with patch("main.send_email_verification_email", side_effect=RuntimeError("smtp down")):
+            sent = main.create_email_verification(
+                fake_db,
+                user_id=123,
+                to_email="doctor@example.com",
+                now=main.datetime.utcnow(),
+                raise_on_email_error=False,
+            )
+
+        self.assertFalse(sent)
+        self.assertEqual(len(fake_db.added), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

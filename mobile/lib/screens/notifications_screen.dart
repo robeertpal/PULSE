@@ -396,6 +396,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   onSavedTap: _openSavedContent,
                   onProfileTap: _openProfile,
                   onLogoutTap: _logout,
+                  darkMode: true,
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(

@@ -15,6 +15,9 @@ class FeaturedCard extends StatefulWidget {
   final Set<int> savedContentIds;
   final ValueChanged<int>? onSaveToggle;
   final ValueChanged<ContentItem>? onItemTap;
+  final bool darkMode;
+  final double? height;
+  final double viewportFraction;
 
   const FeaturedCard({
     super.key,
@@ -25,6 +28,9 @@ class FeaturedCard extends StatefulWidget {
     this.savedContentIds = const {},
     this.onSaveToggle,
     this.onItemTap,
+    this.darkMode = false,
+    this.height,
+    this.viewportFraction = 0.92,
   });
 
   @override
@@ -39,7 +45,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(viewportFraction: 0.92);
+    _pageController = PageController(viewportFraction: widget.viewportFraction);
     _pageController.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -106,7 +112,8 @@ class _FeaturedCardState extends State<FeaturedCard> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth.clamp(0.0, 760.0);
-        final height = constraints.maxWidth >= 700 ? 300.0 : 252.0;
+        final height =
+            widget.height ?? (constraints.maxWidth >= 700 ? 300.0 : 252.0);
 
         return Center(
           child: SizedBox(
@@ -136,6 +143,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
                                 child: _FeaturedSlide(
                                   item: item,
                                   iconOnlyTypeBadge: widget.iconOnlyTypeBadge,
+                                  darkMode: widget.darkMode,
                                   isSaved: widget.savedContentIds.contains(
                                     item.id,
                                   ),
@@ -165,6 +173,7 @@ class _FeaturedCardState extends State<FeaturedCard> {
                           )]
                           .contentType,
                     ),
+                    darkMode: widget.darkMode,
                   ),
                 ],
               ],
@@ -180,6 +189,7 @@ class _FeaturedSlide extends StatelessWidget {
   final ContentItem item;
   final bool iconOnlyTypeBadge;
   final bool isSaved;
+  final bool darkMode;
   final ValueChanged<int>? onSaveToggle;
   final VoidCallback? onTap;
 
@@ -187,6 +197,7 @@ class _FeaturedSlide extends StatelessWidget {
     required this.item,
     required this.iconOnlyTypeBadge,
     required this.isSaved,
+    required this.darkMode,
     this.onSaveToggle,
     this.onTap,
   });
@@ -209,24 +220,27 @@ class _FeaturedSlide extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(darkMode ? 24 : 28),
+          border: darkMode
+              ? Border.all(color: Colors.white.withValues(alpha: 0.12))
+              : null,
           boxShadow: [
             BoxShadow(
-              color: color.withValues(alpha: 0.24),
-              blurRadius: 28,
+              color: color.withValues(alpha: darkMode ? 0.30 : 0.24),
+              blurRadius: darkMode ? 34 : 28,
               offset: const Offset(0, 14),
               spreadRadius: -6,
             ),
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
+              color: Colors.black.withValues(alpha: darkMode ? 0.40 : 0.08),
+              blurRadius: darkMode ? 28 : 18,
+              offset: const Offset(0, 10),
               spreadRadius: -4,
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(darkMode ? 24 : 28),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -241,8 +255,8 @@ class _FeaturedSlide extends StatelessWidget {
                     end: Alignment.bottomCenter,
                     colors: [
                       Colors.black.withValues(alpha: 0.05),
-                      Colors.black.withValues(alpha: 0.26),
-                      Colors.black.withValues(alpha: 0.78),
+                      Colors.black.withValues(alpha: darkMode ? 0.34 : 0.26),
+                      Colors.black.withValues(alpha: darkMode ? 0.86 : 0.78),
                     ],
                     stops: const [0.0, 0.44, 1.0],
                   ),
@@ -278,7 +292,7 @@ class _FeaturedSlide extends StatelessWidget {
               Positioned(
                 left: 22,
                 right: 22,
-                bottom: 22,
+                bottom: darkMode ? 18 : 22,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -286,7 +300,7 @@ class _FeaturedSlide extends StatelessWidget {
                     Row(
                       children: [
                         _TypeBadge(
-                          label: _labelForType(item.contentType),
+                        label: _labelForType(item.contentType),
                           color: color,
                           contentType: item.contentType,
                           iconOnly: iconOnlyTypeBadge,
@@ -313,9 +327,9 @@ class _FeaturedSlide extends StatelessWidget {
                       item.publicationName ?? item.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
-                        fontSize: 22,
+                        fontSize: darkMode ? 18 : 22,
                         fontWeight: FontWeight.w800,
                         height: 1.15,
                       ),
@@ -328,7 +342,7 @@ class _FeaturedSlide extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.84),
-                          fontSize: 14,
+                          fontSize: darkMode ? 12.5 : 14,
                           fontWeight: FontWeight.w500,
                           height: 1.35,
                         ),
@@ -453,11 +467,13 @@ class _FeaturedIndicators extends StatelessWidget {
   final int count;
   final int currentIndex;
   final Color activeColor;
+  final bool darkMode;
 
   const _FeaturedIndicators({
     required this.count,
     required this.currentIndex,
     required this.activeColor,
+    required this.darkMode,
   });
 
   @override
@@ -474,7 +490,17 @@ class _FeaturedIndicators extends StatelessWidget {
           height: 8,
           decoration: BoxDecoration(
             color: isActive ? activeColor : PulseTheme.border,
+            gradient: isActive && darkMode ? PulseTheme.primaryGradient : null,
             borderRadius: BorderRadius.circular(8),
+            boxShadow: isActive && darkMode
+                ? [
+                    BoxShadow(
+                      color: activeColor.withValues(alpha: 0.38),
+                      blurRadius: 12,
+                      spreadRadius: -2,
+                    ),
+                  ]
+                : null,
           ),
         );
       }),
