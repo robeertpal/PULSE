@@ -530,15 +530,6 @@ class _RegisterPageState extends State<RegisterPage> {
             email: _emailController.text.trim(),
             password: _passwordController.text.trim(),
             verificationRequired: verificationRequired,
-      final verificationSent = data['email_verification_sent'] != false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            verificationRequired && verificationSent
-                ? 'Cont creat. Verifică emailul pentru cod.'
-                : verificationRequired
-                ? 'Cont creat. Codul de verificare nu a putut fi trimis momentan.'
-                : 'Cont creat cu succes.',
           ),
         ),
       );
