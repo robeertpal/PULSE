@@ -40,6 +40,7 @@ class ContentCard extends StatefulWidget {
   final VoidCallback? onDetailClosed;
   final double? cardWidth;
   final EdgeInsetsGeometry margin;
+  final bool darkMode;
 
   const ContentCard({
     super.key,
@@ -75,6 +76,7 @@ class ContentCard extends StatefulWidget {
     this.onDetailClosed,
     this.cardWidth = 240,
     this.margin = const EdgeInsets.only(right: 16),
+    this.darkMode = false,
     this.onTap,
   });
 
@@ -88,6 +90,7 @@ class ContentCard extends StatefulWidget {
     VoidCallback? onDetailClosed,
     double? cardWidth = 240,
     EdgeInsetsGeometry margin = const EdgeInsets.only(right: 16),
+    bool darkMode = false,
   }) {
     Color categoryColor = PulseTheme.primary;
     String iconAsset = 'assets/icons/newspaper.svg';
@@ -196,6 +199,7 @@ class ContentCard extends StatefulWidget {
       onDetailClosed: onDetailClosed,
       cardWidth: cardWidth,
       margin: margin,
+      darkMode: darkMode,
     );
   }
 
@@ -227,13 +231,20 @@ class _ContentCardState extends State<ContentCard>
   }
 
   Widget _buildIconPlaceholder() {
+    final backgroundColor = widget.darkMode
+        ? Colors.white.withValues(alpha: 0.08)
+        : widget.categoryColor.withValues(alpha: 0.12);
+
     return Center(
       child: Container(
         width: 56,
         height: 56,
         decoration: BoxDecoration(
-          color: widget.categoryColor.withValues(alpha: 0.12),
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(18),
+          border: widget.darkMode
+              ? Border.all(color: Colors.white.withValues(alpha: 0.10))
+              : null,
         ),
         child: Center(
           child: SvgPicture.asset(
@@ -316,45 +327,67 @@ class _ContentCardState extends State<ContentCard>
   }
 
   Widget _buildCardBody() {
+    final cardColor = widget.darkMode
+        ? const Color(0xFF101A33).withValues(alpha: 0.70)
+        : PulseTheme.surface;
+    final borderColor = widget.darkMode
+        ? Colors.white.withValues(alpha: 0.10)
+        : PulseTheme.border.withValues(alpha: 0.6);
+    final titleColor = widget.darkMode ? Colors.white : PulseTheme.textPrimary;
+    final subtitleColor = widget.darkMode
+        ? const Color(0xFFB9C5E4)
+        : PulseTheme.textSecondary;
+    final imageHeight = widget.darkMode ? 104.0 : 120.0;
+    final cardRadius = widget.darkMode ? 22.0 : 24.0;
+    final contentPadding = widget.darkMode
+        ? const EdgeInsets.fromLTRB(14, 13, 14, 14)
+        : const EdgeInsets.all(16.0);
+
     return ScaleTransition(
       scale: _scaleAnimation,
       child: Container(
         width: widget.cardWidth,
         margin: widget.margin,
         decoration: BoxDecoration(
-          color: PulseTheme.surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: PulseTheme.border.withValues(alpha: 0.6)),
+          color: cardColor,
+          borderRadius: BorderRadius.circular(cardRadius),
+          border: Border.all(color: borderColor),
           boxShadow: [
             BoxShadow(
-              color: widget.categoryColor.withValues(alpha: 0.08),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
+              color: widget.darkMode
+                  ? widget.categoryColor.withValues(alpha: 0.20)
+                  : widget.categoryColor.withValues(alpha: 0.08),
+              blurRadius: widget.darkMode ? 26 : 20,
+              offset: Offset(0, widget.darkMode ? 10 : 8),
               spreadRadius: -2,
             ),
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              color: Colors.black.withValues(alpha: widget.darkMode ? 0.32 : 0.03),
+              blurRadius: widget.darkMode ? 24 : 10,
+              offset: Offset(0, widget.darkMode ? 8 : 4),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(cardRadius),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // â”€â”€ Image Area with Gradient â”€â”€
               Container(
-                height: 120,
+                height: imageHeight,
                 width: double.infinity,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      widget.categoryColor.withValues(alpha: 0.12),
-                      widget.categoryColor.withValues(alpha: 0.04),
+                      widget.categoryColor.withValues(
+                        alpha: widget.darkMode ? 0.26 : 0.12,
+                      ),
+                      widget.categoryColor.withValues(
+                        alpha: widget.darkMode ? 0.08 : 0.04,
+                      ),
                     ],
                   ),
                 ),
@@ -376,7 +409,7 @@ class _ContentCardState extends State<ContentCard>
               // â”€â”€ Text Content â”€â”€
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: contentPadding,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -387,8 +420,17 @@ class _ContentCardState extends State<ContentCard>
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: widget.categoryColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
+                          color: widget.categoryColor.withValues(
+                            alpha: widget.darkMode ? 0.18 : 0.1,
+                          ),
+                          borderRadius: BorderRadius.circular(999),
+                          border: widget.darkMode
+                              ? Border.all(
+                                  color: widget.categoryColor.withValues(
+                                    alpha: 0.28,
+                                  ),
+                                )
+                              : null,
                         ),
                         child: Text(
                           widget.tag.toUpperCase(),
@@ -405,10 +447,10 @@ class _ContentCardState extends State<ContentCard>
                         widget.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: PulseTheme.textPrimary,
+                          color: titleColor,
                           height: 1.3,
                           letterSpacing: -0.2,
                         ),
@@ -418,9 +460,9 @@ class _ContentCardState extends State<ContentCard>
                         widget.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: PulseTheme.textSecondary,
+                          color: subtitleColor,
                           fontWeight: FontWeight.w500,
                           height: 1.25,
                         ),

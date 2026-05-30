@@ -29,6 +29,15 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+  static const Color _darkCanvas = Color(0xFF050B1A);
+  static const Color _darkCanvasAlt = Color(0xFF081226);
+  static const Color _darkViolet = Color(0xFF120B2E);
+  static const Color _darkSurface = Color(0xFF0D1730);
+  static const Color _darkText = Color(0xFFF8FBFF);
+  static const Color _darkMuted = Color(0xFFB9C5E4);
+  static const Color _neonBlue = Color(0xFF38BDF8);
+  static const Color _neonPurple = Color(0xFF8B5CF6);
+
   int _selectedIndex = 0; // Bottom nav index
   int _selectedHomeTab = 0;
   late AnimationController _entranceController;
@@ -409,6 +418,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       isSaved: _savedContentIds.contains(item.id),
       onSaveToggle: _toggleSavedContent,
       onDetailClosed: _loadSavedContentIds,
+      cardWidth: 220,
+      darkMode: true,
     );
   }
 
@@ -563,6 +574,33 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  BoxDecoration _glassDecoration({
+    double radius = 24,
+    double opacity = 0.10,
+    Color? borderColor,
+  }) {
+    return BoxDecoration(
+      color: Colors.white.withValues(alpha: opacity),
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+        color: borderColor ?? Colors.white.withValues(alpha: 0.12),
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.28),
+          blurRadius: 30,
+          offset: const Offset(0, 18),
+          spreadRadius: -16,
+        ),
+        BoxShadow(
+          color: _neonPurple.withValues(alpha: 0.12),
+          blurRadius: 28,
+          spreadRadius: -18,
+        ),
+      ],
+    );
+  }
+
   void _selectHomeTab(int index) {
     if (_selectedHomeTab == index) return;
     setState(() {
@@ -584,47 +622,114 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildHomeTabSwitch() {
     return Padding(
-      padding: const EdgeInsets.only(top: 4, bottom: 18),
-      child: Row(
-        children: [
-          Expanded(child: _buildHomeTabOption('Acasă', 0)),
-          Expanded(child: _buildHomeTabOption('For You', 1)),
-        ],
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: _glassDecoration(
+              radius: 22,
+              opacity: 0.08,
+              borderColor: _neonPurple.withValues(alpha: 0.20),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildHomeTabOption(
+                    label: 'ACASĂ',
+                    icon: Icons.home_rounded,
+                    index: 0,
+                  ),
+                ),
+                Expanded(
+                  child: _buildHomeTabOption(
+                    label: 'FOR YOU',
+                    icon: Icons.auto_awesome_rounded,
+                    index: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildHomeTabOption(String label, int index) {
+  Widget _buildHomeTabOption({
+    required String label,
+    required IconData icon,
+    required int index,
+  }) {
     final isSelected = _selectedHomeTab == index;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _selectHomeTab(index),
-      child: AnimatedDefaultTextStyle(
+      child: AnimatedContainer(
         duration: PulseTheme.animFast,
         curve: PulseTheme.animCurve,
-        style: TextStyle(
-          color: isSelected ? PulseTheme.textPrimary : PulseTheme.textTertiary,
-          fontSize: 16,
-          fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
-          letterSpacing: 0,
+        height: 48,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: isSelected
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    _neonBlue.withValues(alpha: 0.18),
+                    _neonPurple.withValues(alpha: 0.24),
+                  ],
+                )
+              : null,
         ),
-        child: SizedBox(
-          height: 48,
-          child: Center(
+        child: Center(
+          child: AnimatedDefaultTextStyle(
+            duration: PulseTheme.animFast,
+            curve: PulseTheme.animCurve,
+            style: TextStyle(
+              color: isSelected ? _darkText : _darkMuted.withValues(alpha: 0.62),
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(label),
-                const SizedBox(height: 7),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      icon,
+                      size: 16,
+                      color: isSelected
+                          ? _darkText
+                          : _darkMuted.withValues(alpha: 0.62),
+                    ),
+                    const SizedBox(width: 7),
+                    Text(label),
+                  ],
+                ),
+                const SizedBox(height: 6),
                 AnimatedContainer(
                   duration: PulseTheme.animFast,
                   curve: PulseTheme.animCurve,
-                  width: isSelected ? 38 : 0,
-                  height: 3,
+                  width: isSelected ? 34 : 0,
+                  height: 2.5,
                   decoration: BoxDecoration(
                     gradient: isSelected ? PulseTheme.primaryGradient : null,
                     borderRadius: BorderRadius.circular(999),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: _neonPurple.withValues(alpha: 0.65),
+                              blurRadius: 12,
+                              spreadRadius: -2,
+                            ),
+                          ]
+                        : null,
                   ),
                 ),
               ],
@@ -637,17 +742,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildForYouContent() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 26, 20, 120),
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 120),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(24, 26, 24, 28),
         decoration: BoxDecoration(
-          color: PulseTheme.surface,
+          color: Colors.white.withValues(alpha: 0.09),
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: PulseTheme.borderLight),
+          border: Border.all(color: _neonPurple.withValues(alpha: 0.18)),
           boxShadow: [
             BoxShadow(
-              color: PulseTheme.primary.withValues(alpha: 0.08),
+              color: _neonPurple.withValues(alpha: 0.18),
               blurRadius: 28,
               offset: const Offset(0, 16),
               spreadRadius: -16,
@@ -662,7 +767,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               decoration: BoxDecoration(
                 gradient: PulseTheme.primaryGradient,
                 shape: BoxShape.circle,
-                boxShadow: PulseTheme.coloredShadow(PulseTheme.primary),
+                boxShadow: [
+                  BoxShadow(
+                    color: _neonPurple.withValues(alpha: 0.42),
+                    blurRadius: 26,
+                    spreadRadius: -6,
+                  ),
+                ],
               ),
               child: const Icon(
                 Icons.auto_awesome,
@@ -675,8 +786,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               'For You',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: PulseTheme.textPrimary,
-                fontSize: 26,
+                color: _darkText,
+                fontSize: 25,
                 fontWeight: FontWeight.w900,
                 height: 1.15,
               ),
@@ -686,8 +797,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               'Recomandări personalizate',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: PulseTheme.primary,
-                fontSize: 15,
+                color: _neonBlue,
+                fontSize: 14,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -696,8 +807,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               'Explorează articole, cursuri și reviste pentru a primi recomandări personalizate.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: PulseTheme.textSecondary,
-                fontSize: 15,
+                color: _darkMuted,
+                fontSize: 14,
                 height: 1.45,
                 fontWeight: FontWeight.w600,
               ),
@@ -757,7 +868,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   decoration: BoxDecoration(
                     gradient: PulseTheme.primaryGradient,
                     shape: BoxShape.circle,
-                    boxShadow: PulseTheme.coloredShadow(PulseTheme.primary),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _neonPurple.withValues(alpha: 0.42),
+                        blurRadius: 22,
+                        spreadRadius: -7,
+                      ),
+                    ],
                   ),
                   child: const Icon(
                     Icons.auto_awesome,
@@ -773,7 +890,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       const Text(
                         'For You',
                         style: TextStyle(
-                          color: PulseTheme.textPrimary,
+                          color: _darkText,
                           fontSize: 24,
                           fontWeight: FontWeight.w900,
                           height: 1.1,
@@ -785,7 +902,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ? 'Recomandări cu explicații AI'
                             : 'Recomandări personalizate',
                         style: const TextStyle(
-                          color: PulseTheme.textSecondary,
+                          color: _darkMuted,
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                         ),
@@ -798,7 +915,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 18),
           SizedBox(
-            height: 382,
+            height: 344,
             child: ListView.separated(
               clipBehavior: Clip.none,
               scrollDirection: Axis.horizontal,
@@ -828,12 +945,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(24, 26, 24, 28),
       decoration: BoxDecoration(
-        color: PulseTheme.surface,
+        color: Colors.white.withValues(alpha: 0.09),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: PulseTheme.borderLight),
+        border: Border.all(color: _neonPurple.withValues(alpha: 0.18)),
         boxShadow: [
           BoxShadow(
-            color: PulseTheme.primary.withValues(alpha: 0.08),
+            color: _neonPurple.withValues(alpha: 0.18),
             blurRadius: 28,
             offset: const Offset(0, 16),
             spreadRadius: -16,
@@ -848,7 +965,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             decoration: BoxDecoration(
               gradient: PulseTheme.primaryGradient,
               shape: BoxShape.circle,
-              boxShadow: PulseTheme.coloredShadow(PulseTheme.primary),
+              boxShadow: [
+                BoxShadow(
+                  color: _neonPurple.withValues(alpha: 0.42),
+                  blurRadius: 26,
+                  spreadRadius: -6,
+                ),
+              ],
             ),
             child: Icon(icon, color: Colors.white, size: 28),
           ),
@@ -857,7 +980,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             title,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: PulseTheme.textPrimary,
+              color: _darkText,
               fontSize: 24,
               fontWeight: FontWeight.w900,
               height: 1.15,
@@ -868,7 +991,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             message,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: PulseTheme.textSecondary,
+              color: _darkMuted,
               fontSize: 15,
               height: 1.45,
               fontWeight: FontWeight.w600,
@@ -900,19 +1023,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildForYouRecommendation(ContentItem item, String? reason) {
     return SizedBox(
-      width: 240,
+      width: 220,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            height: 300,
+            height: 252,
             child: ContentCard.fromModel(
               item,
               isSaved: _savedContentIds.contains(item.id),
               onSaveToggle: _toggleSavedContent,
               onDetailClosed: _loadSavedContentIds,
-              cardWidth: 240,
+              cardWidth: 220,
               margin: EdgeInsets.zero,
+              darkMode: true,
             ),
           ),
           if (reason != null && reason.trim().isNotEmpty) ...[
@@ -921,10 +1045,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: PulseTheme.primary.withValues(alpha: 0.07),
+                color: Colors.white.withValues(alpha: 0.07),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: PulseTheme.primary.withValues(alpha: 0.10),
+                  color: _neonPurple.withValues(alpha: 0.18),
                 ),
               ),
               child: Text(
@@ -932,7 +1056,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: PulseTheme.textSecondary,
+                  color: _darkMuted,
                   fontSize: 12,
                   height: 1.35,
                   fontWeight: FontWeight.w700,
@@ -973,18 +1097,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         showCheckmark: false,
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: const VisualDensity(horizontal: 0, vertical: -1),
-        backgroundColor: const Color(0xFFF8FAFC),
-        selectedColor: PulseTheme.primary.withValues(alpha: 0.1),
+        backgroundColor: Colors.white.withValues(alpha: 0.07),
+        selectedColor: _neonPurple.withValues(alpha: 0.20),
         side: BorderSide(
           color: selected
-              ? PulseTheme.primary.withValues(alpha: 0.72)
-              : PulseTheme.border.withValues(alpha: 0.78),
+              ? _neonBlue.withValues(alpha: 0.75)
+              : Colors.white.withValues(alpha: 0.14),
           width: selected ? 1.3 : 1,
         ),
         labelPadding: const EdgeInsets.symmetric(horizontal: 10),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
         labelStyle: TextStyle(
-          color: selected ? PulseTheme.primaryDark : PulseTheme.textSecondary,
+          color: selected ? _darkText : _darkMuted,
           fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
           fontSize: 13,
         ),
@@ -1012,7 +1136,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 width: 4,
                 height: 16,
                 decoration: BoxDecoration(
-                  color: PulseTheme.primary.withValues(alpha: 0.42),
+                  color: _neonBlue.withValues(alpha: 0.62),
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
@@ -1020,7 +1144,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Text(
                 label,
                 style: const TextStyle(
-                  color: PulseTheme.textPrimary,
+                  color: _darkText,
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
                 ),
@@ -1080,16 +1204,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: PulseTheme.primary.withValues(alpha: 0.09),
+          color: _neonPurple.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: PulseTheme.primary.withValues(alpha: 0.14)),
+        border: Border.all(color: _neonBlue.withValues(alpha: 0.24)),
       ),
       child: Text(
         _activeFilterCount == 1
             ? '1 filtru activ'
             : '$_activeFilterCount filtre active',
         style: const TextStyle(
-          color: PulseTheme.primary,
+          color: _darkText,
           fontSize: 12,
           fontWeight: FontWeight.w800,
         ),
@@ -1103,16 +1227,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 6, 20, 22),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         decoration: BoxDecoration(
-          color: PulseTheme.surface,
+          color: Colors.white.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: PulseTheme.borderLight),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.035),
+              color: Colors.black.withValues(alpha: 0.28),
               blurRadius: 22,
               offset: const Offset(0, 10),
               spreadRadius: -8,
@@ -1142,12 +1270,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: PulseTheme.primary.withValues(alpha: 0.08),
+                          color: _neonPurple.withValues(alpha: 0.18),
+                          border: Border.all(
+                            color: _neonBlue.withValues(alpha: 0.18),
+                          ),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
                           Icons.tune,
-                          color: PulseTheme.primary,
+                          color: _darkText,
                           size: 20,
                         ),
                       ),
@@ -1156,7 +1287,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         child: Text(
                           'Filtre',
                           style: TextStyle(
-                            color: PulseTheme.textPrimary,
+                            color: _darkText,
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
                           ),
@@ -1170,7 +1301,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         curve: PulseTheme.animCurve,
                         child: const Icon(
                           Icons.keyboard_arrow_down,
-                          color: PulseTheme.textSecondary,
+                          color: _darkMuted,
                         ),
                       ),
                     ],
@@ -1192,7 +1323,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           child: Text(
                             'Restrânge conținutul după interesul tău clinic.',
                             style: TextStyle(
-                              color: PulseTheme.textSecondary,
+                              color: _darkMuted,
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
                               height: 1.3,
@@ -1212,9 +1343,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             child: Divider(
                               height: 1,
-                              color: PulseTheme.borderLight.withValues(
-                                alpha: 0.92,
-                              ),
+                              color: Colors.white.withValues(alpha: 0.10),
                             ),
                           ),
                         _buildFilterRow(
@@ -1230,7 +1359,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             child: TextButton.icon(
                               onPressed: _resetFilters,
                               style: TextButton.styleFrom(
-                                foregroundColor: PulseTheme.primary,
+                                foregroundColor: _neonBlue,
                                 minimumSize: const Size(0, 36),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -1258,7 +1387,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: PulseTheme.textSecondary,
+                          color: _darkMuted,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -1267,6 +1396,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   : const SizedBox.shrink(),
             ),
           ],
+        ),
+          ),
         ),
       ),
     );
@@ -1279,12 +1410,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
         decoration: BoxDecoration(
-          color: PulseTheme.surface,
+          color: Colors.white.withValues(alpha: 0.09),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: PulseTheme.borderLight),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.035),
+              color: Colors.black.withValues(alpha: 0.28),
               blurRadius: 22,
               offset: const Offset(0, 10),
               spreadRadius: -8,
@@ -1297,7 +1428,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: PulseTheme.primary.withValues(alpha: 0.08),
+                color: _neonPurple.withValues(alpha: 0.18),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -1313,7 +1444,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   : 'Nu există conținut publicat momentan.',
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: PulseTheme.textPrimary,
+                color: _darkText,
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
                 height: 1.3,
@@ -1324,7 +1455,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               TextButton.icon(
                 onPressed: _resetFilters,
                 style: TextButton.styleFrom(
-                  foregroundColor: PulseTheme.primary,
+                  foregroundColor: _neonBlue,
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   textStyle: const TextStyle(
                     fontWeight: FontWeight.w800,
@@ -1409,7 +1540,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             children: [
               Text(
                 _errorMessage!,
-                style: const TextStyle(color: PulseTheme.textSecondary),
+                style: const TextStyle(color: _darkMuted),
               ),
               const SizedBox(height: 12),
               ElevatedButton(
@@ -1442,11 +1573,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             savedContentIds: _savedContentIds,
             onSaveToggle: _toggleSavedContent,
             onItemTap: _openContentItem,
+            darkMode: true,
+            height: 222,
+            viewportFraction: 0.94,
           ),
         ),
 
         if (_isFeaturedLoading || _featuredItems.isNotEmpty)
-          const SizedBox(height: 30),
+          const SizedBox(height: 24),
 
         if (!_isFeaturedLoading && !_hasAnyHomeContent)
           _animatedSection(2, _buildHomeEmptyState()),
@@ -1461,11 +1595,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               emptyIconAsset: 'assets/icons/newspaper.svg',
               categoryColor: PulseTheme.newsContent,
               editorialLayout: true,
+              darkMode: true,
               featuredChild: FeaturedCard(
                 items: newsSectionItems,
                 savedContentIds: _savedContentIds,
                 onSaveToggle: _toggleSavedContent,
                 onItemTap: _openContentItem,
+                darkMode: true,
+                height: 204,
+                viewportFraction: 0.92,
               ),
               onActionTap: () => _navigateToTab(4),
               children: const [],
@@ -1488,11 +1626,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               emptyIconAsset: 'assets/icons/books.svg',
               categoryColor: PulseTheme.magazineContent,
               editorialLayout: true,
+              darkMode: true,
               featuredChild: FeaturedCard(
                 items: publicationSectionItems,
                 savedContentIds: _savedContentIds,
                 onSaveToggle: _toggleSavedContent,
                 onItemTap: _openContentItem,
+                darkMode: true,
+                height: 204,
+                viewportFraction: 0.92,
               ),
               onActionTap: () => _navigateToTab(2),
               children: const [],
@@ -1515,11 +1657,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               emptyIconAsset: 'assets/icons/events.svg',
               categoryColor: PulseTheme.eventContent,
               editorialLayout: true,
+              darkMode: true,
               featuredChild: FeaturedCard(
                 items: eventSectionItems,
                 savedContentIds: _savedContentIds,
                 onSaveToggle: _toggleSavedContent,
                 onItemTap: _openContentItem,
+                darkMode: true,
+                height: 204,
+                viewportFraction: 0.92,
               ),
               onActionTap: () => _navigateToTab(3),
               children: const [],
@@ -1542,11 +1688,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               emptyIconAsset: 'assets/icons/graduation.svg',
               categoryColor: PulseTheme.courseContent,
               editorialLayout: true,
+              darkMode: true,
               featuredChild: FeaturedCard(
                 items: courseSectionItems,
                 savedContentIds: _savedContentIds,
                 onSaveToggle: _toggleSavedContent,
                 onItemTap: _openContentItem,
+                darkMode: true,
+                height: 204,
+                viewportFraction: 0.92,
               ),
               onActionTap: () => _navigateToTab(1),
               children: const [],
@@ -1570,8 +1720,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
-        _buildContentFilters(),
+        const SizedBox(height: 2),
         _buildHomeTabSwitch(),
         Expanded(
           child: PageView(
@@ -1579,13 +1728,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             onPageChanged: _handleHomeTabPageChanged,
             children: [
               RefreshIndicator(
-                color: PulseTheme.primary,
+                color: _darkText,
                 onRefresh: _loadData,
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: BouncingScrollPhysics(),
                   ),
-                  child: _buildAcasaFeed(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildContentFilters(),
+                      _buildAcasaFeed(),
+                    ],
+                  ),
                 ),
               ),
               SingleChildScrollView(
@@ -1620,7 +1775,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             children: [
               Text(
                 _errorMessage!,
-                style: const TextStyle(color: PulseTheme.textSecondary),
+                style: const TextStyle(color: _darkMuted),
               ),
               const SizedBox(height: 12),
               ElevatedButton(
@@ -1652,6 +1807,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 emptyMessage: emptyMessage,
                 emptyIconAsset: emptyIconAsset,
                 categoryColor: categoryColor,
+                darkMode: true,
                 onActionTap: () {},
                 children: items.map(_savedContentCard).toList(),
               ),
@@ -1665,10 +1821,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: PulseTheme.background,
+      backgroundColor: _darkCanvas,
       extendBody: true,
       bottomNavigationBar: _buildGlassBottomNav(),
-      body: SafeArea(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [_darkCanvas, _darkCanvasAlt, _darkViolet],
+          ),
+        ),
+        child: SafeArea(
         bottom: false,
         child: Column(
           children: [
@@ -1679,11 +1843,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 doctorName: _doctorName,
                 avatarUrl: '',
                 emcPoints: _emcPoints,
+                savedCount: _savedContentIds.length,
                 unreadNotificationsCount: _unreadNotificationsCount,
                 onNotificationsTap: _openNotifications,
                 onSavedTap: _openSavedContent,
                 onProfileTap: _openProfile,
                 onLogoutTap: _logout,
+                darkMode: true,
               ),
             ),
             // Conținutul paginii cu tranziții
@@ -1727,6 +1893,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -1743,18 +1910,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.72),
+                color: _darkSurface.withValues(alpha: 0.76),
                 borderRadius: BorderRadius.circular(28),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.5),
+                  color: _neonPurple.withValues(alpha: 0.22),
                   width: 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
+                    color: Colors.black.withValues(alpha: 0.34),
+                    blurRadius: 28,
+                    offset: const Offset(0, 12),
                     spreadRadius: -2,
+                  ),
+                  BoxShadow(
+                    color: _neonPurple.withValues(alpha: 0.16),
+                    blurRadius: 24,
+                    spreadRadius: -14,
                   ),
                 ],
               ),
@@ -1796,7 +1968,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
         decoration: BoxDecoration(
           color: isSelected
-              ? PulseTheme.primary.withValues(alpha: 0.1)
+              ? _neonPurple.withValues(alpha: 0.18)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(22),
         ),
@@ -1809,8 +1981,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               height: 22,
               colorFilter: ColorFilter.mode(
                 isSelected
-                    ? PulseTheme.primary
-                    : PulseTheme.textSecondary.withValues(alpha: 0.7),
+                    ? _darkText
+                    : _darkMuted.withValues(alpha: 0.62),
                 BlendMode.srcIn,
               ),
             ),
@@ -1823,7 +1995,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       child: Text(
                         label,
                         style: const TextStyle(
-                          color: PulseTheme.primary,
+                          color: _darkText,
                           fontWeight: FontWeight.w700,
                           fontSize: 13,
                           letterSpacing: -0.2,
