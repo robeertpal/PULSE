@@ -1,6 +1,6 @@
 import os
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_security.db")
 os.environ.setdefault("ENVIRONMENT", "development")
@@ -154,3 +154,58 @@ def test_email_verification_delivery_failure_can_be_non_fatal():
 
     assert sent is False
     assert len(fake_db.added) == 1
+
+
+def test_smtp_config_accepts_render_email_env_names():
+    with patch.dict(
+        os.environ,
+        {
+            "SMTP_HOST": "smtp.example.com",
+            "SMTP_PORT": "587",
+            "SMTP_USER": "smtp-user@example.com",
+            "SMTP_PASSWORD": "secret",
+            "SMTP_FROM": "Pulse <no-reply@example.com>",
+        },
+        clear=True,
+    ):
+        config = main.get_smtp_config()
+
+    assert config.host == "smtp.example.com"
+    assert config.port == 587
+    assert config.email_from == "Pulse <no-reply@example.com>"
+    assert config.from_env_name == "SMTP_FROM"
+    assert config.use_starttls is True
+    assert config.use_ssl is False
+
+
+def test_smtp_port_465_uses_ssl_without_starttls():
+    smtp_context = MagicMock()
+    smtp_client = MagicMock()
+    smtp_context.__enter__.return_value = smtp_client
+
+    with patch.dict(
+        os.environ,
+        {
+            "SMTP_HOST": "smtp.example.com",
+            "SMTP_PORT": "465",
+            "SMTP_USER": "smtp-user@example.com",
+            "SMTP_PASSWORD": "secret",
+            "FROM_EMAIL": "no-reply@example.com",
+        },
+        clear=True,
+    ), patch("main.smtplib.SMTP_SSL", return_value=smtp_context) as smtp_ssl, patch(
+        "main.smtplib.SMTP"
+    ) as smtp_plain:
+        main.send_smtp_email(
+            email_type="test",
+            to_email="doctor@example.com",
+            subject="Test",
+            text_content="Test",
+            html_content="<p>Test</p>",
+        )
+
+    smtp_ssl.assert_called_once_with("smtp.example.com", 465, timeout=20)
+    smtp_plain.assert_not_called()
+    smtp_client.starttls.assert_not_called()
+    smtp_client.login.assert_called_once_with("smtp-user@example.com", "secret")
+    assert smtp_client.send_message.called is True

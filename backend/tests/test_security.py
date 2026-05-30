@@ -1,7 +1,7 @@
 import os
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_security.db")
 os.environ.setdefault("ENVIRONMENT", "development")
@@ -150,6 +150,59 @@ class SecurityTests(unittest.TestCase):
 
         self.assertFalse(sent)
         self.assertEqual(len(fake_db.added), 1)
+
+    def test_smtp_config_accepts_render_email_env_names(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SMTP_HOST": "smtp.example.com",
+                "SMTP_PORT": "587",
+                "SMTP_USER": "smtp-user@example.com",
+                "SMTP_PASSWORD": "secret",
+                "SMTP_FROM": "Pulse <no-reply@example.com>",
+            },
+            clear=True,
+        ):
+            config = main.get_smtp_config()
+
+        self.assertEqual(config.host, "smtp.example.com")
+        self.assertEqual(config.port, 587)
+        self.assertEqual(config.email_from, "Pulse <no-reply@example.com>")
+        self.assertEqual(config.from_env_name, "SMTP_FROM")
+        self.assertTrue(config.use_starttls)
+        self.assertFalse(config.use_ssl)
+
+    def test_smtp_port_465_uses_ssl_without_starttls(self):
+        smtp_context = MagicMock()
+        smtp_client = MagicMock()
+        smtp_context.__enter__.return_value = smtp_client
+
+        with patch.dict(
+            os.environ,
+            {
+                "SMTP_HOST": "smtp.example.com",
+                "SMTP_PORT": "465",
+                "SMTP_USER": "smtp-user@example.com",
+                "SMTP_PASSWORD": "secret",
+                "FROM_EMAIL": "no-reply@example.com",
+            },
+            clear=True,
+        ), patch("main.smtplib.SMTP_SSL", return_value=smtp_context) as smtp_ssl, patch(
+            "main.smtplib.SMTP"
+        ) as smtp_plain:
+            main.send_smtp_email(
+                email_type="test",
+                to_email="doctor@example.com",
+                subject="Test",
+                text_content="Test",
+                html_content="<p>Test</p>",
+            )
+
+        smtp_ssl.assert_called_once_with("smtp.example.com", 465, timeout=20)
+        smtp_plain.assert_not_called()
+        smtp_client.starttls.assert_not_called()
+        smtp_client.login.assert_called_once_with("smtp-user@example.com", "secret")
+        self.assertTrue(smtp_client.send_message.called)
 
 
 if __name__ == "__main__":

@@ -127,6 +127,14 @@ Configurează în Render aceleași valori necesare backend-ului:
 - `ADMIN_USERNAME`: email/user admin pentru ManagementSystem. Necesar local și Render.
 - `ADMIN_PASSWORD_HASH`: hash PBKDF2 pentru parola admin. Necesar local și Render.
 - `ADMIN_SESSION_TTL_MINUTES`: TTL token admin. Necesar local și Render.
+- `SMTP_HOST`: hostul SMTP folosit pentru codurile de verificare/resetare. Necesar Render.
+- `SMTP_PORT`: portul SMTP. Recomandat `587` cu STARTTLS sau `465` cu SSL, în funcție de provider. Necesar Render.
+- `SMTP_USER`: userul SMTP. Necesar Render.
+- `SMTP_PASSWORD`: parola/app password SMTP. Necesar Render.
+- `SMTP_FROM` sau `FROM_EMAIL` sau `EMAIL_FROM`: adresa expeditorului. `SMTP_FROM` are prioritate. Necesar Render.
+- `SMTP_STARTTLS`: setează explicit `true` pentru portul `587`, dacă providerul cere STARTTLS.
+- `SMTP_USE_SSL`: setează explicit `true` pentru portul `465`, dacă providerul cere SSL direct.
+- `SMTP_TIMEOUT_SECONDS`: timeout conexiune SMTP, implicit `20`.
 - `AZURE_STORAGE_CONNECTION_STRING`: secret Azure Storage. Necesar local și Render, valoarea vine din Azure.
 - `AZURE_STORAGE_CONTAINER_NAME`: container Azure. Necesar local și Render.
 - `AZURE_STORAGE_PUBLIC_BASE_URL`: URL public container/media. Necesar local și Render.
@@ -145,7 +153,9 @@ Configurează în Render aceleași valori necesare backend-ului:
 - Health check path rămâne `/health`.
 - Python version recomandat: 3.12 sau versiunea folosită deja de Render.
 - Activează auto-deploy GitHub pe branch-ul existent.
-- Verifică logurile Render să nu afișeze valori din `.env`.
+- Verifică logurile Render pentru linia `SMTP config status`: trebuie să arate `missing=none`, hostul/portul corecte, modul TLS corect și `password_configured=True`, fără să afișeze parola.
+- Dacă trimiterea emailului eșuează, logurile backend trebuie să conțină `SMTP email send failed` cu recipientul, hostul, portul și excepția exactă. Verifică apoi în providerul SMTP că acceptă conexiuni din Render.
+- Verifică logurile Render să nu afișeze valori secrete din `.env`.
 
 ## Firebase manual
 
