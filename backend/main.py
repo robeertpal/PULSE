@@ -101,6 +101,7 @@ app = FastAPI(
     openapi_url="/openapi.json" if docs_enabled() else None,
 )
 logger = logging.getLogger("pulse.admin")
+BREVO_TRANSACTIONAL_EMAIL_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 @dataclass(frozen=True)
@@ -113,6 +114,8 @@ class SmtpConfig:
     email_from: str
     email_from_name: str
     email_reply_to: str
+    brevo_api_key: str
+    brevo_api_timeout_seconds: int
     use_ssl: bool
     use_starttls: bool
     timeout_seconds: int
@@ -122,6 +125,12 @@ class SmtpConfig:
     @property
     def missing_fields(self) -> list[str]:
         missing = []
+        if self.provider == "brevo_api":
+            if not self.brevo_api_key:
+                missing.append("BREVO_API_KEY")
+            if not self.email_from:
+                missing.append("EMAIL_FROM")
+            return missing
         if not self.host:
             missing.append("SMTP_HOST")
         if not self.port:
@@ -174,6 +183,8 @@ def get_smtp_config() -> SmtpConfig:
         email_from=email_from,
         email_from_name=os.getenv("EMAIL_FROM_NAME", "").strip(),
         email_reply_to=os.getenv("EMAIL_REPLY_TO", email_from).strip() or email_from,
+        brevo_api_key=os.getenv("BREVO_API_KEY", "").strip(),
+        brevo_api_timeout_seconds=parse_int_env("BREVO_API_TIMEOUT_SECONDS", 20),
         use_ssl=use_ssl,
         use_starttls=use_starttls,
         timeout_seconds=parse_int_env("SMTP_TIMEOUT_SECONDS", 20),
@@ -185,8 +196,9 @@ def get_smtp_config() -> SmtpConfig:
 def log_smtp_config_status() -> None:
     config = get_smtp_config()
     logger.info(
-        "SMTP config status environment=%s provider=%s host=%s port=%s ssl=%s starttls=%s "
-        "force_ipv4=%s user_configured=%s password_configured=%s from=%s reply_to=%s from_env=%s missing=%s",
+        "Email config status environment=%s provider=%s host=%s port=%s ssl=%s starttls=%s "
+        "force_ipv4=%s user_configured=%s password_configured=%s brevo_api_key_configured=%s "
+        "brevo_api_timeout_seconds=%s from=%s from_name=%s reply_to=%s from_env=%s missing=%s",
         ENVIRONMENT,
         config.provider,
         config.host or "<missing>",
@@ -196,7 +208,10 @@ def log_smtp_config_status() -> None:
         config.force_ipv4,
         bool(config.user),
         bool(config.password),
+        bool(config.brevo_api_key),
+        config.brevo_api_timeout_seconds,
         config.email_from or "<missing>",
+        config.email_from_name or "<missing>",
         config.email_reply_to or "<missing>",
         config.from_env_name,
         ",".join(config.missing_fields) or "none",
@@ -237,6 +252,110 @@ class IPv4SMTP_SSL(smtplib.SMTP_SSL):
         logger.info("SMTP IPv4 connection resolved host=%s ipv4_address=%s port=%s ssl=True", host, self.selected_ipv4, port)
         raw_socket = socket.create_connection((self.selected_ipv4, port), timeout)
         return self.context.wrap_socket(raw_socket, server_hostname=host)
+
+
+def send_brevo_api_email(
+    *,
+    email_type: str,
+    to_email: str,
+    subject: str,
+    text_content: str,
+    html_content: str,
+    config: SmtpConfig,
+) -> None:
+    logger.info(
+        "Brevo API email send attempt provider=%s type=%s recipient=%s subject=%s from=%s reply_to=%s",
+        config.provider,
+        email_type,
+        to_email,
+        subject,
+        config.email_from or "<missing>",
+        config.email_reply_to or "<missing>",
+    )
+    missing_fields = config.missing_fields
+    if missing_fields:
+        message = f"Brevo API configuration is incomplete: missing {', '.join(missing_fields)}"
+        logger.error(
+            "Brevo API email send failed provider=%s type=%s recipient=%s subject=%s error=%s",
+            config.provider,
+            email_type,
+            to_email,
+            subject,
+            message,
+        )
+        raise RuntimeError(message)
+
+    payload = {
+        "sender": {
+            "name": config.email_from_name,
+            "email": config.email_from,
+        },
+        "to": [{"email": to_email}],
+        "replyTo": {"email": config.email_reply_to},
+        "subject": subject,
+        "htmlContent": html_content,
+        "textContent": text_content,
+    }
+    headers = {
+        "api-key": config.brevo_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    started_at = time.perf_counter()
+    try:
+        response = httpx.post(
+            BREVO_TRANSACTIONAL_EMAIL_URL,
+            headers=headers,
+            json=payload,
+            timeout=config.brevo_api_timeout_seconds,
+        )
+    except Exception as exc:
+        duration_ms = int((time.perf_counter() - started_at) * 1000)
+        logger.exception(
+            "Brevo API email send failed provider=%s type=%s recipient=%s subject=%s duration_ms=%s error=%r",
+            config.provider,
+            email_type,
+            to_email,
+            subject,
+            duration_ms,
+            exc,
+        )
+        raise
+
+    duration_ms = int((time.perf_counter() - started_at) * 1000)
+    response_body = response.text
+    message_id = None
+    try:
+        response_json = response.json()
+        message_id = response_json.get("messageId")
+    except ValueError:
+        response_json = None
+
+    if 200 <= response.status_code < 300:
+        logger.info(
+            "Brevo API email send succeeded provider=%s type=%s recipient=%s subject=%s duration_ms=%s status_code=%s messageId=%s",
+            config.provider,
+            email_type,
+            to_email,
+            subject,
+            duration_ms,
+            response.status_code,
+            message_id or "<missing>",
+        )
+        return
+
+    logger.error(
+        "Brevo API email send failed provider=%s type=%s recipient=%s subject=%s duration_ms=%s status_code=%s body=%s",
+        config.provider,
+        email_type,
+        to_email,
+        subject,
+        duration_ms,
+        response.status_code,
+        response_body,
+    )
+    raise RuntimeError(f"Brevo API email send failed with status {response.status_code}: {response_body}")
 
 DEFAULT_LOCAL_ORIGINS = ",".join(
     [
@@ -832,8 +951,39 @@ def send_smtp_email(
     )
 
 
+def send_email(
+    *,
+    email_type: str,
+    to_email: str,
+    subject: str,
+    text_content: str,
+    html_content: str,
+) -> None:
+    config = get_smtp_config()
+    if config.provider == "brevo_api":
+        send_brevo_api_email(
+            email_type=email_type,
+            to_email=to_email,
+            subject=subject,
+            text_content=text_content,
+            html_content=html_content,
+            config=config,
+        )
+        return
+    if config.provider in {"smtp", "brevo_smtp"}:
+        send_smtp_email(
+            email_type=email_type,
+            to_email=to_email,
+            subject=subject,
+            text_content=text_content,
+            html_content=html_content,
+        )
+        return
+    raise RuntimeError(f"Unsupported EMAIL_PROVIDER: {config.provider}")
+
+
 def send_email_verification_email(to_email: str, otp_code: str) -> None:
-    send_smtp_email(
+    send_email(
         email_type="email_verification",
         to_email=to_email,
         subject=EMAIL_VERIFICATION_SUBJECT,
@@ -846,7 +996,7 @@ def send_email_verification_email(to_email: str, otp_code: str) -> None:
 
 
 def send_password_reset_email(to_email: str, otp_code: str) -> None:
-    send_smtp_email(
+    send_email(
         email_type="password_reset",
         to_email=to_email,
         subject=PASSWORD_RESET_SUBJECT,
@@ -3696,7 +3846,7 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
             user.id,
             user.email,
             now,
-            raise_on_email_error=IS_PRODUCTION,
+            raise_on_email_error=IS_PRODUCTION or get_smtp_config().provider == "brevo_api",
         )
     except Exception as exc:
         db.rollback()

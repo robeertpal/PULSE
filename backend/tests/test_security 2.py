@@ -208,6 +208,93 @@ def test_brevo_smtp_config_defaults_and_sender_name():
     assert config.force_ipv4 is False
 
 
+def test_brevo_api_sends_via_https_not_smtp():
+    response = MagicMock()
+    response.status_code = 201
+    response.text = '{"messageId":"abc-123"}'
+    response.json.return_value = {"messageId": "abc-123"}
+
+    with patch.dict(
+        os.environ,
+        {
+            "EMAIL_PROVIDER": "brevo_api",
+            "BREVO_API_KEY": "brevo-key",
+            "BREVO_API_TIMEOUT_SECONDS": "7",
+            "EMAIL_FROM": "pulse.medichub@gmail.com",
+            "EMAIL_FROM_NAME": "PULSE",
+            "EMAIL_REPLY_TO": "reply@example.com",
+        },
+        clear=True,
+    ), patch("main.httpx.post", return_value=response) as post, patch("main.smtplib.SMTP") as smtp, patch(
+        "main.smtplib.SMTP_SSL"
+    ) as smtp_ssl:
+        main.send_email(
+            email_type="test",
+            to_email="doctor@example.com",
+            subject="Test subject",
+            text_content="Plain text",
+            html_content="<p>HTML</p>",
+        )
+
+    smtp.assert_not_called()
+    smtp_ssl.assert_not_called()
+    post.assert_called_once()
+    _, kwargs = post.call_args
+    assert kwargs["headers"]["api-key"] == "brevo-key"
+    assert kwargs["timeout"] == 7
+    assert kwargs["json"]["sender"] == {"name": "PULSE", "email": "pulse.medichub@gmail.com"}
+    assert kwargs["json"]["to"] == [{"email": "doctor@example.com"}]
+    assert kwargs["json"]["replyTo"] == {"email": "reply@example.com"}
+    assert kwargs["json"]["subject"] == "Test subject"
+    assert kwargs["json"]["htmlContent"] == "<p>HTML</p>"
+    assert kwargs["json"]["textContent"] == "Plain text"
+
+
+def test_brevo_api_non_2xx_raises_with_status_and_body():
+    response = MagicMock()
+    response.status_code = 401
+    response.text = '{"message":"invalid api key"}'
+    response.json.return_value = {"message": "invalid api key"}
+
+    with patch.dict(
+        os.environ,
+        {
+            "EMAIL_PROVIDER": "brevo_api",
+            "BREVO_API_KEY": "bad-key",
+            "EMAIL_FROM": "pulse.medichub@gmail.com",
+        },
+        clear=True,
+    ), patch("main.httpx.post", return_value=response):
+        try:
+            main.send_email(
+                email_type="test",
+                to_email="doctor@example.com",
+                subject="Test",
+                text_content="Plain",
+                html_content="<p>HTML</p>",
+            )
+        except RuntimeError as exc:
+            assert "status 401" in str(exc)
+        else:
+            raise AssertionError("Expected RuntimeError")
+
+
+def test_brevo_api_requires_api_key_and_email_from():
+    with patch.dict(os.environ, {"EMAIL_PROVIDER": "brevo_api"}, clear=True):
+        try:
+            main.send_email(
+                email_type="test",
+                to_email="doctor@example.com",
+                subject="Test",
+                text_content="Plain",
+                html_content="<p>HTML</p>",
+            )
+        except RuntimeError as exc:
+            assert "BREVO_API_KEY" in str(exc)
+        else:
+            raise AssertionError("Expected RuntimeError")
+
+
 def test_bool_env_parses_false_values_as_false():
     false_values = ["false", "0", "no", "off", ""]
     for value in false_values:
