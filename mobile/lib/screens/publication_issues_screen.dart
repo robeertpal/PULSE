@@ -30,6 +30,7 @@ const String _pdfOpenErrorMessage =
 
 class PublicationIssuesScreen extends StatefulWidget {
   final int publicationId;
+  final int? contentItemId;
   final String publicationName;
   final String? contentTitle;
   final String? contentShortDescription;
@@ -48,6 +49,7 @@ class PublicationIssuesScreen extends StatefulWidget {
   const PublicationIssuesScreen({
     super.key,
     required this.publicationId,
+    this.contentItemId,
     required this.publicationName,
     this.contentTitle,
     this.contentShortDescription,
@@ -83,7 +85,23 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
   @override
   void initState() {
     super.initState();
+    _trackPublicationOpen();
     _loadIssues();
+  }
+
+  void _trackPublicationOpen() {
+    unawaited(
+      _apiService.trackUserActivity(
+        actionType: 'publication_open',
+        contentItemId: widget.contentItemId,
+        metadata: {
+          'content_type': 'publication',
+          'publication_id': widget.publicationId,
+          'publication_name': widget.publicationName,
+          'source': 'publication_issues',
+        },
+      ),
+    );
   }
 
   Future<void> _loadIssues() async {
@@ -1299,6 +1317,7 @@ class _PublicationIssueDetailScreenState
     super.initState();
     _issue = widget.initialIssue;
     if (_issue != null) {
+      _trackIssueOpen(_issue!);
       _logIssuePdf('initial', _issue!);
       _logPdfDiagnostics(_issue!);
     }
@@ -1318,6 +1337,9 @@ class _PublicationIssueDetailScreenState
         _issue = issue;
         _isLoading = false;
       });
+      if (widget.initialIssue == null) {
+        _trackIssueOpen(issue);
+      }
       _logIssuePdf('detail', issue);
       _logPdfDiagnostics(issue);
     } catch (_) {
@@ -1327,6 +1349,26 @@ class _PublicationIssueDetailScreenState
         _errorMessage = 'Nu am putut încărca ediția.';
       });
     }
+  }
+
+  void _trackIssueOpen(PublicationIssue issue) {
+    unawaited(
+      _apiService.trackUserActivity(
+        actionType: 'publication_issue_open',
+        metadata: {
+          'content_type': 'publication',
+          'publication_id': issue.publicationId,
+          if (issue.publicationName != null)
+            'publication_name': issue.publicationName,
+          'issue_id': issue.id,
+          'issue_number': issue.issueNumber,
+          'issue_year': issue.year,
+          if (issue.issueLabel != null) 'issue_label': issue.issueLabel,
+          'pdf_url_present': issue.pdfUrl?.trim().isNotEmpty == true,
+          'source': 'publication_issue_detail',
+        },
+      ),
+    );
   }
 
   void _logIssuePdf(String source, PublicationIssue issue) {
@@ -1462,6 +1504,23 @@ class _PublicationIssueDetailScreenState
   }
 
   void _openPdfViewer(PublicationIssue issue, String pdfUrl) {
+    unawaited(
+      _apiService.trackUserActivity(
+        actionType: 'publication_pdf_open',
+        metadata: {
+          'content_type': 'publication',
+          'publication_id': issue.publicationId,
+          if (issue.publicationName != null)
+            'publication_name': issue.publicationName,
+          'issue_id': issue.id,
+          'issue_number': issue.issueNumber,
+          'issue_year': issue.year,
+          if (issue.issueLabel != null) 'issue_label': issue.issueLabel,
+          'pdf_url_present': pdfUrl.trim().isNotEmpty,
+          'source': 'publication_issue_detail',
+        },
+      ),
+    );
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) =>

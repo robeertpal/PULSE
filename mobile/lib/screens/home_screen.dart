@@ -34,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late AnimationController _entranceController;
   late List<Animation<double>> _fadeAnimations;
   late List<Animation<Offset>> _slideAnimations;
+  final PageController _homeTabPageController = PageController(initialPage: 0);
 
   final ApiService _apiService = ApiService();
   final AuthStorage _authStorage = AuthStorage();
@@ -42,17 +43,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<ContentItem> _publications = [];
   List<ContentItem> _news = [];
   List<ContentItem> _featuredItems = [];
+  List<ContentItem> _forYouItems = [];
   List<FilterOption> _categories = [];
   List<FilterOption> _specializations = [];
   Map<String, List<AdItem>> _adsByPlacement = {};
+  Map<int, String> _forYouReasons = {};
   final Set<int> _selectedCategoryIds = {};
   final Set<int> _selectedSpecializationIds = {};
   Set<int> _savedContentIds = {};
   bool _isLoading = true;
   bool _isFeaturedLoading = true;
+  bool _isForYouLoading = true;
+  bool _forYouGeneratedWithAi = false;
   bool _filtersExpanded = false;
   int _contentRequestId = 0;
   String? _errorMessage;
+  String? _forYouErrorMessage;
   String _doctorName = 'Medic';
   int _emcPoints = 0;
   int _unreadNotificationsCount = 0;
@@ -107,6 +113,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _loadSavedContentIds();
     _loadDoctorName();
     _loadUnreadNotificationsCount();
+    _loadForYouRecommendations();
   }
 
   Future<void> _loadUnreadNotificationsCount() async {
@@ -271,6 +278,50 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
 
+  Future<void> _loadForYouRecommendations() async {
+    if (!mounted) return;
+    setState(() {
+      _isForYouLoading = true;
+      _forYouErrorMessage = null;
+    });
+
+    try {
+      final result = await _apiService.getForYouRecommendations(limit: 20);
+      final rawItems = result['items'];
+      final parsedItems = <ContentItem>[];
+      final parsedReasons = <int, String>{};
+
+      if (rawItems is List) {
+        for (final rawItem in rawItems) {
+          if (rawItem is! Map<String, dynamic>) continue;
+          final contentJson = rawItem['content_item'];
+          if (contentJson is! Map<String, dynamic>) continue;
+          final item = ContentItem.fromJson(contentJson);
+          parsedItems.add(item);
+          final reason = rawItem['reason']?.toString().trim();
+          if (reason != null && reason.isNotEmpty) {
+            parsedReasons[item.id] = reason;
+          }
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _forYouItems = parsedItems;
+        _forYouReasons = parsedReasons;
+        _forYouGeneratedWithAi = result['generated_with_ai'] == true;
+        _isForYouLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isForYouLoading = false;
+        _forYouErrorMessage =
+            'Nu am putut încărca recomandările personalizate.';
+      });
+    }
+  }
+
   void _showSavedFeedback(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -379,6 +430,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         MaterialPageRoute(
           builder: (context) => PublicationIssuesScreen(
             publicationId: publicationId,
+            contentItemId: item.id,
             publicationName: item.publicationName ?? item.title,
             contentTitle: item.title,
             contentShortDescription: item.shortDescription,
@@ -499,6 +551,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _homeTabPageController.dispose();
     _entranceController.dispose();
     super.dispose();
   }
@@ -511,6 +564,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _selectHomeTab(int index) {
+    if (_selectedHomeTab == index) return;
+    setState(() {
+      _selectedHomeTab = index;
+    });
+    _homeTabPageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _handleHomeTabPageChanged(int index) {
     if (_selectedHomeTab == index) return;
     setState(() {
       _selectedHomeTab = index;
@@ -628,7 +693,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 16),
             const Text(
-              'În curând vei vedea aici cursuri, reviste, evenimente și articole recomandate pentru profilul tău medical.',
+              'Explorează articole, cursuri și reviste pentru a primi recomandări personalizate.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: PulseTheme.textSecondary,
@@ -639,6 +704,243 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildForYouRecommendationsContent() {
+    if (_isForYouLoading) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(20, 18, 20, 120),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SkeletonBlock(width: 170, height: 24, radius: 10),
+            SizedBox(height: 10),
+            SkeletonBlock(width: 260, height: 16, radius: 8),
+            SizedBox(height: 22),
+            SkeletonBlock(height: 300, radius: 28),
+          ],
+        ),
+      );
+    }
+
+    if (_forYouErrorMessage != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 22, 20, 120),
+        child: _buildForYouMessageCard(
+          icon: Icons.auto_awesome,
+          title: 'For You',
+          message: _forYouErrorMessage!,
+          actionLabel: 'Reîncearcă',
+          onAction: _loadForYouRecommendations,
+        ),
+      );
+    }
+
+    if (_forYouItems.isEmpty) {
+      return _buildForYouContent();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 120),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    gradient: PulseTheme.primaryGradient,
+                    shape: BoxShape.circle,
+                    boxShadow: PulseTheme.coloredShadow(PulseTheme.primary),
+                  ),
+                  child: const Icon(
+                    Icons.auto_awesome,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'For You',
+                        style: TextStyle(
+                          color: PulseTheme.textPrimary,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                          height: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _forYouGeneratedWithAi
+                            ? 'Recomandări cu explicații AI'
+                            : 'Recomandări personalizate',
+                        style: const TextStyle(
+                          color: PulseTheme.textSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            height: 382,
+            child: ListView.separated(
+              clipBehavior: Clip.none,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: _forYouItems.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 16),
+              itemBuilder: (context, index) {
+                final item = _forYouItems[index];
+                final reason = _forYouReasons[item.id];
+                return _buildForYouRecommendation(item, reason);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildForYouMessageCard({
+    required IconData icon,
+    required String title,
+    required String message,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(24, 26, 24, 28),
+      decoration: BoxDecoration(
+        color: PulseTheme.surface,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: PulseTheme.borderLight),
+        boxShadow: [
+          BoxShadow(
+            color: PulseTheme.primary.withValues(alpha: 0.08),
+            blurRadius: 28,
+            offset: const Offset(0, 16),
+            spreadRadius: -16,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              gradient: PulseTheme.primaryGradient,
+              shape: BoxShape.circle,
+              boxShadow: PulseTheme.coloredShadow(PulseTheme.primary),
+            ),
+            child: Icon(icon, color: Colors.white, size: 28),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: PulseTheme.textPrimary,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              height: 1.15,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: PulseTheme.textSecondary,
+              fontSize: 15,
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: 18),
+            OutlinedButton(
+              onPressed: onAction,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: PulseTheme.primary,
+                side: BorderSide(
+                  color: PulseTheme.primary.withValues(alpha: 0.24),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: Text(
+                actionLabel,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildForYouRecommendation(ContentItem item, String? reason) {
+    return SizedBox(
+      width: 240,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 300,
+            child: ContentCard.fromModel(
+              item,
+              isSaved: _savedContentIds.contains(item.id),
+              onSaveToggle: _toggleSavedContent,
+              onDetailClosed: _loadSavedContentIds,
+              cardWidth: 240,
+              margin: EdgeInsets.zero,
+            ),
+          ),
+          if (reason != null && reason.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: PulseTheme.primary.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: PulseTheme.primary.withValues(alpha: 0.10),
+                ),
+              ),
+              child: Text(
+                reason,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: PulseTheme.textSecondary,
+                  fontSize: 12,
+                  height: 1.35,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -1265,30 +1567,38 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Main Home Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Widget _buildHomeContent() {
-    final scrollView = SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(
-        parent: BouncingScrollPhysics(),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 8),
-          _buildContentFilters(),
-          _buildHomeTabSwitch(),
-          if (_selectedHomeTab == 0) _buildAcasaFeed() else _buildForYouContent(),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        _buildContentFilters(),
+        _buildHomeTabSwitch(),
+        Expanded(
+          child: PageView(
+            controller: _homeTabPageController,
+            onPageChanged: _handleHomeTabPageChanged,
+            children: [
+              RefreshIndicator(
+                color: PulseTheme.primary,
+                onRefresh: _loadData,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  child: _buildAcasaFeed(),
+                ),
+              ),
+              SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                child: _buildForYouRecommendationsContent(),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
-
-    if (_selectedHomeTab == 0) {
-      return RefreshIndicator(
-        color: PulseTheme.primary,
-        onRefresh: _loadData,
-        child: scrollView,
-      );
-    }
-
-    return scrollView;
   }
 
   Widget _buildCategoryContent({

@@ -705,6 +705,69 @@ class ApiService {
     );
   }
 
+  Future<Map<String, dynamic>> getForYouRecommendations({
+    int limit = 20,
+  }) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final uri = Uri.parse(
+        '$_baseUrl/for-you',
+      ).replace(queryParameters: {'limit': limit.toString()});
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 20));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut încărca recomandările personalizate.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Răspuns For You neașteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching For You recommendations: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> trackUserActivity({
+    required String actionType,
+    int? contentItemId,
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/user-activity'),
+            headers: {...headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'action_type': actionType,
+              if (contentItemId != null) 'content_item_id': contentItemId,
+              'metadata': metadata ?? <String, dynamic>{},
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        debugPrint(
+          'Activity tracking ignored: '
+          '${_requestDiagnostics(url: response.request?.url.toString() ?? baseUrl, statusCode: response.statusCode, body: response.body)}',
+        );
+      }
+    } catch (e) {
+      debugPrint('Activity tracking ignored: $e');
+    }
+  }
+
   Future<Map<String, dynamic>> getContentItemDetail(int contentItemId) async {
     try {
       final response = await http

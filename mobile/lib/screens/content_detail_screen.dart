@@ -51,12 +51,39 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   String? _aiSummaryError;
   Set<int> _savedContentIds = {};
   List<ContentItem> _recommendations = [];
+  DateTime? _openedAt;
+  bool _didTrackView = false;
 
   @override
   void initState() {
     super.initState();
     _isSaved = widget.initiallySaved;
     _loadDetail();
+  }
+
+  @override
+  void dispose() {
+    final item = _item;
+    final openedAt = _openedAt;
+    if (item != null && openedAt != null) {
+      final timeSpentSeconds = DateTime.now().difference(openedAt).inSeconds;
+      if (timeSpentSeconds > 0) {
+        final estimatedReadSeconds = _estimatedReadSeconds(item);
+        unawaited(
+          _apiService.trackUserActivity(
+            actionType: 'content_dwell',
+            contentItemId: item.id,
+            metadata: _activityMetadataFor(
+              item,
+              source: 'content_detail',
+              timeSpentSeconds: timeSpentSeconds,
+              estimatedReadSeconds: estimatedReadSeconds,
+            ),
+          ),
+        );
+      }
+    }
+    super.dispose();
   }
 
   Future<void> _loadDetail() async {
@@ -75,6 +102,17 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
 
       final item = ContentItem.fromJson(detail);
       final recommendations = await _loadRecommendationsFor(item);
+      if (!_didTrackView) {
+        _didTrackView = true;
+        _openedAt = DateTime.now();
+        unawaited(
+          _apiService.trackUserActivity(
+            actionType: 'content_view',
+            contentItemId: item.id,
+            metadata: _activityMetadataFor(item, source: 'content_detail'),
+          ),
+        );
+      }
 
       if (!mounted) return;
       setState(() {
@@ -91,6 +129,47 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         _errorMessage = 'Nu am putut incarca detaliile.';
       });
     }
+  }
+
+  int _estimatedReadSeconds(ContentItem item) {
+    final text = [
+      item.title,
+      item.shortDescription,
+      _cleanBody(item.body),
+    ].whereType<String>().join(' ');
+    final seconds = ((text.length / 1000) * 60).ceil();
+    return seconds.clamp(30, 3600).toInt();
+  }
+
+  Map<String, dynamic> _activityMetadataFor(
+    ContentItem item, {
+    required String source,
+    int? timeSpentSeconds,
+    int? estimatedReadSeconds,
+  }) {
+    final metadata = <String, dynamic>{
+      'content_type': item.contentType,
+      if (item.categoryId != null) 'category_id': item.categoryId,
+      if (item.categoryName != null) 'category_name': item.categoryName,
+      if (item.specializationId != null)
+        'specialization_id': item.specializationId,
+      if (item.specializationName != null)
+        'specialization_name': item.specializationName,
+      if (item.authorName != null) 'author_name': item.authorName,
+      'source': source,
+    };
+
+    if (timeSpentSeconds != null) {
+      metadata['time_spent_seconds'] = timeSpentSeconds;
+    }
+    if (estimatedReadSeconds != null) {
+      metadata['estimated_read_seconds'] = estimatedReadSeconds;
+      if (timeSpentSeconds != null && estimatedReadSeconds > 0) {
+        metadata['completion_ratio'] = (timeSpentSeconds / estimatedReadSeconds)
+            .clamp(0.0, 1.0);
+      }
+    }
+    return metadata;
   }
 
   Future<List<ContentItem>> _loadRecommendationsFor(ContentItem item) async {
