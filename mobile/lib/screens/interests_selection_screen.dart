@@ -65,8 +65,7 @@ class InterestsSelectionScreen extends StatefulWidget {
 }
 
 class _InterestsSelectionScreenState extends State<InterestsSelectionScreen>
-  with SingleTickerProviderStateMixin {
-
+    with SingleTickerProviderStateMixin {
   final _apiService = ApiService();
   final _authStorage = AuthStorage();
 
@@ -142,23 +141,30 @@ class _InterestsSelectionScreenState extends State<InterestsSelectionScreen>
     final maxRadius = math.min(size.width, size.height) * 0.38;
 
     for (int i = 0; i < _interests.length; i++) {
-      final double angle = (i / math.max(1, _interests.length)) * math.pi * 2 + (random.nextDouble() - 0.5) * 0.25;
-      final double spiral = (i / math.max(1, _interests.length)) * 0.75; // 0..0.75
+      final double angle =
+          (i / math.max(1, _interests.length)) * math.pi * 2 +
+          (random.nextDouble() - 0.5) * 0.25;
+      final double spiral =
+          (i / math.max(1, _interests.length)) * 0.75; // 0..0.75
 
-      final double r = 40 + spiral * maxRadius * (0.45 + random.nextDouble() * 0.55);
+      final double r =
+          40 + spiral * maxRadius * (0.45 + random.nextDouble() * 0.55);
 
       final double initialX = centerX + math.cos(angle) * r;
       final double initialY = centerY + math.sin(angle) * r;
 
       // Slight size variation for visual rhythm
-      final double baseSize = 52.0 + (i % 6) * 4.0 + (random.nextDouble() - 0.5) * 6.0;
+      final double baseSize =
+          52.0 + (i % 6) * 4.0 + (random.nextDouble() - 0.5) * 6.0;
 
-      _bubbleNodes.add(_BubbleNode(
-        option: _interests[i],
-        radius: baseSize.abs(),
-        initialX: initialX,
-        initialY: initialY,
-      ));
+      _bubbleNodes.add(
+        _BubbleNode(
+          option: _interests[i],
+          radius: baseSize.abs(),
+          initialX: initialX,
+          initialY: initialY,
+        ),
+      );
     }
   }
 
@@ -312,9 +318,7 @@ class _InterestsSelectionScreenState extends State<InterestsSelectionScreen>
             _Sunset.right.withValues(alpha: 0.12),
           ],
         ),
-        border: Border.all(
-          color: _Sunset.accent.withValues(alpha: 0.6),
-        ),
+        border: Border.all(color: _Sunset.accent.withValues(alpha: 0.6)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -351,7 +355,7 @@ class _InterestsSelectionScreenState extends State<InterestsSelectionScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                    selectedCount == 0
+                  selectedCount == 0
                       ? 'Alege ce te definește'
                       : '$selectedCount interese selectate',
                   style: TextStyle(
@@ -425,17 +429,14 @@ class _InterestsSelectionScreenState extends State<InterestsSelectionScreen>
           width: node.radius * 2,
           height: node.radius * 2,
           padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
+          decoration: BoxDecoration(
             shape: BoxShape.circle,
             // Culorile de fundal din imaginea ta (Roz-Violet pastelat)
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: isSelected
-                  ? [
-                      _Sunset.left,
-                      _Sunset.accent,
-                    ]
+                  ? [_Sunset.left, _Sunset.accent]
                   : [
                       _Sunset.soft.withValues(alpha: 0.6),
                       _Sunset.right.withValues(alpha: 0.45),
@@ -508,14 +509,19 @@ class _InterestsSelectionScreenState extends State<InterestsSelectionScreen>
                           height: 420,
                           child: LayoutBuilder(
                             builder: (context, constraints) {
-                              final size = Size(constraints.maxWidth, constraints.maxHeight);
+                              final size = Size(
+                                constraints.maxWidth,
+                                constraints.maxHeight,
+                              );
                               if (_lastLayoutSize != size) {
                                 _lastLayoutSize = size;
                                 _initBubbleNodes(size);
                               }
                               return Stack(
                                 clipBehavior: Clip.none,
-                                children: _bubbleNodes.map(_buildBubbleWidget).toList(),
+                                children: _bubbleNodes
+                                    .map(_buildBubbleWidget)
+                                    .toList(),
                               );
                             },
                           ),
@@ -523,10 +529,14 @@ class _InterestsSelectionScreenState extends State<InterestsSelectionScreen>
                         const SizedBox(height: 20),
                         // Butonul de continuare
                         ElevatedButton(
-                          onPressed: _selectedInterestIds.isEmpty ? null : _persistSelection,
+                          onPressed: _selectedInterestIds.isEmpty
+                              ? null
+                              : _persistSelection,
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
-                            backgroundColor: const Color(0xFF9C47FF), // Mov asortat
+                            backgroundColor: const Color(
+                              0xFF9C47FF,
+                            ), // Mov asortat
                             foregroundColor: Colors.white,
                             disabledBackgroundColor: Colors.grey.shade300,
                             shape: RoundedRectangleBorder(
@@ -535,10 +545,20 @@ class _InterestsSelectionScreenState extends State<InterestsSelectionScreen>
                             elevation: 2,
                           ),
                           child: _isSubmitting
-                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
                               : const Text(
                                   'Continuă',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                         ),
                       ],
@@ -547,7 +567,9 @@ class _InterestsSelectionScreenState extends State<InterestsSelectionScreen>
                       Positioned.fill(
                         child: Container(
                           color: Colors.white.withValues(alpha: 0.6),
-                          child: const Center(child: CircularProgressIndicator()),
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
                         ),
                       ),
                   ],

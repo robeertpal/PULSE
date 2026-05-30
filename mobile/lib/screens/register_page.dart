@@ -749,6 +749,12 @@ class _RegisterPageState extends State<RegisterPage> {
         key: ValueKey('$label-$effectiveValue-${options.length}'),
         initialValue: effectiveValue,
         isExpanded: true,
+        style: const TextStyle(
+          color: AuthShell.textPrimary,
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+        dropdownColor: Colors.white,
         icon: _dropdownArrowIcon(),
         hint: Text(
           hintText ?? label,
@@ -767,7 +773,28 @@ class _RegisterPageState extends State<RegisterPage> {
             .map(
               (item) => DropdownMenuItem<int>(
                 value: item.id,
-                child: Text(item.name, overflow: TextOverflow.ellipsis),
+                child: Text(
+                  item.name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AuthShell.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            )
+            .toList(),
+        selectedItemBuilder: (context) => options
+            .map(
+              (item) => Text(
+                item.name,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AuthShell.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             )
             .toList(),
@@ -791,6 +818,12 @@ class _RegisterPageState extends State<RegisterPage> {
         key: ValueKey('disabled-$label-$hintText'),
         initialValue: null,
         isExpanded: true,
+        style: const TextStyle(
+          color: AuthShell.textPrimary,
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+        dropdownColor: Colors.white,
         icon: _dropdownArrowIcon(),
         hint: Text(
           hintText,
@@ -823,6 +856,12 @@ class _RegisterPageState extends State<RegisterPage> {
               key: ValueKey('phone-prefix-$_phonePrefix'),
               initialValue: _phonePrefix,
               isExpanded: true,
+              style: const TextStyle(
+                color: AuthShell.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+              dropdownColor: Colors.white,
               icon: _dropdownArrowIcon(),
               decoration: _fieldDecoration(
                 'Prefix',
@@ -866,7 +905,13 @@ class _RegisterPageState extends State<RegisterPage> {
     final rule = _selectedOccupationRule;
     return [
       Step(
-        title: const Text('Cont'),
+        title: const Text(
+          'Cont',
+          style: TextStyle(
+            color: AuthShell.textPrimary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         isActive: _currentStep >= 0,
         state: _currentStep > 0 ? StepState.complete : StepState.indexed,
         content: Column(
@@ -902,7 +947,13 @@ class _RegisterPageState extends State<RegisterPage> {
         ),
       ),
       Step(
-        title: const Text('Date personale'),
+        title: const Text(
+          'Date personale',
+          style: TextStyle(
+            color: AuthShell.textPrimary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         isActive: _currentStep >= 1,
         state: _currentStep > 1 ? StepState.complete : StepState.indexed,
         content: Column(
@@ -975,7 +1026,13 @@ class _RegisterPageState extends State<RegisterPage> {
         ),
       ),
       Step(
-        title: const Text('Profesional'),
+        title: const Text(
+          'Profesional',
+          style: TextStyle(
+            color: AuthShell.textPrimary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         isActive: _currentStep >= 2,
         content: Column(
           children: [
@@ -1078,6 +1135,12 @@ class _RegisterPageState extends State<RegisterPage> {
                   key: ValueKey('titlu-universitar-$_selectedTitluUniversitar'),
                   initialValue: _selectedTitluUniversitar,
                   isExpanded: true,
+                  style: const TextStyle(
+                    color: AuthShell.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  dropdownColor: Colors.white,
                   icon: _dropdownArrowIcon(),
                   decoration: _fieldDecoration(
                     'Titlu universitar',
@@ -1101,7 +1164,13 @@ class _RegisterPageState extends State<RegisterPage> {
               controlAffinity: ListTileControlAffinity.leading,
               activeColor: AuthShell.pulsePurple,
               checkColor: Colors.white,
-              title: const Text('Sunt de acord să primesc email-uri'),
+              title: const Text(
+                'Sunt de acord să primesc email-uri',
+                style: TextStyle(
+                  color: AuthShell.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               onChanged: (value) =>
                   setState(() => _acordEmail = value ?? false),
             ),
@@ -1111,7 +1180,13 @@ class _RegisterPageState extends State<RegisterPage> {
               controlAffinity: ListTileControlAffinity.leading,
               activeColor: AuthShell.pulsePurple,
               checkColor: Colors.white,
-              title: const Text('Sunt de acord să primesc SMS-uri'),
+              title: const Text(
+                'Sunt de acord să primesc SMS-uri',
+                style: TextStyle(
+                  color: AuthShell.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               onChanged: (value) => setState(() => _acordSms = value ?? false),
             ),
             CheckboxListTile(
@@ -1120,11 +1195,20 @@ class _RegisterPageState extends State<RegisterPage> {
               controlAffinity: ListTileControlAffinity.leading,
               activeColor: AuthShell.pulsePurple,
               checkColor: Colors.white,
-              title: const Text('Accept prelucrarea datelor personale'),
+              title: const Text(
+                'Accept prelucrarea datelor personale',
+                style: TextStyle(
+                  color: AuthShell.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               subtitle: !_gdprConsent && _currentStep == 2
                   ? Text(
                       'Consimțământul GDPR este obligatoriu.',
-                      style: TextStyle(color: Colors.red.shade700),
+                      style: TextStyle(
+                        color: Colors.red.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
                     )
                   : null,
               onChanged: (value) =>
