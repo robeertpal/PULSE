@@ -20,6 +20,7 @@ import secrets
 import smtplib
 import socket
 import ssl
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -81,7 +82,12 @@ def parse_bool_env(name: str, default: bool = False) -> bool:
     raw_value = os.getenv(name)
     if raw_value is None:
         return default
-    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"", "0", "false", "no", "off"}:
+        return False
+    return default
 
 
 def docs_enabled() -> bool:
@@ -106,6 +112,7 @@ class SmtpConfig:
     password: str
     email_from: str
     email_from_name: str
+    email_reply_to: str
     use_ssl: bool
     use_starttls: bool
     timeout_seconds: int
@@ -166,6 +173,7 @@ def get_smtp_config() -> SmtpConfig:
         password=smtp_password,
         email_from=email_from,
         email_from_name=os.getenv("EMAIL_FROM_NAME", "").strip(),
+        email_reply_to=os.getenv("EMAIL_REPLY_TO", email_from).strip() or email_from,
         use_ssl=use_ssl,
         use_starttls=use_starttls,
         timeout_seconds=parse_int_env("SMTP_TIMEOUT_SECONDS", 20),
@@ -178,7 +186,7 @@ def log_smtp_config_status() -> None:
     config = get_smtp_config()
     logger.info(
         "SMTP config status environment=%s provider=%s host=%s port=%s ssl=%s starttls=%s "
-        "force_ipv4=%s user_configured=%s password_configured=%s from=%s from_env=%s missing=%s",
+        "force_ipv4=%s user_configured=%s password_configured=%s from=%s reply_to=%s from_env=%s missing=%s",
         ENVIRONMENT,
         config.provider,
         config.host or "<missing>",
@@ -189,6 +197,7 @@ def log_smtp_config_status() -> None:
         bool(config.user),
         bool(config.password),
         config.email_from or "<missing>",
+        config.email_reply_to or "<missing>",
         config.from_env_name,
         ",".join(config.missing_fields) or "none",
     )
@@ -723,16 +732,18 @@ def send_smtp_email(
 ) -> None:
     config = get_smtp_config()
     logger.info(
-        "SMTP email send attempt provider=%s type=%s recipient=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s from=%s",
+        "SMTP email send attempt provider=%s type=%s recipient=%s subject=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s from=%s reply_to=%s",
         config.provider,
         email_type,
         to_email,
+        subject,
         config.host or "<missing>",
         config.port,
         config.use_ssl,
         config.use_starttls,
         config.force_ipv4,
         config.email_from or "<missing>",
+        config.email_reply_to or "<missing>",
     )
     missing_fields = config.missing_fields
     if missing_fields:
@@ -744,47 +755,80 @@ def send_smtp_email(
     message["Subject"] = subject
     message["From"] = config.sender_header
     message["To"] = to_email
+    message["Reply-To"] = config.email_reply_to
     message.set_content(text_content)
     message.add_alternative(html_content, subtype="html")
 
+    started_at = time.perf_counter()
+    smtp = None
+    sent = False
     try:
         ssl_context = ssl.create_default_context()
         if config.use_ssl:
             smtp_ssl_class = IPv4SMTP_SSL if config.force_ipv4 else smtplib.SMTP_SSL
-            with smtp_ssl_class(config.host, config.port, timeout=config.timeout_seconds, context=ssl_context) as smtp:
-                smtp.login(config.user, config.password)
-                smtp.send_message(message)
+            smtp = smtp_ssl_class(config.host, config.port, timeout=config.timeout_seconds, context=ssl_context)
         else:
             smtp_class = IPv4SMTP if config.force_ipv4 else smtplib.SMTP
-            with smtp_class(config.host, config.port, timeout=config.timeout_seconds) as smtp:
-                if config.use_starttls:
-                    smtp.ehlo()
-                    smtp.starttls(context=ssl_context)
-                    smtp.ehlo()
-                smtp.login(config.user, config.password)
-                smtp.send_message(message)
+            smtp = smtp_class(config.host, config.port, timeout=config.timeout_seconds)
+            if config.use_starttls:
+                smtp.ehlo()
+                smtp.starttls(context=ssl_context)
+                smtp.ehlo()
+        smtp.login(config.user, config.password)
+        smtp.send_message(message)
+        sent = True
     except Exception as exc:
+        duration_ms = int((time.perf_counter() - started_at) * 1000)
         logger.exception(
-            "SMTP email send failed provider=%s type=%s recipient=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s error=%r",
+            "SMTP email send failed provider=%s type=%s recipient=%s subject=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s duration_ms=%s error=%r",
             config.provider,
             email_type,
             to_email,
+            subject,
             config.host,
             config.port,
             config.use_ssl,
             config.use_starttls,
             config.force_ipv4,
+            duration_ms,
             exc,
         )
         raise
+    finally:
+        if smtp is not None:
+            try:
+                smtp.quit()
+            except Exception as exc:
+                if sent:
+                    logger.warning(
+                        "SMTP quit failed after accepted send provider=%s type=%s recipient=%s subject=%s host=%s port=%s error=%r",
+                        config.provider,
+                        email_type,
+                        to_email,
+                        subject,
+                        config.host,
+                        config.port,
+                        exc,
+                    )
+                else:
+                    try:
+                        smtp.close()
+                    except Exception:
+                        pass
 
+    duration_ms = int((time.perf_counter() - started_at) * 1000)
     logger.info(
-        "SMTP email send succeeded provider=%s type=%s recipient=%s host=%s port=%s",
+        "SMTP email send succeeded provider=%s type=%s recipient=%s subject=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s duration_ms=%s",
         config.provider,
         email_type,
         to_email,
+        subject,
         config.host,
         config.port,
+        config.use_ssl,
+        config.use_starttls,
+        config.force_ipv4,
+        duration_ms,
     )
 
 

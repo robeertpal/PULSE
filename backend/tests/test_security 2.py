@@ -190,6 +190,7 @@ def test_brevo_smtp_config_defaults_and_sender_name():
             "EMAIL_FROM": "pulse.medichub@gmail.com",
             "SMTP_FROM": "fallback@example.com",
             "EMAIL_FROM_NAME": "PULSE",
+            "EMAIL_REPLY_TO": "reply@example.com",
         },
         clear=True,
     ):
@@ -201,15 +202,21 @@ def test_brevo_smtp_config_defaults_and_sender_name():
     assert config.email_from == "pulse.medichub@gmail.com"
     assert config.from_env_name == "EMAIL_FROM"
     assert config.sender_header == "PULSE <pulse.medichub@gmail.com>"
+    assert config.email_reply_to == "reply@example.com"
     assert config.use_starttls is True
     assert config.use_ssl is False
     assert config.force_ipv4 is False
 
 
+def test_bool_env_parses_false_values_as_false():
+    false_values = ["false", "0", "no", "off", ""]
+    for value in false_values:
+        with patch.dict(os.environ, {"SMTP_FORCE_IPV4": value}, clear=True):
+            assert main.parse_bool_env("SMTP_FORCE_IPV4", True) is False
+
+
 def test_smtp_port_465_uses_ssl_without_starttls():
-    smtp_context = MagicMock()
     smtp_client = MagicMock()
-    smtp_context.__enter__.return_value = smtp_client
 
     with patch.dict(
         os.environ,
@@ -222,7 +229,7 @@ def test_smtp_port_465_uses_ssl_without_starttls():
             "SMTP_FORCE_IPV4": "false",
         },
         clear=True,
-    ), patch("main.smtplib.SMTP_SSL", return_value=smtp_context) as smtp_ssl, patch(
+    ), patch("main.smtplib.SMTP_SSL", return_value=smtp_client) as smtp_ssl, patch(
         "main.smtplib.SMTP"
     ) as smtp_plain, patch("main.ssl.create_default_context", return_value=MagicMock()) as ssl_context:
         main.send_smtp_email(
@@ -238,6 +245,7 @@ def test_smtp_port_465_uses_ssl_without_starttls():
     smtp_client.starttls.assert_not_called()
     smtp_client.login.assert_called_once_with("smtp-user@example.com", "secret")
     assert smtp_client.send_message.called is True
+    smtp_client.quit.assert_called_once()
 
 
 def test_ipv4_smtp_ssl_socket_wraps_ipv4_with_sni():
@@ -276,11 +284,9 @@ def test_ipv4_smtp_socket_uses_ipv4_address():
 
 
 def test_smtp_force_ipv4_starttls_flow_uses_ipv4_class():
-    smtp_context = MagicMock()
     smtp_client = MagicMock()
-    smtp_context.__enter__.return_value = smtp_client
 
-    with patch("main.IPv4SMTP", return_value=smtp_context) as smtp_ipv4, patch.dict(
+    with patch("main.IPv4SMTP", return_value=smtp_client) as smtp_ipv4, patch.dict(
         os.environ,
         {
             "SMTP_HOST": "smtp.example.com",
@@ -305,6 +311,38 @@ def test_smtp_force_ipv4_starttls_flow_uses_ipv4_class():
     smtp_client.starttls.assert_called_once_with(context=ssl_context.return_value)
     assert smtp_client.ehlo.call_count == 2
     smtp_client.login.assert_called_once_with("smtp-user@example.com", "secret")
+    smtp_client.quit.assert_called_once()
+
+
+def test_smtp_quit_failure_after_send_does_not_fail_delivery():
+    smtp_client = MagicMock()
+    smtp_client.quit.side_effect = TimeoutError("quit timed out")
+
+    with patch.dict(
+        os.environ,
+        {
+            "EMAIL_PROVIDER": "brevo_smtp",
+            "SMTP_USER": "login@smtp-brevo.com",
+            "SMTP_PASSWORD": "secret",
+            "EMAIL_FROM": "pulse.medichub@gmail.com",
+            "EMAIL_REPLY_TO": "pulse.medichub@gmail.com",
+        },
+        clear=True,
+    ), patch("main.smtplib.SMTP", return_value=smtp_client), patch(
+        "main.ssl.create_default_context", return_value=MagicMock()
+    ):
+        main.send_smtp_email(
+            email_type="test",
+            to_email="doctor@example.com",
+            subject="Test",
+            text_content="Test",
+            html_content="<p>Test</p>",
+        )
+
+    smtp_client.send_message.assert_called_once()
+    sent_message = smtp_client.send_message.call_args.args[0]
+    assert sent_message["From"] == "pulse.medichub@gmail.com"
+    assert sent_message["Reply-To"] == "pulse.medichub@gmail.com"
 
 
 def test_smtp_force_ipv4_errors_clearly_without_ipv4_address():
