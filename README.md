@@ -392,9 +392,10 @@ SMTP_USER=...
 SMTP_PASSWORD=...
 SMTP_FROM=...
 SMTP_STARTTLS=true
+SMTP_FORCE_IPV4=true
 ```
 
-Pentru SMTP se recomandă `SMTP_PORT=587` cu `SMTP_STARTTLS=true` sau `SMTP_PORT=465` cu `SMTP_USE_SSL=true`, în funcție de provider. După deploy, logurile Render trebuie să includă `SMTP config status` cu `missing=none`; la fiecare trimitere apar loguri `SMTP email send attempt`, `SMTP email send succeeded` sau `SMTP email send failed`.
+Pentru SMTP se recomandă `SMTP_PORT=587` cu `SMTP_STARTTLS=true` sau `SMTP_PORT=465` cu `SMTP_USE_SSL=true`, în funcție de provider. În production, backend-ul forțează implicit IPv4 pentru SMTP ca să evite rutele IPv6 indisponibile pe Render; păstrează `SMTP_FORCE_IPV4=true` pentru Gmail dacă apare `OSError: [Errno 101] Network is unreachable`. După deploy, logurile Render trebuie să includă `SMTP config status` cu `missing=none` și `SMTP IPv4 connection resolved`; la fiecare trimitere apar loguri `SMTP email send attempt`, `SMTP email send succeeded` sau `SMTP email send failed`.
 
 Schimbările în `backend/` necesită, în general, redeploy pe Render. Schimbările limitate la Flutter, ManagementSystem, CSS/JS static sau workflow-uri Firebase nu necesită deploy pe Render, cu excepția cazului în care contractul API se schimbă.
 

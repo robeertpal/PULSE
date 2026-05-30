@@ -134,6 +134,7 @@ Configurează în Render aceleași valori necesare backend-ului:
 - `SMTP_FROM` sau `FROM_EMAIL` sau `EMAIL_FROM`: adresa expeditorului. `SMTP_FROM` are prioritate. Necesar Render.
 - `SMTP_STARTTLS`: setează explicit `true` pentru portul `587`, dacă providerul cere STARTTLS.
 - `SMTP_USE_SSL`: setează explicit `true` pentru portul `465`, dacă providerul cere SSL direct.
+- `SMTP_FORCE_IPV4`: implicit `true` în production. Păstrează-l activ pe Render pentru Gmail SMTP dacă apare `OSError: [Errno 101] Network is unreachable` înainte de autentificare.
 - `SMTP_TIMEOUT_SECONDS`: timeout conexiune SMTP, implicit `20`.
 - `AZURE_STORAGE_CONNECTION_STRING`: secret Azure Storage. Necesar local și Render, valoarea vine din Azure.
 - `AZURE_STORAGE_CONTAINER_NAME`: container Azure. Necesar local și Render.
@@ -153,7 +154,8 @@ Configurează în Render aceleași valori necesare backend-ului:
 - Health check path rămâne `/health`.
 - Python version recomandat: 3.12 sau versiunea folosită deja de Render.
 - Activează auto-deploy GitHub pe branch-ul existent.
-- Verifică logurile Render pentru linia `SMTP config status`: trebuie să arate `missing=none`, hostul/portul corecte, modul TLS corect și `password_configured=True`, fără să afișeze parola.
+- Verifică logurile Render pentru linia `SMTP config status`: trebuie să arate `missing=none`, hostul/portul corecte, modul TLS corect, `force_ipv4=True` și `password_configured=True`, fără să afișeze parola.
+- Pentru Gmail SMTP pe Render, logurile trebuie să conțină `SMTP IPv4 connection resolved host=smtp.gmail.com ipv4_address=...`, confirmând că socketul folosește IPv4 și nu IPv6.
 - Dacă trimiterea emailului eșuează, logurile backend trebuie să conțină `SMTP email send failed` cu recipientul, hostul, portul și excepția exactă. Verifică apoi în providerul SMTP că acceptă conexiuni din Render.
 - Verifică logurile Render să nu afișeze valori secrete din `.env`.
 

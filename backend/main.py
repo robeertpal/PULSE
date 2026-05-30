@@ -17,6 +17,8 @@ import os
 import re
 import secrets
 import smtplib
+import socket
+import ssl
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -105,6 +107,7 @@ class SmtpConfig:
     use_starttls: bool
     timeout_seconds: int
     from_env_name: str
+    force_ipv4: bool
 
     @property
     def missing_fields(self) -> list[str]:
@@ -153,6 +156,7 @@ def get_smtp_config() -> SmtpConfig:
         use_starttls=use_starttls,
         timeout_seconds=parse_int_env("SMTP_TIMEOUT_SECONDS", 20),
         from_env_name=from_env_name or "SMTP_USER",
+        force_ipv4=parse_bool_env("SMTP_FORCE_IPV4", IS_PRODUCTION),
     )
 
 
@@ -160,12 +164,13 @@ def log_smtp_config_status() -> None:
     config = get_smtp_config()
     logger.info(
         "SMTP config status environment=%s host=%s port=%s ssl=%s starttls=%s "
-        "user_configured=%s password_configured=%s from=%s from_env=%s missing=%s",
+        "force_ipv4=%s user_configured=%s password_configured=%s from=%s from_env=%s missing=%s",
         ENVIRONMENT,
         config.host or "<missing>",
         config.port,
         config.use_ssl,
         config.use_starttls,
+        config.force_ipv4,
         bool(config.user),
         bool(config.password),
         config.email_from or "<missing>",
@@ -177,6 +182,37 @@ def log_smtp_config_status() -> None:
 @app.on_event("startup")
 def log_startup_smtp_config() -> None:
     log_smtp_config_status()
+
+
+def resolve_smtp_ipv4(host: str, port: int) -> str:
+    try:
+        addresses = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        logger.exception("SMTP IPv4 DNS resolution failed host=%s port=%s error=%r", host, port, exc)
+        raise RuntimeError(f"SMTP IPv4 DNS resolution failed for {host}:{port}: {exc}") from exc
+    if not addresses:
+        logger.error("SMTP IPv4 DNS resolution returned no addresses host=%s port=%s", host, port)
+        raise RuntimeError(f"SMTP host {host}:{port} has no IPv4 address")
+    return addresses[0][4][0]
+
+
+class IPv4SMTP(smtplib.SMTP):
+    selected_ipv4: str
+
+    def _get_socket(self, host: str, port: int, timeout: float):
+        self.selected_ipv4 = resolve_smtp_ipv4(host, port)
+        logger.info("SMTP IPv4 connection resolved host=%s ipv4_address=%s port=%s ssl=False", host, self.selected_ipv4, port)
+        return socket.create_connection((self.selected_ipv4, port), timeout)
+
+
+class IPv4SMTP_SSL(smtplib.SMTP_SSL):
+    selected_ipv4: str
+
+    def _get_socket(self, host: str, port: int, timeout: float):
+        self.selected_ipv4 = resolve_smtp_ipv4(host, port)
+        logger.info("SMTP IPv4 connection resolved host=%s ipv4_address=%s port=%s ssl=True", host, self.selected_ipv4, port)
+        raw_socket = socket.create_connection((self.selected_ipv4, port), timeout)
+        return self.context.wrap_socket(raw_socket, server_hostname=host)
 
 DEFAULT_LOCAL_ORIGINS = ",".join(
     [
@@ -672,13 +708,14 @@ def send_smtp_email(
 ) -> None:
     config = get_smtp_config()
     logger.info(
-        "SMTP email send attempt type=%s recipient=%s host=%s port=%s ssl=%s starttls=%s from=%s",
+        "SMTP email send attempt type=%s recipient=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s from=%s",
         email_type,
         to_email,
         config.host or "<missing>",
         config.port,
         config.use_ssl,
         config.use_starttls,
+        config.force_ipv4,
         config.email_from or "<missing>",
     )
     missing_fields = config.missing_fields
@@ -695,25 +732,31 @@ def send_smtp_email(
     message.add_alternative(html_content, subtype="html")
 
     try:
+        ssl_context = ssl.create_default_context()
         if config.use_ssl:
-            with smtplib.SMTP_SSL(config.host, config.port, timeout=config.timeout_seconds) as smtp:
+            smtp_ssl_class = IPv4SMTP_SSL if config.force_ipv4 else smtplib.SMTP_SSL
+            with smtp_ssl_class(config.host, config.port, timeout=config.timeout_seconds, context=ssl_context) as smtp:
                 smtp.login(config.user, config.password)
                 smtp.send_message(message)
         else:
-            with smtplib.SMTP(config.host, config.port, timeout=config.timeout_seconds) as smtp:
+            smtp_class = IPv4SMTP if config.force_ipv4 else smtplib.SMTP
+            with smtp_class(config.host, config.port, timeout=config.timeout_seconds) as smtp:
                 if config.use_starttls:
-                    smtp.starttls()
+                    smtp.ehlo()
+                    smtp.starttls(context=ssl_context)
+                    smtp.ehlo()
                 smtp.login(config.user, config.password)
                 smtp.send_message(message)
     except Exception as exc:
         logger.exception(
-            "SMTP email send failed type=%s recipient=%s host=%s port=%s ssl=%s starttls=%s error=%r",
+            "SMTP email send failed type=%s recipient=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s error=%r",
             email_type,
             to_email,
             config.host,
             config.port,
             config.use_ssl,
             config.use_starttls,
+            config.force_ipv4,
             exc,
         )
         raise
