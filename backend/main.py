@@ -6,6 +6,7 @@ from datetime import timedelta
 from datetime import timezone
 from decimal import Decimal
 from email.message import EmailMessage
+from email.utils import formataddr
 import html
 import enum
 import hashlib
@@ -98,11 +99,13 @@ logger = logging.getLogger("pulse.admin")
 
 @dataclass(frozen=True)
 class SmtpConfig:
+    provider: str
     host: str
     port: int
     user: str
     password: str
     email_from: str
+    email_from_name: str
     use_ssl: bool
     use_starttls: bool
     timeout_seconds: int
@@ -124,6 +127,12 @@ class SmtpConfig:
             missing.append("SMTP_FROM/FROM_EMAIL/EMAIL_FROM")
         return missing
 
+    @property
+    def sender_header(self) -> str:
+        if self.email_from_name:
+            return formataddr((self.email_from_name, self.email_from))
+        return self.email_from
+
 
 def first_configured_env(names: list[str], default: str = "") -> tuple[str, str]:
     for name in names:
@@ -134,38 +143,44 @@ def first_configured_env(names: list[str], default: str = "") -> tuple[str, str]
 
 
 def get_smtp_config() -> SmtpConfig:
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
+    provider = os.getenv("EMAIL_PROVIDER", "smtp").strip().lower() or "smtp"
+    is_brevo_smtp = provider == "brevo_smtp"
+    default_host = "smtp-relay.brevo.com" if is_brevo_smtp else ""
+    smtp_host = os.getenv("SMTP_HOST", default_host).strip()
     smtp_port = parse_int_env("SMTP_PORT", 587)
     smtp_user = os.getenv("SMTP_USER", "").strip()
     smtp_password = os.getenv("SMTP_PASSWORD", "")
     email_from, from_env_name = first_configured_env(
-        ["SMTP_FROM", "FROM_EMAIL", "EMAIL_FROM"],
+        ["EMAIL_FROM", "SMTP_FROM", "FROM_EMAIL"],
         smtp_user,
     )
-    use_ssl = parse_bool_env("SMTP_USE_SSL", smtp_port == 465)
-    use_starttls = parse_bool_env("SMTP_STARTTLS", not use_ssl)
+    use_ssl = parse_bool_env("SMTP_USE_SSL", False if is_brevo_smtp else smtp_port == 465)
+    use_starttls = parse_bool_env("SMTP_STARTTLS", True if is_brevo_smtp else not use_ssl)
     if use_ssl:
         use_starttls = False
     return SmtpConfig(
+        provider=provider,
         host=smtp_host,
         port=smtp_port,
         user=smtp_user,
         password=smtp_password,
         email_from=email_from,
+        email_from_name=os.getenv("EMAIL_FROM_NAME", "").strip(),
         use_ssl=use_ssl,
         use_starttls=use_starttls,
         timeout_seconds=parse_int_env("SMTP_TIMEOUT_SECONDS", 20),
         from_env_name=from_env_name or "SMTP_USER",
-        force_ipv4=parse_bool_env("SMTP_FORCE_IPV4", IS_PRODUCTION),
+        force_ipv4=parse_bool_env("SMTP_FORCE_IPV4", False if is_brevo_smtp else IS_PRODUCTION),
     )
 
 
 def log_smtp_config_status() -> None:
     config = get_smtp_config()
     logger.info(
-        "SMTP config status environment=%s host=%s port=%s ssl=%s starttls=%s "
+        "SMTP config status environment=%s provider=%s host=%s port=%s ssl=%s starttls=%s "
         "force_ipv4=%s user_configured=%s password_configured=%s from=%s from_env=%s missing=%s",
         ENVIRONMENT,
+        config.provider,
         config.host or "<missing>",
         config.port,
         config.use_ssl,
@@ -708,7 +723,8 @@ def send_smtp_email(
 ) -> None:
     config = get_smtp_config()
     logger.info(
-        "SMTP email send attempt type=%s recipient=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s from=%s",
+        "SMTP email send attempt provider=%s type=%s recipient=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s from=%s",
+        config.provider,
         email_type,
         to_email,
         config.host or "<missing>",
@@ -721,12 +737,12 @@ def send_smtp_email(
     missing_fields = config.missing_fields
     if missing_fields:
         message = f"SMTP configuration is incomplete: missing {', '.join(missing_fields)}"
-        logger.error("SMTP email send failed type=%s recipient=%s error=%s", email_type, to_email, message)
+        logger.error("SMTP email send failed provider=%s type=%s recipient=%s error=%s", config.provider, email_type, to_email, message)
         raise RuntimeError(message)
 
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = config.email_from
+    message["From"] = config.sender_header
     message["To"] = to_email
     message.set_content(text_content)
     message.add_alternative(html_content, subtype="html")
@@ -749,7 +765,8 @@ def send_smtp_email(
                 smtp.send_message(message)
     except Exception as exc:
         logger.exception(
-            "SMTP email send failed type=%s recipient=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s error=%r",
+            "SMTP email send failed provider=%s type=%s recipient=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s error=%r",
+            config.provider,
             email_type,
             to_email,
             config.host,
@@ -762,7 +779,8 @@ def send_smtp_email(
         raise
 
     logger.info(
-        "SMTP email send succeeded type=%s recipient=%s host=%s port=%s",
+        "SMTP email send succeeded provider=%s type=%s recipient=%s host=%s port=%s",
+        config.provider,
         email_type,
         to_email,
         config.host,

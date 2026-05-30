@@ -160,6 +160,7 @@ def test_smtp_config_accepts_render_email_env_names():
     with patch.dict(
         os.environ,
         {
+            "EMAIL_PROVIDER": "smtp",
             "SMTP_HOST": "smtp.example.com",
             "SMTP_PORT": "587",
             "SMTP_USER": "smtp-user@example.com",
@@ -170,12 +171,39 @@ def test_smtp_config_accepts_render_email_env_names():
     ):
         config = main.get_smtp_config()
 
+    assert config.provider == "smtp"
     assert config.host == "smtp.example.com"
     assert config.port == 587
     assert config.email_from == "Pulse <no-reply@example.com>"
     assert config.from_env_name == "SMTP_FROM"
     assert config.use_starttls is True
     assert config.use_ssl is False
+
+
+def test_brevo_smtp_config_defaults_and_sender_name():
+    with patch.dict(
+        os.environ,
+        {
+            "EMAIL_PROVIDER": "brevo_smtp",
+            "SMTP_USER": "login@smtp-brevo.com",
+            "SMTP_PASSWORD": "secret",
+            "EMAIL_FROM": "pulse.medichub@gmail.com",
+            "SMTP_FROM": "fallback@example.com",
+            "EMAIL_FROM_NAME": "PULSE",
+        },
+        clear=True,
+    ):
+        config = main.get_smtp_config()
+
+    assert config.provider == "brevo_smtp"
+    assert config.host == "smtp-relay.brevo.com"
+    assert config.port == 587
+    assert config.email_from == "pulse.medichub@gmail.com"
+    assert config.from_env_name == "EMAIL_FROM"
+    assert config.sender_header == "PULSE <pulse.medichub@gmail.com>"
+    assert config.use_starttls is True
+    assert config.use_ssl is False
+    assert config.force_ipv4 is False
 
 
 def test_smtp_port_465_uses_ssl_without_starttls():
@@ -224,11 +252,11 @@ def test_ipv4_smtp_ssl_socket_wraps_ipv4_with_sni():
         "main.socket.create_connection",
         return_value=MagicMock(),
     ) as create_connection:
-        smtp._get_socket("smtp.gmail.com", 465, 20)
+        smtp._get_socket("smtp.example.com", 465, 20)
 
-    getaddrinfo.assert_called_once_with("smtp.gmail.com", 465, main.socket.AF_INET, main.socket.SOCK_STREAM)
+    getaddrinfo.assert_called_once_with("smtp.example.com", 465, main.socket.AF_INET, main.socket.SOCK_STREAM)
     create_connection.assert_called_once_with(("142.250.102.109", 465), 20)
-    ssl_context.wrap_socket.assert_called_once_with(create_connection.return_value, server_hostname="smtp.gmail.com")
+    ssl_context.wrap_socket.assert_called_once_with(create_connection.return_value, server_hostname="smtp.example.com")
 
 
 def test_ipv4_smtp_socket_uses_ipv4_address():
@@ -241,9 +269,9 @@ def test_ipv4_smtp_socket_uses_ipv4_address():
         "main.socket.create_connection",
         return_value=MagicMock(),
     ) as create_connection:
-        smtp._get_socket("smtp.gmail.com", 587, 20)
+        smtp._get_socket("smtp.example.com", 587, 20)
 
-    getaddrinfo.assert_called_once_with("smtp.gmail.com", 587, main.socket.AF_INET, main.socket.SOCK_STREAM)
+    getaddrinfo.assert_called_once_with("smtp.example.com", 587, main.socket.AF_INET, main.socket.SOCK_STREAM)
     create_connection.assert_called_once_with(("142.250.102.109", 587), 20)
 
 
@@ -255,9 +283,9 @@ def test_smtp_force_ipv4_starttls_flow_uses_ipv4_class():
     with patch("main.IPv4SMTP", return_value=smtp_context) as smtp_ipv4, patch.dict(
         os.environ,
         {
-            "SMTP_HOST": "smtp.gmail.com",
+            "SMTP_HOST": "smtp.example.com",
             "SMTP_PORT": "587",
-            "SMTP_USER": "smtp-user@gmail.com",
+            "SMTP_USER": "smtp-user@example.com",
             "SMTP_PASSWORD": "secret",
             "FROM_EMAIL": "no-reply@example.com",
             "SMTP_STARTTLS": "true",
@@ -273,16 +301,16 @@ def test_smtp_force_ipv4_starttls_flow_uses_ipv4_class():
             html_content="<p>Test</p>",
         )
 
-    smtp_ipv4.assert_called_once_with("smtp.gmail.com", 587, timeout=20)
+    smtp_ipv4.assert_called_once_with("smtp.example.com", 587, timeout=20)
     smtp_client.starttls.assert_called_once_with(context=ssl_context.return_value)
     assert smtp_client.ehlo.call_count == 2
-    smtp_client.login.assert_called_once_with("smtp-user@gmail.com", "secret")
+    smtp_client.login.assert_called_once_with("smtp-user@example.com", "secret")
 
 
 def test_smtp_force_ipv4_errors_clearly_without_ipv4_address():
     with patch("main.socket.getaddrinfo", return_value=[]):
         try:
-            main.resolve_smtp_ipv4("smtp.gmail.com", 587)
+            main.resolve_smtp_ipv4("smtp.example.com", 587)
         except RuntimeError as exc:
             assert "has no IPv4 address" in str(exc)
         else:
