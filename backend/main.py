@@ -41,6 +41,7 @@ from schemas import (
     PasswordResetConfirm,
     PasswordResetRequest,
     PasswordResetVerify,
+    UserInterestsUpdate,
     UserCreate,
     UserLogin,
     UserLogout,
@@ -545,6 +546,9 @@ def send_email_verification_email(to_email: str, otp_code: str) -> None:
     smtp_password = os.getenv("SMTP_PASSWORD", "")
     email_from = os.getenv("EMAIL_FROM", smtp_user).strip()
     if not smtp_host or not smtp_port or not smtp_user or not smtp_password or not email_from:
+        if not IS_PRODUCTION:
+            logger.warning("Skipping email verification delivery because SMTP is not configured")
+            return
         raise RuntimeError("SMTP configuration is incomplete")
 
     message = EmailMessage()
@@ -570,6 +574,9 @@ def send_password_reset_email(to_email: str, otp_code: str) -> None:
     smtp_password = os.getenv("SMTP_PASSWORD", "")
     email_from = os.getenv("EMAIL_FROM", smtp_user).strip()
     if not smtp_host or not smtp_port or not smtp_user or not smtp_password or not email_from:
+        if not IS_PRODUCTION:
+            logger.warning("Skipping password reset email delivery because SMTP is not configured")
+            return
         raise RuntimeError("SMTP configuration is incomplete")
 
     message = EmailMessage()
@@ -3076,6 +3083,35 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
         "specialization_name": profile.specialization.name if profile.specialization else None,
         "professional_grade_name": profile.professional_grade.name if profile.professional_grade else None,
     }
+
+
+@app.put("/api/me/interests")
+def update_my_interests(
+    payload: UserInterestsUpdate,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    profile = db.query(models.UserProfile).filter(models.UserProfile.user_id == user_id).first()
+    if profile is None:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    interest_ids = _resolve_interest_ids(db, payload.interest_ids)
+    now = datetime.utcnow()
+
+    db.query(models.UserProfileInterest).filter(
+        models.UserProfileInterest.user_profile_id == profile.id
+    ).delete(synchronize_session=False)
+    db.query(models.UserInterest).filter(models.UserInterest.user_id == user_id).delete(
+        synchronize_session=False
+    )
+
+    for interest_id in interest_ids:
+        db.add(models.UserProfileInterest(user_profile_id=profile.id, interest_id=interest_id))
+        db.add(models.UserInterest(user_id=user_id, interest_id=interest_id, created_at=now))
+
+    profile.updated_at = now
+    db.commit()
+    return {"message": "Interests updated successfully", "interest_ids": interest_ids}
 
 
 @app.get("/users")

@@ -1,13 +1,16 @@
 import os
+from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 
-# Reîncărcăm variabilele de mediu
-load_dotenv()
+# Reîncărcăm variabilele de mediu din backend/.env ca să folosim mereu Azure DB.
+load_dotenv(Path(__file__).with_name(".env"))
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is not set in backend/.env")
 
 # Engine options for Azure PostgreSQL
 # sslmode=require is typical for Azure

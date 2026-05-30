@@ -9,7 +9,7 @@ import '../services/api_service.dart';
 import '../services/auth_storage.dart';
 import '../utils/validators.dart' as validators;
 import '../widgets/auth_shell.dart';
-import 'email_verification_screen.dart';
+import 'interests_selection_screen.dart';
 
 class _OptionItem {
   const _OptionItem({
@@ -82,7 +82,6 @@ class _RegisterPageState extends State<RegisterPage> {
       'assets/icons/numbers.rectangle.fill.svg';
   static const _signatureIcon = 'assets/icons/signature.svg';
   static const _titleIcon = 'assets/icons/graduation.svg';
-  static const _interestsIcon = 'assets/icons/heart.svg';
   static const _dropdownIcon = 'assets/icons/arrow.right.svg';
   static const _eyeIcon = 'assets/icons/eye.fill.svg';
   static const _eyeSlashIcon = 'assets/icons/eye.slash.fill.svg';
@@ -120,7 +119,6 @@ class _RegisterPageState extends State<RegisterPage> {
   List<_OptionItem> _specializations = const [];
   List<_OptionItem> _professionalGrades = const [];
   List<_OptionItem> _institutions = const [];
-  List<_OptionItem> _interests = const [];
 
   int? _selectedCountyId;
   int? _selectedCityId;
@@ -129,7 +127,6 @@ class _RegisterPageState extends State<RegisterPage> {
   int? _selectedSecondarySpecializationId;
   int? _selectedProfessionalGradeId;
   int? _selectedInstitutionId;
-  final Set<int> _selectedInterestIds = {};
 
   static const List<String> _titluriUniversitare = [
     'Fără titlu universitar',
@@ -149,7 +146,6 @@ class _RegisterPageState extends State<RegisterPage> {
   static String get _professionalGradesUrl =>
       '${ApiService.baseUrl}/professional-grades';
   static String get _institutionsUrl => '${ApiService.baseUrl}/institutions';
-  static String get _interestsUrl => '${ApiService.baseUrl}/interests';
 
   @override
   void initState() {
@@ -332,7 +328,6 @@ class _RegisterPageState extends State<RegisterPage> {
         _fetchOptions(_specializationsUrl),
         _fetchOptions(_professionalGradesUrl),
         _fetchOptions(_institutionsUrl),
-        _fetchOptions(_interestsUrl),
       ]);
 
       if (!mounted) return;
@@ -343,7 +338,6 @@ class _RegisterPageState extends State<RegisterPage> {
         _specializations = results[3];
         _professionalGrades = results[4];
         _institutions = results[5];
-        _interests = results[6];
 
         _selectedCountyId = null;
         _selectedCityId = null;
@@ -439,9 +433,9 @@ class _RegisterPageState extends State<RegisterPage> {
                 null &&
             (!rule.requiresSecondarySpecialization ||
                 _numberValidator(
-                      _selectedSecondarySpecializationId,
-                      label: 'Specializare secundară',
-                    ) ==
+                  _selectedSecondarySpecializationId,
+                  label: 'Specializare secundară',
+                ) ==
                     null) &&
             (!rule.requiresCuim ||
                 _cuimValidator(_cuimController.text) == null) &&
@@ -449,7 +443,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 _codParafaValidator(_codParafaController.text) == null) &&
             (!rule.requiresRegistrationCode ||
                 _requiredValidator(
-                      _professionalCodeController.text,
+                  _professionalCodeController.text,
                       label: rule.registrationCodeLabel,
                     ) ==
                     null) &&
@@ -502,7 +496,6 @@ class _RegisterPageState extends State<RegisterPage> {
       'specialization_secondary_name': _selectedSecondarySpecialization?.name,
       'professional_grade_id': _selectedProfessionalGradeId,
       'institution_id': _selectedInstitutionId,
-      'interest_ids': _selectedInterestIds.toList(),
       'cuim': rule.requiresCuim ? _cuimController.text.trim() : null,
       'cod_parafa': rule.requiresCodParafa
           ? _codParafaController.text.trim()
@@ -531,25 +524,15 @@ class _RegisterPageState extends State<RegisterPage> {
       );
       if (!mounted) return;
       final verificationRequired = data['email_verification_required'] == true;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            verificationRequired
-                ? 'Cont creat. Verifică emailul pentru cod.'
-                : 'Cont creat cu succes.',
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => InterestsSelectionScreen(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+            verificationRequired: verificationRequired,
           ),
         ),
       );
-      if (verificationRequired) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) =>
-                EmailVerificationScreen(email: _emailController.text.trim()),
-          ),
-        );
-      } else {
-        Navigator.of(context).pop();
-      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -879,48 +862,6 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  Widget _interestPicker() {
-    if (_interests.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: InputDecorator(
-        decoration: _fieldDecoration(
-          'Interese',
-          hintText: 'Interese',
-          iconAsset: _interestsIcon,
-        ),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _interests.map((interest) {
-            final selected = _selectedInterestIds.contains(interest.id);
-            return FilterChip(
-              label: Text(interest.name),
-              selected: selected,
-              selectedColor: const Color(0xFFFFE4CF),
-              checkmarkColor: AuthShell.pulsePurple,
-              backgroundColor: Colors.white,
-              side: BorderSide(
-                color: selected
-                    ? AuthShell.pulseOrange
-                    : const Color(0xFFE8DDEC),
-              ),
-              onSelected: (value) {
-                setState(() {
-                  if (value) {
-                    _selectedInterestIds.add(interest.id);
-                  } else {
-                    _selectedInterestIds.remove(interest.id);
-                  }
-                });
-              },
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
   List<Step> _buildSteps() {
     final rule = _selectedOccupationRule;
     return [
@@ -1154,10 +1095,10 @@ class _RegisterPageState extends State<RegisterPage> {
                       _requiredValidator(value, label: 'Titlu universitar'),
                 ),
               ),
-            _interestPicker(),
             CheckboxListTile(
               value: _acordEmail,
               contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
               activeColor: AuthShell.pulsePurple,
               checkColor: Colors.white,
               title: const Text('Sunt de acord să primesc email-uri'),
@@ -1167,6 +1108,7 @@ class _RegisterPageState extends State<RegisterPage> {
             CheckboxListTile(
               value: _acordSms,
               contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
               activeColor: AuthShell.pulsePurple,
               checkColor: Colors.white,
               title: const Text('Sunt de acord să primesc SMS-uri'),
@@ -1175,6 +1117,7 @@ class _RegisterPageState extends State<RegisterPage> {
             CheckboxListTile(
               value: _gdprConsent,
               contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
               activeColor: AuthShell.pulsePurple,
               checkColor: Colors.white,
               title: const Text('Accept prelucrarea datelor personale'),

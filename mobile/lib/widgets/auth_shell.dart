@@ -283,6 +283,7 @@ class AuthHeaderText extends StatelessWidget {
           title,
           textAlign: align,
           style: TextStyle(
+            decoration: TextDecoration.none,
             color: titleColor,
             fontSize: light ? 44 : 30,
             fontWeight: FontWeight.w900,
@@ -295,6 +296,7 @@ class AuthHeaderText extends StatelessWidget {
           subtitle,
           textAlign: align,
           style: TextStyle(
+            decoration: TextDecoration.none,
             color: subtitleColor,
             fontSize: 15.5,
             height: 1.5,
