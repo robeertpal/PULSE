@@ -48,6 +48,7 @@ from schemas import (
     PasswordResetVerify,
     UserCreate,
     UserActivityCreate,
+    UserInterestsUpdate,
     UserLogin,
     UserLogout,
 )
@@ -4169,6 +4170,69 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
         "occupation_name": profile.occupation.name if profile.occupation else None,
         "specialization_name": profile.specialization.name if profile.specialization else None,
         "professional_grade_name": profile.professional_grade.name if profile.professional_grade else None,
+    }
+
+
+@app.put("/api/me/interests")
+def update_my_interests(
+    payload: UserInterestsUpdate,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _ensure_registration_schema(db)
+    user_model = get_user_model()
+    user = db.query(user_model).filter(user_model.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    profile = (
+        db.query(models.UserProfile)
+        .filter(models.UserProfile.user_id == user_id)
+        .first()
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    interest_ids = _resolve_interest_ids(db, payload.interest_ids)
+    now = datetime.utcnow()
+
+    try:
+        db.query(models.UserProfileInterest).filter(
+            models.UserProfileInterest.user_profile_id == profile.id
+        ).delete(synchronize_session=False)
+        db.query(models.UserInterest).filter(
+            models.UserInterest.user_id == user_id
+        ).delete(synchronize_session=False)
+
+        for interest_id in interest_ids:
+            db.add(
+                models.UserProfileInterest(
+                    user_profile_id=profile.id,
+                    interest_id=interest_id,
+                )
+            )
+            db.add(
+                models.UserInterest(
+                    user_id=user_id,
+                    interest_id=interest_id,
+                    created_at=now,
+                )
+            )
+
+        profile.updated_at = now
+        user.updated_at = now
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Failed to update user interests user_id=%s", user_id)
+        raise HTTPException(
+            status_code=400,
+            detail="Nu am putut salva interesele momentan.",
+        ) from exc
+
+    return {
+        "message": "Interests updated successfully",
+        "interest_ids": interest_ids,
     }
 
 

@@ -72,6 +72,10 @@ class UserLogout(BaseModel):
     session_token: str = Field(min_length=16, max_length=512)
 
 
+class UserInterestsUpdate(BaseModel):
+    interest_ids: List[int] = Field(default_factory=list)
+
+
 class UserActivityCreate(BaseModel):
     action_type: str = Field(min_length=1, max_length=100)
     content_item_id: Optional[int] = Field(default=None, gt=0)

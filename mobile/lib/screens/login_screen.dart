@@ -30,6 +30,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isSubmitting = false;
   bool _showPassword = false;
+  String? _submitErrorText;
 
   @override
   void dispose() {
@@ -71,6 +72,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() {
       _isSubmitting = true;
+      _submitErrorText = null;
     });
 
     final email = _emailController.text.trim();
@@ -106,9 +108,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      setState(() {
+        _submitErrorText = e.toString().replaceFirst('Exception: ', '');
+      });
     } finally {
       if (mounted) {
         setState(() {
@@ -191,15 +193,15 @@ class _LoginScreenState extends State<LoginScreen> {
       errorStyle: const TextStyle(height: 1.25),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: const BorderSide(color: AuthShell.pulseOrange, width: 1.4),
+        borderSide: const BorderSide(color: AuthShell.pulsePurple, width: 1.4),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
@@ -290,6 +292,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                 suffixIcon: _passwordVisibilityButton(),
                               ),
                             ),
+                            if (_submitErrorText != null) ...[
+                              const SizedBox(height: 14),
+                              AuthErrorBox(message: _submitErrorText!),
+                            ],
                             Align(
                               alignment: Alignment.centerRight,
                               child: TextButton(
@@ -321,7 +327,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             const SizedBox(height: 24),
                             AuthPrimaryButton(
-                              label: 'Intră în cont',
+                              label: 'Autentificare',
                               isLoading: _isSubmitting,
                               onPressed: _submitLogin,
                             ),

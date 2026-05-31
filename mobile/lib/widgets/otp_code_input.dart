@@ -235,7 +235,7 @@ class _OtpDigitBox extends StatelessWidget {
               ? Colors.red.shade400
               : isFocused
               ? AuthShell.pulsePurple
-              : const Color(0xFFD8C8EA);
+              : Colors.white.withValues(alpha: 0.14);
 
           return AnimatedContainer(
             duration: const Duration(milliseconds: 160),
@@ -244,9 +244,9 @@ class _OtpDigitBox extends StatelessWidget {
             height: size,
             decoration: BoxDecoration(
               color: enabled
-                  ? const Color(0xFFFFFCFF)
-                  : const Color(0xFFF0ECF4),
-              borderRadius: BorderRadius.circular(16),
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: borderColor,
                 width: isFocused || hasError ? 1.6 : 1.1,
@@ -254,9 +254,9 @@ class _OtpDigitBox extends StatelessWidget {
               boxShadow: isFocused
                   ? [
                       BoxShadow(
-                        color: AuthShell.pulsePurple.withValues(alpha: 0.13),
-                        blurRadius: 14,
-                        offset: const Offset(0, 7),
+                        color: AuthShell.pulsePurple.withValues(alpha: 0.24),
+                        blurRadius: 18,
+                        offset: const Offset(0, 9),
                       ),
                     ]
                   : null,

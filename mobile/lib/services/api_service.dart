@@ -371,6 +371,58 @@ class ApiService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getInterests() async {
+    final url = '$baseUrl/interests';
+    late final http.Response response;
+    try {
+      response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 15));
+    } catch (error) {
+      throw _friendlyNetworkException(
+        error,
+        'încărcarea intereselor',
+        url: url,
+      );
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        _responseErrorMessage(response, 'Nu am putut încărca interesele.'),
+      );
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! List) {
+      throw Exception('Răspuns interese neașteptat.');
+    }
+    return decoded.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<void> updateMyInterests({required List<int> interestIds}) async {
+    final url = '$baseUrl/api/me/interests';
+    final headers = await _buildAuthHeaders();
+    late final http.Response response;
+    try {
+      response = await http
+          .put(
+            Uri.parse(url),
+            headers: {...headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({'interest_ids': interestIds}),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (error) {
+      throw _friendlyNetworkException(error, 'salvarea intereselor', url: url);
+    }
+
+    await _handleAuthFailure(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        _responseErrorMessage(response, 'Nu am putut salva interesele.'),
+      );
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getNotifications() async {
     try {
       final headers = await _buildAuthHeaders();
