@@ -3,22 +3,24 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 class AuthShell {
-  static const pulsePurple = Color(0xFF7C3AED);
-  static const deepPurple = Color(0xFF31106F);
+  static const pulsePink = Color(0xFFFF4D8D);
+  static const pulsePurple = pulsePink;
+  static const deepPurple = Color(0xFF5A102F);
   static const pulseOrange = Color(0xFFFF8A3D);
   static const softOrange = Color(0xFFFFB36B);
-  static const pulseViolet = Color(0xFF8B5CF6);
+  static const pulseViolet = Color(0xFFFF6FA3);
   static const fieldFill = Color(0x1AFFFFFF);
   static const warmSurface = Color(0xFF0A0F1F);
   static const textPrimary = Color(0xFFF8FBFF);
   static const textSecondary = Color(0xFFC8BEDA);
+  static const authErrorColor = Color(0xFFFF4D5E);
   static const deepGreen = deepPurple;
   static const forestGreen = pulsePurple;
 
   static const LinearGradient pulseGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [deepPurple, pulsePurple, pulseOrange],
+    colors: [pulsePink, pulseOrange],
   );
 
   static BoxDecoration backgroundDecoration() {
@@ -483,16 +485,16 @@ class AuthErrorBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+        color: AuthShell.authErrorColor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: const Color(0xFFEF4444).withValues(alpha: 0.34),
+          color: AuthShell.authErrorColor.withValues(alpha: 0.42),
         ),
       ),
       child: Text(
         message,
         style: const TextStyle(
-          color: Color(0xFFFFC7C7),
+          color: AuthShell.authErrorColor,
           fontSize: 13,
           height: 1.35,
           fontWeight: FontWeight.w700,
@@ -500,4 +502,128 @@ class AuthErrorBox extends StatelessWidget {
       ),
     );
   }
+}
+
+String pulseDisplayErrorMessage(Object error) {
+  final raw = error.toString().replaceFirst('Exception: ', '').trim();
+  if (raw.isEmpty) return 'A apărut o eroare. Te rugăm să încerci din nou.';
+  final technicalMarkers = [
+    'URL apelat:',
+    'Status code:',
+    'Body backend:',
+    'Tip eroare:',
+    'Detalii:',
+  ];
+  var message = raw.split('\n').first.trim();
+  for (final marker in technicalMarkers) {
+    final index = message.indexOf(marker);
+    if (index >= 0) {
+      message = message.substring(0, index).trim();
+    }
+  }
+  if (message.isEmpty) {
+    return 'A apărut o eroare. Te rugăm să încerci din nou.';
+  }
+  return message;
+}
+
+Future<void> showPulseErrorDialog(
+  BuildContext context,
+  Object error, {
+  String title = 'Nu am putut continua',
+}) {
+  final message = pulseDisplayErrorMessage(error);
+  return showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'Închide',
+    barrierColor: Colors.black.withValues(alpha: 0.62),
+    transitionDuration: const Duration(milliseconds: 220),
+    pageBuilder: (context, animation, secondaryAnimation) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Material(
+            color: Colors.transparent,
+            child: FrostedAuthCard(
+              padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 390),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: AuthShell.pulseGradient,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AuthShell.pulsePurple.withValues(
+                                alpha: 0.28,
+                              ),
+                              blurRadius: 18,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.error_outline_rounded,
+                          color: Colors.white,
+                          size: 25,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: AuthShell.textPrimary,
+                        fontSize: 22,
+                        height: 1.1,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      message,
+                      style: const TextStyle(
+                        color: AuthShell.textSecondary,
+                        fontSize: 15,
+                        height: 1.42,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    AuthPrimaryButton(
+                      label: 'Am înțeles',
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.96, end: 1).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
 }

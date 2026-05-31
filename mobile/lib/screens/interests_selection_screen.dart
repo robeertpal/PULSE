@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart';
 import '../services/api_service.dart';
 import '../services/auth_storage.dart';
 import '../widgets/auth_shell.dart';
+import 'home_screen.dart';
 import 'login_screen.dart';
 
 class InterestOption {
@@ -112,8 +113,9 @@ class _InterestsSelectionScreenState extends State<InterestsSelectionScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = pulseDisplayErrorMessage(e);
       });
+      await showPulseErrorDialog(context, e);
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -166,19 +168,33 @@ class _InterestsSelectionScreenState extends State<InterestsSelectionScreen>
       await _apiService.updateMyInterests(
         interestIds: _selectedInterestIds.toList(),
       );
-      await _authStorage.clearSession();
+
+      try {
+        final profileData = await _apiService.getMyProfile();
+        final name = profileData['display_name'] as String?;
+        if (name != null && name.trim().isNotEmpty) {
+          await _authStorage.saveUserName(name.trim());
+        }
+      } catch (e) {
+        debugPrint('Failed to pre-fetch profile name after onboarding: $e');
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Interesele au fost salvate.')),
       );
-      _goToLogin();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => const HomeScreen(showOnboardingWelcome: true),
+        ),
+        (route) => false,
+      );
     } catch (e) {
-      await _authStorage.clearSession();
       if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = pulseDisplayErrorMessage(e);
       });
+      await showPulseErrorDialog(context, e);
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);

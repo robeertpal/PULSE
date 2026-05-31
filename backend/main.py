@@ -182,7 +182,7 @@ def get_smtp_config() -> SmtpConfig:
         user=smtp_user,
         password=smtp_password,
         email_from=email_from,
-        email_from_name=os.getenv("EMAIL_FROM_NAME", "").strip(),
+        email_from_name=os.getenv("EMAIL_FROM_NAME", "pulse").strip(),
         email_reply_to=os.getenv("EMAIL_REPLY_TO", email_from).strip() or email_from,
         brevo_api_key=os.getenv("BREVO_API_KEY", "").strip(),
         brevo_api_timeout_seconds=parse_int_env("BREVO_API_TIMEOUT_SECONDS", 20),
@@ -1341,6 +1341,72 @@ def _resolve_institution_id(db: Session, payload: UserCreate) -> Optional[int]:
     if institution is None:
         raise HTTPException(status_code=422, detail="Institution id is invalid")
     return institution.id
+
+
+EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
+CNP_CONTROL_WEIGHTS = "279146358279"
+CNP_VALID_COUNTY_CODES = set(range(1, 47)) | {51, 52}
+
+
+def normalize_email_for_registration(email: str) -> str:
+    normalized = (email or "").strip().lower()
+    if not normalized or not EMAIL_PATTERN.fullmatch(normalized):
+        raise HTTPException(status_code=400, detail="Adresa de email nu este validă.")
+    return normalized
+
+
+def normalize_person_name(value: str, field_label: str) -> str:
+    compacted = re.sub(r"\s+", " ", (value or "").strip().lower())
+    if not compacted:
+        raise HTTPException(status_code=400, detail=f"{field_label} este obligatoriu.")
+    compacted = re.sub(r"\s*-\s*", "-", compacted)
+    return re.sub(r"[^\W\d_]+", lambda match: match.group(0).capitalize(), compacted, flags=re.UNICODE)
+
+
+def validate_cnp(cnp: str) -> str:
+    digits = (cnp or "").strip()
+    if not re.fullmatch(r"\d{13}", digits):
+        raise HTTPException(status_code=400, detail="CNP-ul introdus nu este valid.")
+
+    sex_century = int(digits[0])
+    if sex_century not in range(1, 10):
+        raise HTTPException(status_code=400, detail="CNP-ul introdus nu este valid.")
+
+    year = int(digits[1:3])
+    month = int(digits[3:5])
+    day = int(digits[5:7])
+    if sex_century in {1, 2, 7, 8, 9}:
+        full_year = 1900 + year
+    elif sex_century in {3, 4}:
+        full_year = 1800 + year
+    else:
+        full_year = 2000 + year
+    try:
+        datetime(full_year, month, day)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="CNP-ul introdus nu este valid.") from exc
+
+    county_code = int(digits[7:9])
+    if county_code not in CNP_VALID_COUNTY_CODES:
+        raise HTTPException(status_code=400, detail="CNP-ul introdus nu este valid.")
+
+    control_sum = sum(int(digit) * int(weight) for digit, weight in zip(digits[:12], CNP_CONTROL_WEIGHTS))
+    expected_control = control_sum % 11
+    if expected_control == 10:
+        expected_control = 1
+    if int(digits[12]) != expected_control:
+        raise HTTPException(status_code=400, detail="CNP-ul introdus nu este valid.")
+
+    return digits
+
+
+def validate_correspondence_address(address: Optional[str]) -> str:
+    normalized = re.sub(r"\s+", " ", (address or "").strip())
+    has_text = re.search(r"[A-Za-zĂÂÎȘȚăâîșț]", normalized) is not None
+    has_number = re.search(r"\d+", normalized) is not None
+    if not normalized or not has_text or not has_number:
+        raise HTTPException(status_code=400, detail="Adresa trebuie să conțină strada și numărul.")
+    return normalized
 
 
 def _resolve_interest_ids(db: Session, interest_ids: List[int]) -> List[int]:
@@ -3747,14 +3813,20 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
     require_rate_limit(request, "register", "AUTH_RATE_LIMIT_PER_MINUTE", 10)
     _ensure_registration_schema(db)
     user_model = get_user_model()
-    existing_user = db.query(user_model).filter(user_model.email == payload.email).first()
+    email = normalize_email_for_registration(payload.email)
+    first_name = normalize_person_name(payload.first_name, "Numele")
+    last_name = normalize_person_name(payload.last_name, "Prenumele")
+    cnp = validate_cnp(payload.cnp)
+    correspondence_address = validate_correspondence_address(payload.correspondence_address)
+
+    existing_user = db.query(user_model).filter(func.lower(user_model.email) == email).first()
     if existing_user is not None:
-        raise HTTPException(status_code=409, detail="An account with this email already exists")
+        raise HTTPException(status_code=409, detail="Există deja un cont creat cu această adresă de email.")
 
     if not payload.password or len(payload.password) < 8:
         raise HTTPException(status_code=422, detail="Password must have at least 8 characters")
     if not payload.gdpr_consent:
-        raise HTTPException(status_code=422, detail="GDPR consent is required")
+        raise HTTPException(status_code=422, detail="Trebuie să accepți Termenii și Condițiile pentru a crea contul.")
 
     county_id = _resolve_county_id(db, payload)
     city_id = _resolve_city_id(db, payload, county_id)
@@ -3765,11 +3837,11 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
     interest_ids = _resolve_interest_ids(db, payload.interest_ids)
 
     missing = []
-    if not payload.first_name:
+    if not first_name:
         missing.append("first_name")
-    if not payload.last_name:
+    if not last_name:
         missing.append("last_name")
-    if not payload.cnp:
+    if not cnp:
         missing.append("cnp")
     if not payload.phone:
         missing.append("phone")
@@ -3785,27 +3857,31 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
 
     now = datetime.utcnow()
     user = user_model(
-        email=payload.email,
+        email=email,
         password_hash=hash_password(payload.password),
         is_active=True,
         created_at=now,
         updated_at=now,
     )
     db.add(user)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Există deja un cont creat cu această adresă de email.") from exc
 
     profile_kwargs = {
         "user_id": user.id,
-        "first_name": payload.first_name,
-        "last_name": payload.last_name,
-        "cnp": payload.cnp,
+        "first_name": first_name,
+        "last_name": last_name,
+        "cnp": cnp,
         "phone": payload.phone,
         "city_id": city_id,
         "occupation_id": occupation_id,
         "specialization_id": specialization_id,
         "professional_grade_id": professional_grade_id,
         "institution_id": institution_id,
-        "correspondence_address": payload.correspondence_address,
+        "correspondence_address": correspondence_address,
         "acord_email": payload.acord_email,
         "acord_sms": payload.acord_sms,
         "gdpr_consent": payload.gdpr_consent,
@@ -3825,7 +3901,11 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
 
     profile = models.UserProfile(**profile_kwargs)
     db.add(profile)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Există deja un cont creat cu această adresă de email.") from exc
 
     for interest_id in interest_ids:
         db.add(

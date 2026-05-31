@@ -23,7 +23,7 @@ void main() {
   test('cnp validation', () {
     expect(v.cnpValidator(''), isNotNull);
     expect(v.cnpValidator('123'), isNotNull);
-    expect(v.cnpValidator('1234567890123'), isNull);
+    expect(v.cnpValidator('1960521123451'), isNull);
   });
 
   test('phone validation', () {

@@ -237,7 +237,7 @@ class _AnimatedWelcomeBackground extends StatelessWidget {
                 blur: 104,
               ),
               _GlowBlob(
-                color: const Color(0xFF8B5CF6),
+                color: AuthShell.pulseViolet,
                 size: 220,
                 opacity: 0.1,
                 alignment: Alignment(-0.48 - (0.06 * t), 0.32 + (0.08 * t)),

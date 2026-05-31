@@ -58,10 +58,6 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
     return email.contains('@') && email.contains('.') && email.length >= 5;
   }
 
-  String _errorText(Object error) {
-    return error.toString().replaceFirst('Exception: ', '');
-  }
-
   void _resetOtp() {
     setState(() {
       _otpInputVersion += 1;
@@ -97,13 +93,7 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        if (_step == _PasswordResetStep.code) {
-          _otpErrorText = _errorText(e);
-        } else {
-          _emailErrorText = _errorText(e);
-        }
-      });
+      await showPulseErrorDialog(context, e);
     } finally {
       if (mounted) {
         setState(() {
@@ -135,9 +125,8 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _otpErrorText = _errorText(e);
-      });
+      await showPulseErrorDialog(context, e);
+      _resetOtp();
     } finally {
       if (mounted) {
         setState(() {
@@ -184,9 +173,7 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _passwordErrorText = _errorText(e);
-      });
+      await showPulseErrorDialog(context, e);
     } finally {
       if (mounted) {
         setState(() {

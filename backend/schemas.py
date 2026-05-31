@@ -3,15 +3,21 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
+def normalize_email_value(value):
+    if isinstance(value, str):
+        return value.strip().lower()
+    return value
+
+
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: str = Field(min_length=1, max_length=255)
     firebase_uid: Optional[str] = Field(default=None, max_length=128)
     password: str = Field(min_length=8, max_length=128)
 
-    first_name: str = Field(min_length=1, max_length=255)
-    last_name: str = Field(min_length=1, max_length=255)
-    cnp: str = Field(min_length=1, max_length=13)
-    phone: str = Field(min_length=1, max_length=50)
+    first_name: str = Field(max_length=255)
+    last_name: str = Field(max_length=255)
+    cnp: str = Field(max_length=32)
+    phone: str = Field(max_length=50)
     correspondence_address: Optional[str] = Field(default=None, max_length=1000)
     city_id: Optional[int] = Field(default=None, gt=0)
     county_id: Optional[int] = Field(default=None, gt=0)
@@ -62,10 +68,20 @@ class UserCreate(BaseModel):
             return value.strip()
         return value
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def strip_email(cls, value):
+        return normalize_email_value(value)
+
 
 class UserLogin(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value):
+        return normalize_email_value(value)
 
 
 class UserInterestsUpdate(BaseModel):
@@ -90,6 +106,11 @@ class EmailVerificationVerify(BaseModel):
     email: EmailStr
     otp_code: str = Field(min_length=6, max_length=6)
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value):
+        return normalize_email_value(value)
+
     @field_validator("otp_code", mode="before")
     @classmethod
     def strip_otp_code(cls, value):
@@ -101,14 +122,29 @@ class EmailVerificationVerify(BaseModel):
 class EmailVerificationResend(BaseModel):
     email: EmailStr
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value):
+        return normalize_email_value(value)
+
 
 class PasswordResetRequest(BaseModel):
     email: EmailStr
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value):
+        return normalize_email_value(value)
 
 
 class PasswordResetVerify(BaseModel):
     email: EmailStr
     otp_code: str = Field(min_length=6, max_length=6)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value):
+        return normalize_email_value(value)
 
     @field_validator("otp_code", mode="before")
     @classmethod
@@ -122,6 +158,11 @@ class PasswordResetConfirm(BaseModel):
     email: EmailStr
     otp_code: str = Field(min_length=6, max_length=6)
     password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value):
+        return normalize_email_value(value)
 
     @field_validator("otp_code", mode="before")
     @classmethod
