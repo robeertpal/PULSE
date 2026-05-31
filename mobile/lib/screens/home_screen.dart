@@ -19,10 +19,13 @@ import '../widgets/featured_card.dart';
 import '../widgets/content_section.dart';
 import '../widgets/content_card.dart';
 import '../widgets/advertisement_feed_slot.dart';
+import '../widgets/auth_shell.dart';
 import '../widgets/skeleton_loading.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.showOnboardingWelcome = false});
+
+  final bool showOnboardingWelcome;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -66,6 +69,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _forYouGeneratedWithAi = false;
   bool _filtersExpanded = false;
   int _contentRequestId = 0;
+  bool _didShowOnboardingWelcome = false;
   String? _errorMessage;
   String? _forYouErrorMessage;
   String _doctorName = 'Medic';
@@ -123,6 +127,125 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _loadDoctorName();
     _loadUnreadNotificationsCount();
     _loadForYouRecommendations();
+
+    if (widget.showOnboardingWelcome) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showOnboardingWelcomeDialogOnce();
+      });
+    }
+  }
+
+  Future<void> _showOnboardingWelcomeDialogOnce() async {
+    if (!mounted || _didShowOnboardingWelcome) return;
+    _didShowOnboardingWelcome = true;
+    await Future<void>.delayed(const Duration(milliseconds: 320));
+    if (!mounted) return;
+
+    final cachedName = await _authStorage.getUserName();
+    final displayName = (cachedName != null && cachedName.trim().isNotEmpty)
+        ? cachedName.trim()
+        : _doctorName.trim();
+    final firstName = displayName.isNotEmpty && displayName != 'Medic'
+        ? displayName.split(RegExp(r'\s+')).first
+        : '';
+    final title = firstName.isNotEmpty
+        ? 'Bun venit, $firstName!'
+        : 'Bun venit în PULSE!';
+
+    if (!mounted) return;
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Închide',
+      barrierColor: Colors.black.withValues(alpha: 0.62),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Material(
+              color: Colors.transparent,
+              child: FrostedAuthCard(
+                padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 410),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: AuthShell.pulseGradient,
+                            boxShadow: [
+                              BoxShadow(
+                                color: AuthShell.pulsePurple.withValues(
+                                  alpha: 0.3,
+                                ),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.auto_awesome_rounded,
+                            color: Colors.white,
+                            size: 27,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: AuthShell.textPrimary,
+                          fontSize: 24,
+                          height: 1.1,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Contul tău este pregătit. Am personalizat experiența pe baza intereselor selectate.',
+                        style: TextStyle(
+                          color: AuthShell.textSecondary,
+                          fontSize: 15,
+                          height: 1.45,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      AuthPrimaryButton(
+                        label: 'Începem',
+                        onPressed: () => Navigator.of(context).maybePop(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.96, end: 1).animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _loadUnreadNotificationsCount() async {
@@ -412,14 +535,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _savedContentCard(ContentItem item) {
-    return ContentCard.fromModel(
-      item,
-      isSaved: _savedContentIds.contains(item.id),
-      onSaveToggle: _toggleSavedContent,
-      onDetailClosed: _loadSavedContentIds,
-      cardWidth: 220,
-      darkMode: true,
+  Widget _verticalContentCard(ContentItem item) {
+    return SizedBox(
+      width: double.infinity,
+      height: 274,
+      child: ContentCard.fromModel(
+        item,
+        isSaved: _savedContentIds.contains(item.id),
+        onSaveToggle: _toggleSavedContent,
+        onDetailClosed: _loadSavedContentIds,
+        cardWidth: double.infinity,
+        margin: EdgeInsets.zero,
+        darkMode: true,
+      ),
     );
   }
 
@@ -920,19 +1048,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
           const SizedBox(height: 18),
-          SizedBox(
-            height: 344,
-            child: ListView.separated(
-              clipBehavior: Clip.none,
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: _forYouItems.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 16),
-              itemBuilder: (context, index) {
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              children: List.generate(_forYouItems.length, (index) {
                 final item = _forYouItems[index];
                 final reason = _forYouReasons[item.id];
-                return _buildForYouRecommendation(item, reason);
-              },
+                return Padding(
+                  padding: EdgeInsets.only(
+                    bottom: index == _forYouItems.length - 1 ? 0 : 18,
+                  ),
+                  child: _buildForYouRecommendation(item, reason),
+                );
+              }),
             ),
           ),
         ],
@@ -1028,48 +1156,147 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildForYouRecommendation(ContentItem item, String? reason) {
-    return SizedBox(
-      width: 220,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _verticalContentCard(item),
+        if (reason != null && reason.trim().isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _neonPurple.withValues(alpha: 0.18)),
+            ),
+            child: Text(
+              reason,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _darkMuted,
+                fontSize: 12,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildVerticalContentFeed({
+    required String title,
+    required String emptyMessage,
+    required String emptyIconAsset,
+    required Color categoryColor,
+    required List<ContentItem> items,
+  }) {
+    final countLabel = items.length == 1
+        ? '1 material disponibil'
+        : '${items.length} materiale disponibile';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            height: 252,
-            child: ContentCard.fromModel(
-              item,
-              isSaved: _savedContentIds.contains(item.id),
-              onSaveToggle: _toggleSavedContent,
-              onDetailClosed: _loadSavedContentIds,
-              cardWidth: 220,
-              margin: EdgeInsets.zero,
-              darkMode: true,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: categoryColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: categoryColor.withValues(alpha: 0.26),
+                  ),
+                ),
+                child: Center(
+                  child: SvgPicture.asset(
+                    emptyIconAsset,
+                    width: 22,
+                    height: 22,
+                    colorFilter: ColorFilter.mode(
+                      categoryColor,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _darkText,
+                        fontSize: 25,
+                        fontWeight: FontWeight.w900,
+                        height: 1.08,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      items.isEmpty
+                          ? 'Feed vertical premium'
+                          : 'Feed vertical · $countLabel',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _darkMuted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: 54,
+            height: 2,
+            decoration: BoxDecoration(
+              color: categoryColor.withValues(alpha: 0.86),
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: [
+                BoxShadow(
+                  color: categoryColor.withValues(alpha: 0.38),
+                  blurRadius: 14,
+                  spreadRadius: -3,
+                ),
+              ],
             ),
           ),
-          if (reason != null && reason.trim().isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.07),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _neonPurple.withValues(alpha: 0.18),
-                ),
-              ),
-              child: Text(
-                reason,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: _darkMuted,
-                  fontSize: 12,
-                  height: 1.35,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+          const SizedBox(height: 20),
+          if (items.isEmpty)
+            _buildForYouMessageCard(
+              icon: Icons.search_off_rounded,
+              title: title,
+              message: emptyMessage,
+            )
+          else
+            Column(
+              children: List.generate(items.length, (index) {
+                final item = items[index];
+                return Padding(
+                  padding: EdgeInsets.only(
+                    bottom: index == items.length - 1 ? 0 : 18,
+                  ),
+                  child: _verticalContentCard(item),
+                );
+              }),
             ),
-          ],
         ],
       ),
     );
@@ -1806,21 +2033,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
         child: Padding(
           padding: const EdgeInsets.only(top: 8.0, bottom: 100.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildContentFilters(),
-              ContentSection(
-                title: title,
-                actionText: '',
-                emptyMessage: emptyMessage,
-                emptyIconAsset: emptyIconAsset,
-                categoryColor: categoryColor,
-                darkMode: true,
-                onActionTap: () {},
-                children: items.map(_savedContentCard).toList(),
-              ),
-            ],
+          child: _buildVerticalContentFeed(
+            title: title,
+            emptyMessage: emptyMessage,
+            emptyIconAsset: emptyIconAsset,
+            categoryColor: categoryColor,
+            items: items,
           ),
         ),
       ),
