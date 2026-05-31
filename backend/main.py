@@ -46,9 +46,9 @@ from schemas import (
     PasswordResetConfirm,
     PasswordResetRequest,
     PasswordResetVerify,
-    UserInterestsUpdate,
     UserCreate,
     UserActivityCreate,
+    UserInterestsUpdate,
     UserLogin,
     UserLogout,
 )
@@ -4179,27 +4179,61 @@ def update_my_interests(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    profile = db.query(models.UserProfile).filter(models.UserProfile.user_id == user_id).first()
+    _ensure_registration_schema(db)
+    user_model = get_user_model()
+    user = db.query(user_model).filter(user_model.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    profile = (
+        db.query(models.UserProfile)
+        .filter(models.UserProfile.user_id == user_id)
+        .first()
+    )
     if profile is None:
         raise HTTPException(status_code=404, detail="User profile not found")
 
     interest_ids = _resolve_interest_ids(db, payload.interest_ids)
     now = datetime.utcnow()
 
-    db.query(models.UserProfileInterest).filter(
-        models.UserProfileInterest.user_profile_id == profile.id
-    ).delete(synchronize_session=False)
-    db.query(models.UserInterest).filter(models.UserInterest.user_id == user_id).delete(
-        synchronize_session=False
-    )
+    try:
+        db.query(models.UserProfileInterest).filter(
+            models.UserProfileInterest.user_profile_id == profile.id
+        ).delete(synchronize_session=False)
+        db.query(models.UserInterest).filter(
+            models.UserInterest.user_id == user_id
+        ).delete(synchronize_session=False)
 
-    for interest_id in interest_ids:
-        db.add(models.UserProfileInterest(user_profile_id=profile.id, interest_id=interest_id))
-        db.add(models.UserInterest(user_id=user_id, interest_id=interest_id, created_at=now))
+        for interest_id in interest_ids:
+            db.add(
+                models.UserProfileInterest(
+                    user_profile_id=profile.id,
+                    interest_id=interest_id,
+                )
+            )
+            db.add(
+                models.UserInterest(
+                    user_id=user_id,
+                    interest_id=interest_id,
+                    created_at=now,
+                )
+            )
 
-    profile.updated_at = now
-    db.commit()
-    return {"message": "Interests updated successfully", "interest_ids": interest_ids}
+        profile.updated_at = now
+        user.updated_at = now
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Failed to update user interests user_id=%s", user_id)
+        raise HTTPException(
+            status_code=400,
+            detail="Nu am putut salva interesele momentan.",
+        ) from exc
+
+    return {
+        "message": "Interests updated successfully",
+        "interest_ids": interest_ids,
+    }
 
 
 @app.get("/users")

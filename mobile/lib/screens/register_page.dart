@@ -9,7 +9,7 @@ import '../services/api_service.dart';
 import '../services/auth_storage.dart';
 import '../utils/validators.dart' as validators;
 import '../widgets/auth_shell.dart';
-import 'interests_selection_screen.dart';
+import 'email_verification_screen.dart';
 
 class _OptionItem {
   const _OptionItem({
@@ -52,6 +52,31 @@ class _ProfessionalRule {
   final bool requiresSecondarySpecialization;
   final bool requiresTitluUniversitar;
   final String registrationCodeLabel;
+}
+
+class _RegisterSectionLabel extends StatelessWidget {
+  const _RegisterSectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 12),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.88),
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.4,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class RegisterPage extends StatefulWidget {
@@ -433,9 +458,9 @@ class _RegisterPageState extends State<RegisterPage> {
                 null &&
             (!rule.requiresSecondarySpecialization ||
                 _numberValidator(
-                  _selectedSecondarySpecializationId,
-                  label: 'Specializare secundară',
-                ) ==
+                      _selectedSecondarySpecializationId,
+                      label: 'Specializare secundară',
+                    ) ==
                     null) &&
             (!rule.requiresCuim ||
                 _cuimValidator(_cuimController.text) == null) &&
@@ -443,7 +468,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 _codParafaValidator(_codParafaController.text) == null) &&
             (!rule.requiresRegistrationCode ||
                 _requiredValidator(
-                  _professionalCodeController.text,
+                      _professionalCodeController.text,
                       label: rule.registrationCodeLabel,
                     ) ==
                     null) &&
@@ -524,15 +549,30 @@ class _RegisterPageState extends State<RegisterPage> {
       );
       if (!mounted) return;
       final verificationRequired = data['email_verification_required'] == true;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => InterestsSelectionScreen(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-            verificationRequired: verificationRequired,
+      final verificationSent = data['email_verification_sent'] != false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            verificationRequired && verificationSent
+                ? 'Cont creat. Verifică emailul pentru cod.'
+                : verificationRequired
+                ? 'Cont creat. Codul de verificare nu a putut fi trimis momentan.'
+                : 'Cont creat cu succes.',
           ),
         ),
       );
+      if (verificationRequired) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => EmailVerificationScreen(
+              email: _emailController.text.trim(),
+              password: _passwordController.text,
+            ),
+          ),
+        );
+      } else {
+        Navigator.of(context).pop();
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -577,15 +617,15 @@ class _RegisterPageState extends State<RegisterPage> {
       helperStyle: const TextStyle(height: 1.25),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: const BorderSide(color: AuthShell.pulseOrange, width: 1.4),
+        borderSide: const BorderSide(color: AuthShell.pulsePurple, width: 1.4),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
@@ -749,12 +789,6 @@ class _RegisterPageState extends State<RegisterPage> {
         key: ValueKey('$label-$effectiveValue-${options.length}'),
         initialValue: effectiveValue,
         isExpanded: true,
-        style: const TextStyle(
-          color: AuthShell.textPrimary,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-        ),
-        dropdownColor: Colors.white,
         icon: _dropdownArrowIcon(),
         hint: Text(
           hintText ?? label,
@@ -773,32 +807,17 @@ class _RegisterPageState extends State<RegisterPage> {
             .map(
               (item) => DropdownMenuItem<int>(
                 value: item.id,
-                child: Text(
-                  item.name,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AuthShell.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            )
-            .toList(),
-        selectedItemBuilder: (context) => options
-            .map(
-              (item) => Text(
-                item.name,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AuthShell.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
+                child: Text(item.name, overflow: TextOverflow.ellipsis),
               ),
             )
             .toList(),
         onChanged: onChanged,
+        dropdownColor: const Color(0xFF0B0F1D),
+        style: const TextStyle(
+          color: AuthShell.textPrimary,
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+        ),
         validator: required
             ? (value) => _numberValidator(value, label: label)
             : null,
@@ -818,12 +837,6 @@ class _RegisterPageState extends State<RegisterPage> {
         key: ValueKey('disabled-$label-$hintText'),
         initialValue: null,
         isExpanded: true,
-        style: const TextStyle(
-          color: AuthShell.textPrimary,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-        ),
-        dropdownColor: Colors.white,
         icon: _dropdownArrowIcon(),
         hint: Text(
           hintText,
@@ -840,6 +853,7 @@ class _RegisterPageState extends State<RegisterPage> {
         ).copyWith(helperText: helperText, enabled: false),
         items: const [],
         onChanged: null,
+        dropdownColor: const Color(0xFF0B0F1D),
       ),
     );
   }
@@ -856,12 +870,6 @@ class _RegisterPageState extends State<RegisterPage> {
               key: ValueKey('phone-prefix-$_phonePrefix'),
               initialValue: _phonePrefix,
               isExpanded: true,
-              style: const TextStyle(
-                color: AuthShell.textPrimary,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-              dropdownColor: Colors.white,
               icon: _dropdownArrowIcon(),
               decoration: _fieldDecoration(
                 'Prefix',
@@ -878,6 +886,12 @@ class _RegisterPageState extends State<RegisterPage> {
                 if (value == null) return;
                 setState(() => _phonePrefix = value);
               },
+              dropdownColor: const Color(0xFF0B0F1D),
+              style: const TextStyle(
+                color: AuthShell.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -901,19 +915,34 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
+  StepStyle _stepStyleFor(int step) {
+    final isCurrent = step == _currentStep;
+    final isCompleted = step < _currentStep;
+
+    return StepStyle(
+      color: isCurrent
+          ? Colors.white.withValues(alpha: 0.34)
+          : Colors.white.withValues(alpha: isCompleted ? 0.3 : 0.2),
+      border: Border.all(
+        color: Colors.white.withValues(alpha: isCurrent ? 0.42 : 0.2),
+      ),
+      indexStyle: TextStyle(
+        color: Colors.white.withValues(alpha: isCurrent ? 1 : 0.9),
+        fontSize: 12,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 0,
+      ),
+    );
+  }
+
   List<Step> _buildSteps() {
     final rule = _selectedOccupationRule;
     return [
       Step(
-        title: const Text(
-          'Cont',
-          style: TextStyle(
-            color: AuthShell.textPrimary,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        title: const Text('Date cont'),
         isActive: _currentStep >= 0,
         state: _currentStep > 0 ? StepState.complete : StepState.indexed,
+        stepStyle: _stepStyleFor(0),
         content: Column(
           children: [
             _textField(
@@ -947,15 +976,10 @@ class _RegisterPageState extends State<RegisterPage> {
         ),
       ),
       Step(
-        title: const Text(
-          'Date personale',
-          style: TextStyle(
-            color: AuthShell.textPrimary,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        title: const Text('Date personale'),
         isActive: _currentStep >= 1,
         state: _currentStep > 1 ? StepState.complete : StepState.indexed,
+        stepStyle: _stepStyleFor(1),
         content: Column(
           children: [
             _textField(
@@ -1026,14 +1050,9 @@ class _RegisterPageState extends State<RegisterPage> {
         ),
       ),
       Step(
-        title: const Text(
-          'Profesional',
-          style: TextStyle(
-            color: AuthShell.textPrimary,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        title: const Text('Date profesionale'),
         isActive: _currentStep >= 2,
+        stepStyle: _stepStyleFor(2),
         content: Column(
           children: [
             _dropdownField(
@@ -1135,12 +1154,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   key: ValueKey('titlu-universitar-$_selectedTitluUniversitar'),
                   initialValue: _selectedTitluUniversitar,
                   isExpanded: true,
-                  style: const TextStyle(
-                    color: AuthShell.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  dropdownColor: Colors.white,
                   icon: _dropdownArrowIcon(),
                   decoration: _fieldDecoration(
                     'Titlu universitar',
@@ -1154,22 +1167,25 @@ class _RegisterPageState extends State<RegisterPage> {
                       .toList(),
                   onChanged: (value) =>
                       setState(() => _selectedTitluUniversitar = value),
+                  dropdownColor: const Color(0xFF0B0F1D),
+                  style: const TextStyle(
+                    color: AuthShell.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
                   validator: (value) =>
                       _requiredValidator(value, label: 'Titlu universitar'),
                 ),
               ),
+            const _RegisterSectionLabel('Acorduri'),
             CheckboxListTile(
               value: _acordEmail,
               contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
               activeColor: AuthShell.pulsePurple,
               checkColor: Colors.white,
               title: const Text(
                 'Sunt de acord să primesc email-uri',
-                style: TextStyle(
-                  color: AuthShell.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(color: AuthShell.textPrimary),
               ),
               onChanged: (value) =>
                   setState(() => _acordEmail = value ?? false),
@@ -1177,38 +1193,27 @@ class _RegisterPageState extends State<RegisterPage> {
             CheckboxListTile(
               value: _acordSms,
               contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
               activeColor: AuthShell.pulsePurple,
               checkColor: Colors.white,
               title: const Text(
                 'Sunt de acord să primesc SMS-uri',
-                style: TextStyle(
-                  color: AuthShell.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(color: AuthShell.textPrimary),
               ),
               onChanged: (value) => setState(() => _acordSms = value ?? false),
             ),
             CheckboxListTile(
               value: _gdprConsent,
               contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
               activeColor: AuthShell.pulsePurple,
               checkColor: Colors.white,
               title: const Text(
                 'Accept prelucrarea datelor personale',
-                style: TextStyle(
-                  color: AuthShell.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(color: AuthShell.textPrimary),
               ),
               subtitle: !_gdprConsent && _currentStep == 2
                   ? Text(
                       'Consimțământul GDPR este obligatoriu.',
-                      style: TextStyle(
-                        color: Colors.red.shade700,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: TextStyle(color: Colors.red.shade700),
                     )
                   : null,
               onChanged: (value) =>
@@ -1295,6 +1300,13 @@ class _RegisterPageState extends State<RegisterPage> {
                           colorScheme: Theme.of(context).colorScheme.copyWith(
                             primary: AuthShell.pulsePurple,
                             secondary: AuthShell.pulseOrange,
+                            surface: const Color(0xFF0B0F1D),
+                            onSurface: AuthShell.textPrimary,
+                          ),
+                          canvasColor: Colors.transparent,
+                          textTheme: Theme.of(context).textTheme.apply(
+                            bodyColor: AuthShell.textPrimary,
+                            displayColor: AuthShell.textPrimary,
                           ),
                         ),
                         child: Stepper(

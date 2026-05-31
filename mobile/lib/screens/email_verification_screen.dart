@@ -3,12 +3,18 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../widgets/auth_shell.dart';
 import '../widgets/otp_code_input.dart';
+import 'interests_selection_screen.dart';
 import 'login_screen.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
-  const EmailVerificationScreen({super.key, required this.email});
+  const EmailVerificationScreen({
+    super.key,
+    required this.email,
+    this.password,
+  });
 
   final String email;
+  final String? password;
 
   @override
   State<EmailVerificationScreen> createState() =>
@@ -74,7 +80,14 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         const SnackBar(content: Text('Email confirmat cu succes.')),
       );
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(
+          builder: (_) => widget.password == null || widget.password!.isEmpty
+              ? const LoginScreen()
+              : InterestsSelectionScreen(
+                  email: _currentEmail,
+                  password: widget.password,
+                ),
+        ),
         (route) => false,
       );
     } catch (e) {
@@ -172,7 +185,11 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
@@ -226,16 +243,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: FilledButton(
+                child: AuthPrimaryButton(
                   onPressed: _isResending ? null : _saveChangedEmail,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AuthShell.pulsePurple,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: Text(_isResending ? 'Se trimite...' : 'Retrimite'),
+                  isLoading: _isResending,
+                  label: _isResending ? 'Se trimite...' : 'Retrimite',
                 ),
               ),
             ],
@@ -327,31 +338,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                           ),
                           const SizedBox(height: 20),
                           SizedBox(
-                            height: 54,
-                            child: FilledButton(
+                            child: AuthPrimaryButton(
+                              label: 'Confirmă codul',
+                              isLoading: _isSubmitting,
                               onPressed: _isSubmitting ? null : _verifyCode,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AuthShell.pulsePurple,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                              ),
-                              child: _isSubmitting
-                                  ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.4,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Text(
-                                      'Confirmă codul',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
                             ),
                           ),
                           const SizedBox(height: 12),
