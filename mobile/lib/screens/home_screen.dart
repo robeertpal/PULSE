@@ -535,14 +535,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _savedContentCard(ContentItem item) {
-    return ContentCard.fromModel(
-      item,
-      isSaved: _savedContentIds.contains(item.id),
-      onSaveToggle: _toggleSavedContent,
-      onDetailClosed: _loadSavedContentIds,
-      cardWidth: 220,
-      darkMode: true,
+  Widget _verticalContentCard(ContentItem item) {
+    return SizedBox(
+      width: double.infinity,
+      height: 274,
+      child: ContentCard.fromModel(
+        item,
+        isSaved: _savedContentIds.contains(item.id),
+        onSaveToggle: _toggleSavedContent,
+        onDetailClosed: _loadSavedContentIds,
+        cardWidth: double.infinity,
+        margin: EdgeInsets.zero,
+        darkMode: true,
+      ),
     );
   }
 
@@ -1043,19 +1048,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
           const SizedBox(height: 18),
-          SizedBox(
-            height: 344,
-            child: ListView.separated(
-              clipBehavior: Clip.none,
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: _forYouItems.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 16),
-              itemBuilder: (context, index) {
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              children: List.generate(_forYouItems.length, (index) {
                 final item = _forYouItems[index];
                 final reason = _forYouReasons[item.id];
-                return _buildForYouRecommendation(item, reason);
-              },
+                return Padding(
+                  padding: EdgeInsets.only(
+                    bottom: index == _forYouItems.length - 1 ? 0 : 18,
+                  ),
+                  child: _buildForYouRecommendation(item, reason),
+                );
+              }),
             ),
           ),
         ],
@@ -1151,48 +1156,147 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildForYouRecommendation(ContentItem item, String? reason) {
-    return SizedBox(
-      width: 220,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _verticalContentCard(item),
+        if (reason != null && reason.trim().isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _neonPurple.withValues(alpha: 0.18)),
+            ),
+            child: Text(
+              reason,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _darkMuted,
+                fontSize: 12,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildVerticalContentFeed({
+    required String title,
+    required String emptyMessage,
+    required String emptyIconAsset,
+    required Color categoryColor,
+    required List<ContentItem> items,
+  }) {
+    final countLabel = items.length == 1
+        ? '1 material disponibil'
+        : '${items.length} materiale disponibile';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            height: 252,
-            child: ContentCard.fromModel(
-              item,
-              isSaved: _savedContentIds.contains(item.id),
-              onSaveToggle: _toggleSavedContent,
-              onDetailClosed: _loadSavedContentIds,
-              cardWidth: 220,
-              margin: EdgeInsets.zero,
-              darkMode: true,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: categoryColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: categoryColor.withValues(alpha: 0.26),
+                  ),
+                ),
+                child: Center(
+                  child: SvgPicture.asset(
+                    emptyIconAsset,
+                    width: 22,
+                    height: 22,
+                    colorFilter: ColorFilter.mode(
+                      categoryColor,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _darkText,
+                        fontSize: 25,
+                        fontWeight: FontWeight.w900,
+                        height: 1.08,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      items.isEmpty
+                          ? 'Feed vertical premium'
+                          : 'Feed vertical · $countLabel',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _darkMuted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: 54,
+            height: 2,
+            decoration: BoxDecoration(
+              color: categoryColor.withValues(alpha: 0.86),
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: [
+                BoxShadow(
+                  color: categoryColor.withValues(alpha: 0.38),
+                  blurRadius: 14,
+                  spreadRadius: -3,
+                ),
+              ],
             ),
           ),
-          if (reason != null && reason.trim().isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.07),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _neonPurple.withValues(alpha: 0.18),
-                ),
-              ),
-              child: Text(
-                reason,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: _darkMuted,
-                  fontSize: 12,
-                  height: 1.35,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+          const SizedBox(height: 20),
+          if (items.isEmpty)
+            _buildForYouMessageCard(
+              icon: Icons.search_off_rounded,
+              title: title,
+              message: emptyMessage,
+            )
+          else
+            Column(
+              children: List.generate(items.length, (index) {
+                final item = items[index];
+                return Padding(
+                  padding: EdgeInsets.only(
+                    bottom: index == items.length - 1 ? 0 : 18,
+                  ),
+                  child: _verticalContentCard(item),
+                );
+              }),
             ),
-          ],
         ],
       ),
     );
@@ -1929,21 +2033,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
         child: Padding(
           padding: const EdgeInsets.only(top: 8.0, bottom: 100.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildContentFilters(),
-              ContentSection(
-                title: title,
-                actionText: '',
-                emptyMessage: emptyMessage,
-                emptyIconAsset: emptyIconAsset,
-                categoryColor: categoryColor,
-                darkMode: true,
-                onActionTap: () {},
-                children: items.map(_savedContentCard).toList(),
-              ),
-            ],
+          child: _buildVerticalContentFeed(
+            title: title,
+            emptyMessage: emptyMessage,
+            emptyIconAsset: emptyIconAsset,
+            categoryColor: categoryColor,
+            items: items,
           ),
         ),
       ),
