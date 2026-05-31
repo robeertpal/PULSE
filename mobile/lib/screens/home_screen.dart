@@ -19,10 +19,13 @@ import '../widgets/featured_card.dart';
 import '../widgets/content_section.dart';
 import '../widgets/content_card.dart';
 import '../widgets/advertisement_feed_slot.dart';
+import '../widgets/auth_shell.dart';
 import '../widgets/skeleton_loading.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.showOnboardingWelcome = false});
+
+  final bool showOnboardingWelcome;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -66,6 +69,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _forYouGeneratedWithAi = false;
   bool _filtersExpanded = false;
   int _contentRequestId = 0;
+  bool _didShowOnboardingWelcome = false;
   String? _errorMessage;
   String? _forYouErrorMessage;
   String _doctorName = 'Medic';
@@ -123,6 +127,125 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _loadDoctorName();
     _loadUnreadNotificationsCount();
     _loadForYouRecommendations();
+
+    if (widget.showOnboardingWelcome) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showOnboardingWelcomeDialogOnce();
+      });
+    }
+  }
+
+  Future<void> _showOnboardingWelcomeDialogOnce() async {
+    if (!mounted || _didShowOnboardingWelcome) return;
+    _didShowOnboardingWelcome = true;
+    await Future<void>.delayed(const Duration(milliseconds: 320));
+    if (!mounted) return;
+
+    final cachedName = await _authStorage.getUserName();
+    final displayName = (cachedName != null && cachedName.trim().isNotEmpty)
+        ? cachedName.trim()
+        : _doctorName.trim();
+    final firstName = displayName.isNotEmpty && displayName != 'Medic'
+        ? displayName.split(RegExp(r'\s+')).first
+        : '';
+    final title = firstName.isNotEmpty
+        ? 'Bun venit, $firstName!'
+        : 'Bun venit în PULSE!';
+
+    if (!mounted) return;
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Închide',
+      barrierColor: Colors.black.withValues(alpha: 0.62),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Material(
+              color: Colors.transparent,
+              child: FrostedAuthCard(
+                padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 410),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: AuthShell.pulseGradient,
+                            boxShadow: [
+                              BoxShadow(
+                                color: AuthShell.pulsePurple.withValues(
+                                  alpha: 0.3,
+                                ),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.auto_awesome_rounded,
+                            color: Colors.white,
+                            size: 27,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: AuthShell.textPrimary,
+                          fontSize: 24,
+                          height: 1.1,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Contul tău este pregătit. Am personalizat experiența pe baza intereselor selectate.',
+                        style: TextStyle(
+                          color: AuthShell.textSecondary,
+                          fontSize: 15,
+                          height: 1.45,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      AuthPrimaryButton(
+                        label: 'Începem',
+                        onPressed: () => Navigator.of(context).maybePop(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.96, end: 1).animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _loadUnreadNotificationsCount() async {

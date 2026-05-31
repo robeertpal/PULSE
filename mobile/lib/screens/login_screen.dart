@@ -30,7 +30,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isSubmitting = false;
   bool _showPassword = false;
-  String? _submitErrorText;
 
   @override
   void dispose() {
@@ -72,7 +71,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() {
       _isSubmitting = true;
-      _submitErrorText = null;
     });
 
     final email = _emailController.text.trim();
@@ -108,9 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _submitErrorText = e.toString().replaceFirst('Exception: ', '');
-      });
+      await showPulseErrorDialog(context, e);
     } finally {
       if (mounted) {
         setState(() {
@@ -190,7 +186,10 @@ class _LoginScreenState extends State<LoginScreen> {
         fontWeight: FontWeight.w600,
         height: 1.2,
       ),
-      errorStyle: const TextStyle(height: 1.25),
+      errorStyle: const TextStyle(
+        color: AuthShell.authErrorColor,
+        height: 1.25,
+      ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
         borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
@@ -205,11 +204,17 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide(color: Colors.red.shade300, width: 1.2),
+        borderSide: const BorderSide(
+          color: AuthShell.authErrorColor,
+          width: 1.2,
+        ),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide(color: Colors.red.shade400, width: 1.3),
+        borderSide: const BorderSide(
+          color: AuthShell.authErrorColor,
+          width: 1.3,
+        ),
       ),
     );
   }
@@ -292,10 +297,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 suffixIcon: _passwordVisibilityButton(),
                               ),
                             ),
-                            if (_submitErrorText != null) ...[
-                              const SizedBox(height: 14),
-                              AuthErrorBox(message: _submitErrorText!),
-                            ],
                             Align(
                               alignment: Alignment.centerRight,
                               child: TextButton(

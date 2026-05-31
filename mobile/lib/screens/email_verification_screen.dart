@@ -92,9 +92,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _otpErrorText = e.toString().replaceFirst('Exception: ', '');
-      });
+      await showPulseErrorDialog(context, e);
+      _resetOtp();
     } finally {
       if (mounted) {
         setState(() {
@@ -120,9 +119,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       _resetOtp();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      await showPulseErrorDialog(context, e);
     } finally {
       if (mounted) {
         setState(() {
@@ -159,9 +156,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _emailErrorText = e.toString().replaceFirst('Exception: ', '');
-      });
+      await showPulseErrorDialog(context, e);
     } finally {
       if (mounted) {
         setState(() {

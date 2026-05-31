@@ -79,6 +79,9 @@ class ApiService {
   String _responseErrorMessage(http.Response response, String fallback) {
     final url = response.request?.url.toString() ?? baseUrl;
     var message = fallback;
+    debugPrint(
+      'Backend error: ${_requestDiagnostics(url: url, statusCode: response.statusCode, body: response.body)}',
+    );
     try {
       final decoded = json.decode(response.body);
       if (decoded is Map<String, dynamic>) {
@@ -86,7 +89,7 @@ class ApiService {
         if (detail is String && detail.isNotEmpty) message = detail;
         final backendMessage = decoded['message'];
         if (backendMessage is String && backendMessage.isNotEmpty) {
-          return '$backendMessage\n${_requestDiagnostics(url: url, statusCode: response.statusCode, body: response.body)}';
+          message = backendMessage;
         }
         final error = decoded['error'];
         if (error is String && error.isNotEmpty) message = error;
@@ -94,7 +97,10 @@ class ApiService {
     } catch (_) {
       // Keep the caller's friendly fallback when the backend body is not JSON.
     }
-    return '$message\n${_requestDiagnostics(url: url, statusCode: response.statusCode, body: response.body)}';
+    if (response.statusCode == 503) {
+      return 'Emailul nu a putut fi trimis momentan. Te rugăm să încerci din nou.';
+    }
+    return message;
   }
 
   Exception _friendlyNetworkException(
@@ -103,19 +109,20 @@ class ApiService {
     String? url,
   }) {
     final requestUrl = url ?? baseUrl;
+    debugPrint(
+      'Network error for $actionLabel: url=$requestUrl type=${error.runtimeType} details=$error',
+    );
     if (error is TimeoutException) {
       return Exception(
-        '$actionLabel durează prea mult.\nURL apelat: $requestUrl\nTip eroare: TimeoutException\nDetalii: Verifică dacă backend-ul rulează pe $baseUrl și încearcă din nou.',
+        'Conexiunea durează prea mult. Te rugăm să încerci din nou.',
       );
     }
     if (error is http.ClientException) {
       return Exception(
-        'Nu mă pot conecta la backend pentru $actionLabel.\nURL apelat: $requestUrl\nTip eroare: ${error.runtimeType}\nDetalii: ${error.message}\nVerifică dacă serverul API rulează pe $baseUrl și dacă pagina Flutter este deschisă cu un URL permis de CORS.',
+        'Nu ne putem conecta momentan. Te rugăm să încerci din nou.',
       );
     }
-    return Exception(
-      '$actionLabel a eșuat.\nURL apelat: $requestUrl\nTip eroare: ${error.runtimeType}\nDetalii: $error',
-    );
+    return Exception('A apărut o eroare. Te rugăm să încerci din nou.');
   }
 
   Future<void> _handleAuthFailure(http.Response response) async {
@@ -131,13 +138,19 @@ class ApiService {
     required String email,
     required String password,
   }) async {
-    final response = await http
-        .post(
-          Uri.parse('$baseUrl/api/login'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'email': email, 'password': password}),
-        )
-        .timeout(const Duration(seconds: 15));
+    late final http.Response response;
+    final url = '$baseUrl/api/login';
+    try {
+      response = await http
+          .post(
+            Uri.parse(url),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email, 'password': password}),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (error) {
+      throw _friendlyNetworkException(error, 'autentificarea', url: url);
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(_responseErrorMessage(response, 'Autentificare eșuată'));
