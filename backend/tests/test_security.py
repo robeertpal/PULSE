@@ -405,7 +405,7 @@ class SecurityTests(unittest.TestCase):
 
         smtp_client.send_message.assert_called_once()
         sent_message = smtp_client.send_message.call_args.args[0]
-        self.assertEqual(sent_message["From"], "pulse.medichub@gmail.com")
+        self.assertEqual(sent_message["From"], "pulse <pulse.medichub@gmail.com>")
         self.assertEqual(sent_message["Reply-To"], "pulse.medichub@gmail.com")
 
     def test_smtp_force_ipv4_errors_clearly_without_ipv4_address(self):
