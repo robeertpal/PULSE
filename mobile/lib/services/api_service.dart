@@ -184,6 +184,63 @@ class ApiService {
     return decoded;
   }
 
+  Future<List<Map<String, dynamic>>> getInterests() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/interests'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut încărca interesele.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Răspuns interese neașteptat.');
+      }
+      return decoded.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      debugPrint('Error fetching interests: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> updateMyInterests({
+    required List<int> interestIds,
+  }) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .put(
+            Uri.parse('$baseUrl/api/me/interests'),
+            headers: {
+              ...headers,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'interest_ids': interestIds}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut salva interesele.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Răspuns actualizare interese neașteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error updating interests: $e');
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> verifyEmailOtp({
     required String email,
     required String otpCode,

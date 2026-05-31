@@ -68,6 +68,10 @@ class UserLogin(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class UserInterestsUpdate(BaseModel):
+    interest_ids: List[int] = Field(default_factory=list)
+
+
 class UserLogout(BaseModel):
     session_token: str = Field(min_length=16, max_length=512)
 
