@@ -54,13 +54,19 @@ class _HomeHeaderState extends State<HomeHeader> {
 
   @override
   Widget build(BuildContext context) {
+    final isCompactMobile = MediaQuery.sizeOf(context).width < 430;
     final primaryText = widget.darkMode ? Colors.white : PulseTheme.textPrimary;
     final secondaryText = widget.darkMode
         ? const Color(0xFFB9C5E4)
         : PulseTheme.textSecondary;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
+      padding: EdgeInsets.fromLTRB(
+        isCompactMobile ? 14 : 20,
+        isCompactMobile ? 6 : 10,
+        isCompactMobile ? 14 : 20,
+        isCompactMobile ? 4 : 8,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -73,7 +79,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                 onTap: widget.onProfileTap,
                 child: _buildAvatar(),
               ),
-              const SizedBox(width: 14),
+              SizedBox(width: isCompactMobile ? 9 : 14),
               // Greeting + Name
               Expanded(
                 child: Column(
@@ -82,17 +88,21 @@ class _HomeHeaderState extends State<HomeHeader> {
                     Text(
                       _getTimeGreeting(),
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: isCompactMobile ? 11 : 13,
                         fontWeight: FontWeight.w500,
                         color: secondaryText,
                         letterSpacing: -0.1,
                       ),
                     ),
-                    const SizedBox(height: 1),
+                    SizedBox(height: isCompactMobile ? 0 : 1),
                     Text(
                       'Dr. ${widget.doctorName}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: widget.darkMode ? 17 : 20,
+                        fontSize: isCompactMobile
+                            ? 14.5
+                            : (widget.darkMode ? 17 : 20),
                         fontWeight: FontWeight.w800,
                         color: primaryText,
                         letterSpacing: -0.5,
@@ -105,19 +115,19 @@ class _HomeHeaderState extends State<HomeHeader> {
               // â”€â”€ Right side action icons â”€â”€
               _buildEmcChip(),
               if (!widget.compactMode) ...[
-                const SizedBox(width: 10),
+                SizedBox(width: isCompactMobile ? 5 : 10),
                 _buildIconButton(
                   'assets/icons/heart.svg',
                   onTap: widget.onSavedTap ?? () {},
                   badgeCount: widget.savedCount,
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: isCompactMobile ? 5 : 8),
                 _buildIconButton(
                   'assets/icons/bell.svg',
                   onTap: widget.onNotificationsTap ?? () {},
                   badgeCount: widget.unreadNotificationsCount,
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: isCompactMobile ? 5 : 8),
                 _buildIconButton(
                   'assets/icons/ellipsis.svg',
                   onTap: () => _showPremiumMenu(context),
@@ -127,18 +137,18 @@ class _HomeHeaderState extends State<HomeHeader> {
             ],
           ),
           if (!widget.compactMode) ...[
-            const SizedBox(height: 16),
+            SizedBox(height: isCompactMobile ? 6 : 12),
             Text(
               'Explorează noutățile medicale de azi.',
               style: TextStyle(
                 color: secondaryText,
                 fontWeight: FontWeight.w500,
-                fontSize: 13.5,
+                fontSize: isCompactMobile ? 11.5 : 13.5,
                 letterSpacing: -0.1,
               ),
             ),
             if (widget.showFilterButton && widget.onFilterTap != null) ...[
-              const SizedBox(height: 10),
+              SizedBox(height: isCompactMobile ? 6 : 8),
               Align(
                 alignment: Alignment.centerRight,
                 child: _buildFilterButton(),
@@ -152,21 +162,24 @@ class _HomeHeaderState extends State<HomeHeader> {
 
   // â”€â”€ Premium Avatar with gradient ring â”€â”€
   Widget _buildAvatar() {
+    final isCompactMobile = MediaQuery.sizeOf(context).width < 430;
+    final size = isCompactMobile ? 34.0 : (widget.darkMode ? 42.0 : 48.0);
+
     return Container(
-      width: widget.darkMode ? 42 : 48,
-      height: widget.darkMode ? 42 : 48,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: PulseTheme.avatarRingGradient,
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
-            blurRadius: 12,
+            blurRadius: isCompactMobile ? 8 : 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(2.5),
+      padding: EdgeInsets.all(isCompactMobile ? 2 : 2.5),
       child: Container(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
@@ -189,6 +202,7 @@ class _HomeHeaderState extends State<HomeHeader> {
   }
 
   Widget _buildAvatarPlaceholder() {
+    final isCompactMobile = MediaQuery.sizeOf(context).width < 430;
     final iconColor = widget.darkMode
         ? const Color(0xFFB9C5E4)
         : PulseTheme.textSecondary;
@@ -196,8 +210,8 @@ class _HomeHeaderState extends State<HomeHeader> {
     return Center(
       child: SvgPicture.asset(
         'assets/icons/people.svg',
-        width: 22,
-        height: 22,
+        width: isCompactMobile ? 17 : 22,
+        height: isCompactMobile ? 17 : 22,
         colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
       ),
     );
@@ -205,10 +219,14 @@ class _HomeHeaderState extends State<HomeHeader> {
 
   // â”€â”€ EMC Points Chip â”€â”€
   Widget _buildEmcChip() {
+    final isCompactMobile = MediaQuery.sizeOf(context).width < 430;
     final textColor = widget.darkMode ? Colors.white : PulseTheme.textPrimary;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: isCompactMobile ? 8 : 12,
+        vertical: isCompactMobile ? 6 : 8,
+      ),
       decoration: BoxDecoration(
         color: widget.darkMode
             ? Colors.white.withValues(alpha: 0.08)
@@ -221,14 +239,18 @@ class _HomeHeaderState extends State<HomeHeader> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SvgPicture.asset('assets/icons/EMC.svg', width: 16, height: 16),
-          const SizedBox(width: 6),
+          SvgPicture.asset(
+            'assets/icons/EMC.svg',
+            width: isCompactMobile ? 13 : 16,
+            height: isCompactMobile ? 13 : 16,
+          ),
+          SizedBox(width: isCompactMobile ? 4 : 6),
           Text(
             '${widget.emcPoints}',
             style: TextStyle(
               color: textColor,
               fontWeight: FontWeight.w800,
-              fontSize: 14,
+              fontSize: isCompactMobile ? 12 : 14,
               letterSpacing: -0.3,
             ),
           ),
@@ -244,14 +266,19 @@ class _HomeHeaderState extends State<HomeHeader> {
     double iconSize = 20,
     int badgeCount = 0,
   }) {
+    final isCompactMobile = MediaQuery.sizeOf(context).width < 430;
     final iconColor = widget.darkMode ? Colors.white : PulseTheme.textPrimary;
+    final buttonSize = isCompactMobile ? 32.0 : 38.0;
+    final effectiveIconSize = iconSize == 4
+        ? iconSize
+        : (isCompactMobile ? 17.0 : iconSize);
 
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        width: 38,
-        height: 38,
+          width: buttonSize,
+          height: buttonSize,
         decoration: BoxDecoration(
           color: widget.darkMode
               ? Colors.white.withValues(alpha: 0.08)
@@ -275,15 +302,15 @@ class _HomeHeaderState extends State<HomeHeader> {
             Center(
               child: SvgPicture.asset(
                 iconPath,
-                height: iconSize,
-                width: iconSize,
+                height: effectiveIconSize,
+                width: effectiveIconSize,
                 colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
               ),
             ),
             if (badgeCount > 0)
               Positioned(
-                right: badgeCount > 9 ? 3 : 7,
-                top: 5,
+                right: isCompactMobile ? 2 : (badgeCount > 9 ? 3 : 7),
+                top: isCompactMobile ? 3 : 5,
                 child: Container(
                   constraints: const BoxConstraints(minWidth: 16),
                   height: 16,
@@ -319,6 +346,7 @@ class _HomeHeaderState extends State<HomeHeader> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Premium Dropdown Menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Widget _buildFilterButton() {
+    final isCompactMobile = MediaQuery.sizeOf(context).width < 430;
     final borderColor = widget.filtersExpanded
         ? PulseTheme.primaryLight.withValues(alpha: 0.52)
         : Colors.white.withValues(alpha: 0.14);
@@ -332,7 +360,10 @@ class _HomeHeaderState extends State<HomeHeader> {
       child: AnimatedContainer(
         duration: PulseTheme.animFast,
         curve: PulseTheme.animCurve,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        padding: EdgeInsets.symmetric(
+          horizontal: isCompactMobile ? 10 : 12,
+          vertical: isCompactMobile ? 7 : 9,
+        ),
         decoration: BoxDecoration(
           color: widget.darkMode
               ? backgroundColor
@@ -357,23 +388,23 @@ class _HomeHeaderState extends State<HomeHeader> {
             Icon(
               Icons.tune_rounded,
               color: widget.darkMode ? Colors.white : PulseTheme.textPrimary,
-              size: 17,
+              size: isCompactMobile ? 15 : 17,
             ),
-            const SizedBox(width: 7),
+            SizedBox(width: isCompactMobile ? 5 : 7),
             Text(
               'Filtreaz\u0103',
               style: TextStyle(
                 color: widget.darkMode ? Colors.white : PulseTheme.textPrimary,
-                fontSize: 12.5,
+                fontSize: isCompactMobile ? 11.5 : 12.5,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.1,
               ),
             ),
             if (widget.activeFilterCount > 0) ...[
-              const SizedBox(width: 7),
+              SizedBox(width: isCompactMobile ? 5 : 7),
               Container(
-                constraints: const BoxConstraints(minWidth: 18),
-                height: 18,
+                constraints: BoxConstraints(minWidth: isCompactMobile ? 16 : 18),
+                height: isCompactMobile ? 16 : 18,
                 padding: const EdgeInsets.symmetric(horizontal: 5),
                 decoration: BoxDecoration(
                   gradient: PulseTheme.primaryGradient,
@@ -391,7 +422,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                 ),
               ),
             ],
-            const SizedBox(width: 4),
+            SizedBox(width: isCompactMobile ? 2 : 4),
             AnimatedRotation(
               turns: widget.filtersExpanded ? 0.5 : 0,
               duration: PulseTheme.animFast,
@@ -400,7 +431,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                 color: widget.darkMode
                     ? const Color(0xFFB9C5E4)
                     : PulseTheme.textSecondary,
-                size: 17,
+                size: isCompactMobile ? 15 : 17,
               ),
             ),
           ],
