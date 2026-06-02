@@ -754,17 +754,41 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
   }
 
+  Widget _buildScrollableHomeHeader({required bool showFilterButton}) {
+    return _animatedSection(
+      0,
+      HomeHeader(
+        doctorName: _doctorName,
+        avatarUrl: '',
+        emcPoints: _emcPoints,
+        savedCount: _savedContentIds.length,
+        unreadNotificationsCount: _unreadNotificationsCount,
+        onNotificationsTap: _openNotifications,
+        onSavedTap: _openSavedContent,
+        onProfileTap: _openProfile,
+        onLogoutTap: _logout,
+        darkMode: true,
+        onFilterTap: _toggleFiltersPanel,
+        activeFilterCount: _activeFilterCount,
+        filtersExpanded: _filtersExpanded,
+        showFilterButton:
+            showFilterButton &&
+            (_categories.isNotEmpty || _specializations.isNotEmpty),
+      ),
+    );
+  }
+
   Widget _buildHomeTabSwitch() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
           child: Container(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.all(3),
             decoration: _glassDecoration(
-              radius: 22,
+              radius: 18,
               opacity: 0.08,
               borderColor: _neonPurple.withValues(alpha: 0.20),
             ),
@@ -805,9 +829,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: AnimatedContainer(
         duration: PulseTheme.animFast,
         curve: PulseTheme.animCurve,
-        height: 48,
+        height: 42,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(15),
           gradient: isSelected
               ? LinearGradient(
                   begin: Alignment.topLeft,
@@ -825,7 +849,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             curve: PulseTheme.animCurve,
             style: TextStyle(
               color: isSelected ? _darkText : _darkMuted.withValues(alpha: 0.62),
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
               letterSpacing: 0.6,
             ),
@@ -842,16 +866,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           ? _darkText
                           : _darkMuted.withValues(alpha: 0.62),
                     ),
-                    const SizedBox(width: 7),
+                    const SizedBox(width: 6),
                     Text(label),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 AnimatedContainer(
                   duration: PulseTheme.animFast,
                   curve: PulseTheme.animCurve,
-                  width: isSelected ? 34 : 0,
-                  height: 2.5,
+                  width: isSelected ? 30 : 0,
+                  height: 2,
                   decoration: BoxDecoration(
                     gradient: isSelected ? PulseTheme.primaryGradient : null,
                     borderRadius: BorderRadius.circular(999),
@@ -1953,38 +1977,38 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Main Home Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Widget _buildHomeContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return PageView(
+      controller: _homeTabPageController,
+      onPageChanged: _handleHomeTabPageChanged,
       children: [
-        const SizedBox(height: 2),
-        _buildHomeTabSwitch(),
-        Expanded(
-          child: PageView(
-            controller: _homeTabPageController,
-            onPageChanged: _handleHomeTabPageChanged,
+        RefreshIndicator(
+          color: _darkText,
+          onRefresh: _loadData,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildScrollableHomeHeader(showFilterButton: true),
+                _buildHomeTabSwitch(),
+                _buildContentFilters(),
+                _buildAcasaFeed(),
+              ],
+            ),
+          ),
+        ),
+        SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              RefreshIndicator(
-                color: _darkText,
-                onRefresh: _loadData,
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(
-                    parent: BouncingScrollPhysics(),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildContentFilters(),
-                      _buildAcasaFeed(),
-                    ],
-                  ),
-                ),
-              ),
-              SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: BouncingScrollPhysics(),
-                ),
-                child: _buildForYouRecommendationsContent(),
-              ),
+              _buildScrollableHomeHeader(showFilterButton: false),
+              _buildHomeTabSwitch(),
+              _buildForYouRecommendationsContent(),
             ],
           ),
         ),
@@ -2063,29 +2087,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         bottom: false,
         child: Column(
           children: [
-            // Partea de acces de sus (Template global)
-            _animatedSection(
-              0,
-              HomeHeader(
-                doctorName: _doctorName,
-                avatarUrl: '',
-                emcPoints: _emcPoints,
-                savedCount: _savedContentIds.length,
-                unreadNotificationsCount: _unreadNotificationsCount,
-                onNotificationsTap: _openNotifications,
-                onSavedTap: _openSavedContent,
-                onProfileTap: _openProfile,
-                onLogoutTap: _logout,
-                darkMode: true,
-                onFilterTap: _toggleFiltersPanel,
-                activeFilterCount: _activeFilterCount,
-                filtersExpanded: _filtersExpanded,
-                showFilterButton:
-                    _selectedIndex == 0 &&
-                    _selectedHomeTab == 0 &&
-                    (_categories.isNotEmpty || _specializations.isNotEmpty),
-              ),
-            ),
             // Conținutul paginii cu tranziții
             Expanded(
               child: FadeIndexedStack(
