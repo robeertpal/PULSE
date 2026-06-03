@@ -32,6 +32,7 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
 from pypdf import PdfReader
 from sqlalchemy import bindparam, func, text
 from sqlalchemy.exc import IntegrityError
@@ -51,6 +52,7 @@ from schemas import (
     UserInterestsUpdate,
     UserLogin,
     UserLogout,
+    UserChangePassword,
 )
 
 try:
@@ -1430,11 +1432,13 @@ def _resolve_interest_ids(db: Session, interest_ids: List[int]) -> List[int]:
 def _ensure_registration_schema(db: Session) -> None:
     statements = [
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS correspondence_address TEXT",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS birth_date VARCHAR(50)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS institution_id INTEGER",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS cuim VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS cod_parafa VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS professional_registration_code VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS titlu_universitar VARCHAR(255)",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS photo_url TEXT",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS specialization_secondary_name VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS acord_email BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS acord_sms BOOLEAN NOT NULL DEFAULT FALSE",
@@ -4212,8 +4216,34 @@ def logout_user(payload: UserLogout, db: Session = Depends(get_db)):
     return {"message": "Logout successful"}
 
 
-@app.get("/api/me/profile")
-def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+class MyProfileUpdate(BaseModel):
+    email: Optional[str] = Field(default=None, max_length=255)
+    first_name: Optional[str] = Field(default=None, max_length=255)
+    last_name: Optional[str] = Field(default=None, max_length=255)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    birth_date: Optional[str] = Field(default=None, max_length=50)
+    correspondence_address: Optional[str] = Field(default=None, max_length=1000)
+    city_id: Optional[int] = Field(default=None, gt=0)
+    occupation_id: Optional[int] = Field(default=None, gt=0)
+    specialization_id: Optional[int] = Field(default=None, gt=0)
+    specialization_secondary_name: Optional[str] = Field(default=None, max_length=255)
+    professional_grade_id: Optional[int] = Field(default=None, gt=0)
+    institution_id: Optional[int] = Field(default=None, gt=0)
+    cuim: Optional[str] = Field(default=None, max_length=255)
+    cod_parafa: Optional[str] = Field(default=None, max_length=255)
+    titlu_universitar: Optional[str] = Field(default=None, max_length=255)
+
+
+class MyPaymentMethodCreate(BaseModel):
+    card_brand: Optional[str] = Field(default=None, max_length=50)
+    card_last4: str = Field(min_length=4, max_length=4)
+    exp_month: int = Field(ge=1, le=12)
+    exp_year: int = Field(ge=2024, le=2100)
+    is_default: bool = False
+
+
+def get_my_profile_payload(user_id: int, db: Session):
+    _ensure_registration_schema(db)
     user_model = get_user_model()
     user = db.query(user_model).filter(user_model.id == user_id).first()
     if user is None:
@@ -4227,6 +4257,7 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
             joinedload(models.UserProfile.occupation),
             joinedload(models.UserProfile.specialization),
             joinedload(models.UserProfile.professional_grade),
+            joinedload(models.UserProfile.institution),
         )
         .first()
     )
@@ -4245,12 +4276,394 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
         "total_emc_points": getattr(profile, "total_emc_points", 0) or 0,
         "email": user.email,
         "phone": profile.phone,
+        "photo_url": getattr(profile, "photo_url", None),
+        "avatar_url": getattr(profile, "photo_url", None),
+        "profile_photo_url": getattr(profile, "photo_url", None),
         "county_name": profile.city.county.name if getattr(profile.city, "county", None) else None,
         "city_name": profile.city.name if profile.city else None,
         "occupation_name": profile.occupation.name if profile.occupation else None,
         "specialization_name": profile.specialization.name if profile.specialization else None,
         "professional_grade_name": profile.professional_grade.name if profile.professional_grade else None,
+        "institution_name": profile.institution.name if profile.institution else None,
     }
+
+
+@app.get("/api/me/profile")
+def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    return get_my_profile_payload(user_id, db)
+
+
+@app.patch("/api/me/profile")
+def update_my_profile(
+    payload: MyProfileUpdate,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _ensure_registration_schema(db)
+    user_model = get_user_model()
+    user = db.query(user_model).filter(user_model.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    profile = (
+        db.query(models.UserProfile)
+        .filter(models.UserProfile.user_id == user_id)
+        .first()
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    data = pydantic_dump(payload, exclude_unset=True)
+
+    if "email" in data and data["email"] is not None:
+        email = data["email"].strip().lower()
+        if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$", email):
+            raise HTTPException(status_code=400, detail="Adresa de email nu este validă.")
+        existing = (
+            db.query(user_model)
+            .filter(user_model.email == email, user_model.id != user_id)
+            .first()
+        )
+        if existing is not None:
+            raise HTTPException(status_code=409, detail="Emailul este deja folosit.")
+        user.email = email
+
+    if "city_id" in data and data["city_id"] is not None:
+        city = db.query(models.City).filter(models.City.id == data["city_id"]).first()
+        if city is None:
+            raise HTTPException(status_code=422, detail="Orașul selectat nu este valid.")
+
+    lookup_checks = [
+        ("occupation_id", models.Occupation, "Rolul selectat nu este valid."),
+        ("specialization_id", models.Specialization, "Specializarea selectată nu este validă."),
+        ("professional_grade_id", models.ProfessionalGrade, "Gradul profesional selectat nu este valid."),
+        ("institution_id", models.Institution, "Instituția selectată nu este validă."),
+    ]
+    for field, model, message in lookup_checks:
+        if field in data and data[field] is not None:
+            exists = db.query(model).filter(model.id == data[field]).first()
+            if exists is None:
+                raise HTTPException(status_code=422, detail=message)
+
+    profile_fields = {
+        "first_name",
+        "last_name",
+        "phone",
+        "birth_date",
+        "correspondence_address",
+        "city_id",
+        "occupation_id",
+        "specialization_id",
+        "specialization_secondary_name",
+        "professional_grade_id",
+        "institution_id",
+        "cuim",
+        "cod_parafa",
+        "titlu_universitar",
+    }
+    for field in profile_fields:
+        if field in data:
+            value = data[field]
+            if isinstance(value, str):
+                value = value.strip()
+            setattr(profile, field, value)
+
+    now = datetime.utcnow()
+    profile.updated_at = now
+    user.updated_at = now
+    db.commit()
+
+    return get_my_profile_payload(user_id, db)
+
+
+@app.post("/api/me/change-password")
+def change_my_password(
+    payload: UserChangePassword,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    user_model = get_user_model()
+    user = db.query(user_model).filter(user_model.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Utilizatorul nu a fost găsit")
+
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Parola curentă este incorectă")
+
+    user.password_hash = hash_password(payload.new_password)
+    user.updated_at = datetime.utcnow()
+    db.commit()
+    return {"message": "Parola a fost schimbată cu succes"}
+
+
+@app.post("/api/me/profile/avatar")
+async def upload_my_profile_avatar(
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    require_rate_limit(request, "profile_avatar_upload", "WRITE_RATE_LIMIT_PER_MINUTE", 20)
+    _ensure_registration_schema(db)
+    profile = (
+        db.query(models.UserProfile)
+        .filter(models.UserProfile.user_id == user_id)
+        .first()
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    upload_result = await handle_upload(
+        file=file,
+        folder=f"user-avatars/{user_id}",
+        max_size=IMAGE_MAX_SIZE,
+        allowed_content_types=IMAGE_ALLOWED_CONTENT_TYPES,
+        allowed_extensions=IMAGE_ALLOWED_EXTENSIONS,
+    )
+    profile.photo_url = upload_result["url"]
+    profile.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        **upload_result,
+        "photo_url": profile.photo_url,
+        "avatar_url": profile.photo_url,
+        "profile_photo_url": profile.photo_url,
+    }
+
+
+def _emc_source_title(db: Session, source_type: str, source_id: int) -> Optional[str]:
+    normalized = (source_type or "").strip().lower()
+    if normalized == "course":
+        row = (
+            db.query(models.ContentItem.title)
+            .join(models.Course, models.Course.content_item_id == models.ContentItem.id)
+            .filter(models.Course.id == source_id)
+            .first()
+        )
+        return row[0] if row else None
+    if normalized == "event":
+        row = (
+            db.query(models.ContentItem.title)
+            .join(models.Event, models.Event.content_item_id == models.ContentItem.id)
+            .filter(models.Event.id == source_id)
+            .first()
+        )
+        return row[0] if row else None
+    if normalized == "publication":
+        row = (
+            db.query(models.Publication.name, models.ContentItem.title)
+            .join(models.ContentItem, models.Publication.content_item_id == models.ContentItem.id)
+            .filter(models.Publication.id == source_id)
+            .first()
+        )
+        if row:
+            return row[0] or row[1]
+    return None
+
+
+@app.get("/api/me/emc-activity")
+def get_my_emc_activity(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(models.UserEmcPointLog)
+        .filter(models.UserEmcPointLog.user_id == user_id)
+        .order_by(models.UserEmcPointLog.awarded_at.desc().nullslast(), models.UserEmcPointLog.id.desc())
+        .all()
+    )
+    return [
+        {
+            "id": row.id,
+            "source_type": row.source_type,
+            "source_id": row.source_id,
+            "source_title": _emc_source_title(db, row.source_type, row.source_id) or "Activitate EMC",
+            "points": row.points,
+            "awarded_at": serialize_value(row.awarded_at),
+        }
+        for row in rows
+    ]
+
+
+def _serialize_payment_method(row: models.UserPaymentMethod) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "provider": row.provider,
+        "provider_customer_id": row.provider_customer_id,
+        "provider_payment_method_id": row.provider_payment_method_id,
+        "card_brand": row.card_brand,
+        "card_last4": row.card_last4,
+        "exp_month": row.exp_month,
+        "exp_year": row.exp_year,
+        "is_default": row.is_default,
+        "created_at": serialize_value(row.created_at),
+        "updated_at": serialize_value(row.updated_at),
+    }
+
+
+@app.get("/api/me/payment-methods")
+def get_my_payment_methods(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .order_by(
+            models.UserPaymentMethod.is_default.desc(),
+            models.UserPaymentMethod.created_at.desc(),
+            models.UserPaymentMethod.id.desc(),
+        )
+        .all()
+    )
+    return [_serialize_payment_method(row) for row in rows]
+
+
+@app.post("/api/me/payment-methods")
+def add_my_payment_method(
+    payload: MyPaymentMethodCreate,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    card_last4 = payload.card_last4.strip()
+    if not re.fullmatch(r"\d{4}", card_last4):
+        raise HTTPException(status_code=422, detail="Ultimele 4 cifre ale cardului nu sunt valide.")
+
+    brand = (payload.card_brand or "Card").strip()[:50] or "Card"
+    active_count = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .count()
+    )
+    make_default = payload.is_default or active_count == 0
+    now = datetime.utcnow()
+
+    if make_default:
+        (
+            db.query(models.UserPaymentMethod)
+            .filter(
+                models.UserPaymentMethod.user_id == user_id,
+                models.UserPaymentMethod.deleted_at.is_(None),
+            )
+            .update(
+                {
+                    models.UserPaymentMethod.is_default: False,
+                    models.UserPaymentMethod.updated_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
+
+    payment_method = models.UserPaymentMethod(
+        user_id=user_id,
+        provider="demo",
+        provider_customer_id=f"demo_cus_{user_id}",
+        provider_payment_method_id=f"demo_pm_{int(time.time())}_{secrets.token_hex(4)}",
+        card_brand=brand,
+        card_last4=card_last4,
+        exp_month=payload.exp_month,
+        exp_year=payload.exp_year,
+        is_default=make_default,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(payment_method)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Metoda de plată există deja.")
+    db.refresh(payment_method)
+    return _serialize_payment_method(payment_method)
+
+
+@app.delete("/api/me/payment-methods/{method_id}")
+def delete_my_payment_method(
+    method_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    payment_method = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.id == method_id,
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if payment_method is None:
+        raise HTTPException(status_code=404, detail="Cardul nu a fost găsit.")
+
+    was_default = payment_method.is_default
+    now = datetime.utcnow()
+    payment_method.deleted_at = now
+    payment_method.updated_at = now
+
+    if was_default:
+        replacement = (
+            db.query(models.UserPaymentMethod)
+            .filter(
+                models.UserPaymentMethod.user_id == user_id,
+                models.UserPaymentMethod.id != method_id,
+                models.UserPaymentMethod.deleted_at.is_(None),
+            )
+            .order_by(models.UserPaymentMethod.created_at.desc(), models.UserPaymentMethod.id.desc())
+            .first()
+        )
+        if replacement is not None:
+            replacement.is_default = True
+            replacement.updated_at = now
+
+    db.commit()
+    return {"success": True}
+
+
+@app.patch("/api/me/payment-methods/{method_id}/default")
+def set_default_payment_method(
+    method_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    payment_method = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.id == method_id,
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if payment_method is None:
+        raise HTTPException(status_code=404, detail="Cardul nu a fost găsit.")
+
+    now = datetime.utcnow()
+    (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .update(
+            {
+                models.UserPaymentMethod.is_default: False,
+                models.UserPaymentMethod.updated_at: now,
+            },
+            synchronize_session=False,
+        )
+    )
+    payment_method.is_default = True
+    payment_method.updated_at = now
+    db.commit()
+    db.refresh(payment_method)
+    return _serialize_payment_method(payment_method)
 
 
 @app.put("/api/me/interests")
@@ -4561,7 +4974,6 @@ def get_audit_logs(db: Session = Depends(get_db)):
 # ADMIN ENDPOINTS
 # -------------------------
 
-from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Dict, Optional, List
 from sqlalchemy import func
 
@@ -4691,6 +5103,17 @@ def validate_upload_file(file: UploadFile, allowed_content_types: set, allowed_e
     content_type = (file.content_type or "").lower()
     sanitized_name = sanitize_filename(file.filename or "upload")
     extension = Path(sanitized_name).suffix.lower()
+    inferred_image_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }
+
+    if content_type in {"", "application/octet-stream"}:
+        inferred = inferred_image_types.get(extension)
+        if inferred in allowed_content_types:
+            content_type = inferred
 
     if content_type not in allowed_content_types:
         allowed = ", ".join(sorted(allowed_content_types))
