@@ -102,6 +102,11 @@ class UserActivityCreate(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
+class FollowTargetPayload(BaseModel):
+    target_type: str = Field(min_length=1, max_length=50)
+    target_id: int = Field(gt=0)
+
+
 class EmailVerificationVerify(BaseModel):
     email: EmailStr
     otp_code: str = Field(min_length=6, max_length=6)
@@ -175,9 +180,3 @@ class PasswordResetConfirm(BaseModel):
 class AdminLogin(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
-
-
-class UserChangePassword(BaseModel):
-    current_password: str = Field(min_length=1, max_length=128)
-    new_password: str = Field(min_length=8, max_length=128)
-

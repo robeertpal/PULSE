@@ -80,12 +80,15 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
   int? _selectedYear;
   bool _isSaved = false;
   bool _isSaving = false;
+  bool _isFollowingPublication = false;
+  bool _isPublicationFollowLoading = false;
   List<ContentItem> _morePublications = [];
 
   @override
   void initState() {
     super.initState();
     _trackPublicationOpen();
+    _loadPublicationFollowStatus();
     _loadIssues();
   }
 
@@ -102,6 +105,72 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _loadPublicationFollowStatus() async {
+    try {
+      final isFollowing = await _apiService.getFollowStatus(
+        targetType: 'publication',
+        targetId: widget.publicationId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _isFollowingPublication = isFollowing;
+      });
+    } catch (e) {
+      debugPrint('Publication follow status ignored: $e');
+    }
+  }
+
+  Future<void> _togglePublicationFollow() async {
+    if (_isPublicationFollowLoading) return;
+    final wasFollowing = _isFollowingPublication;
+    setState(() {
+      _isFollowingPublication = !wasFollowing;
+      _isPublicationFollowLoading = true;
+    });
+
+    try {
+      if (wasFollowing) {
+        await _apiService.unfollowTarget(
+          targetType: 'publication',
+          targetId: widget.publicationId,
+        );
+      } else {
+        await _apiService.followTarget(
+          targetType: 'publication',
+          targetId: widget.publicationId,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wasFollowing
+                ? 'Nu mai urm\u0103re\u0219ti publica\u021bia.'
+                : 'Urm\u0103re\u0219ti publica\u021bia.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isFollowingPublication = wasFollowing;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nu am putut actualiza follow-ul.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPublicationFollowLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadIssues() async {
@@ -455,6 +524,43 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
     );
   }
 
+  Widget _buildPublicationFollowButton() {
+    return OutlinedButton.icon(
+      onPressed: _isPublicationFollowLoading ? null : _togglePublicationFollow,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: _isFollowingPublication
+            ? Colors.white
+            : PulseTheme.magazineContent,
+        side: BorderSide(
+          color: _isFollowingPublication
+              ? Colors.white.withValues(alpha: 0.24)
+              : PulseTheme.magazineContent.withValues(alpha: 0.44),
+        ),
+        backgroundColor: _isFollowingPublication
+            ? Colors.white.withValues(alpha: 0.14)
+            : Colors.black.withValues(alpha: 0.20),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      ),
+      icon: _isPublicationFollowLoading
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(
+              _isFollowingPublication
+                  ? Icons.check_circle_rounded
+                  : Icons.add_circle_outline_rounded,
+              size: 18,
+            ),
+      label: Text(
+        _isFollowingPublication ? 'Following' : 'Follow',
+        style: const TextStyle(fontWeight: FontWeight.w900),
+      ),
+    );
+  }
+
   Widget _buildHero() {
     final topInset = MediaQuery.of(context).padding.top;
     final subscriptionUrl = _subscriptionUrl;
@@ -601,6 +707,11 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                           color: PulseTheme.magazineContent,
                         ),
                     ],
+                  ),
+                  const SizedBox(height: 14),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _buildPublicationFollowButton(),
                   ),
                   if (subscriptionUrl != null) ...[
                     const SizedBox(height: 18),
@@ -2644,7 +2755,11 @@ class _PremiumPill extends StatelessWidget {
   final String? svgAsset;
   final Color color;
 
-  const _PremiumPill({required this.label, this.svgAsset, required this.color});
+  const _PremiumPill({
+    required this.label,
+    this.svgAsset,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
