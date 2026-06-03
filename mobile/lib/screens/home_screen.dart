@@ -19,6 +19,7 @@ import '../widgets/content_section.dart';
 import '../widgets/content_card.dart';
 import '../widgets/advertisement_feed_slot.dart';
 import '../widgets/auth_shell.dart';
+import '../widgets/pulse_animated_background.dart';
 import '../widgets/skeleton_loading.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -2574,10 +2575,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             colors: [_darkCanvas, _darkCanvasAlt, _darkViolet],
           ),
         ),
-        child: SafeArea(
-        bottom: false,
-        child: Column(
+        child: Stack(
           children: [
+            const Positioned.fill(child: PulseAnimatedBackground()),
+            SafeArea(
+              bottom: false,
+              child: Column(
+                children: [
             if (_selectedIndex == 0) _buildStickyHomeHeader(),
             // Conținutul paginii cu tranziții
             Expanded(
@@ -2617,9 +2621,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ],
               ),
             ),
+                ],
+              ),
+            ),
           ],
         ),
-      ),
       ),
     );
   }
