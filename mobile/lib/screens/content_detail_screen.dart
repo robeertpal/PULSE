@@ -59,6 +59,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   String? _eventRegistrationStatus;
   String? _eventTicketCode;
   bool _isRegisteringEvent = false;
+  bool _isCourseEnrolled = false;
+  bool _isEnrollingCourse = false;
 
   @override
   void initState() {
@@ -130,6 +132,17 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           _eventTicketCode = regData['ticket_code'];
         } catch (e) {
           debugPrint('Error checking event registration: $e');
+        }
+      }
+
+      if (item.contentType == 'course' && item.courseId != null) {
+        try {
+          final enrollmentData = await _apiService.checkCourseEnrollment(
+            item.courseId!,
+          );
+          _isCourseEnrolled = enrollmentData['is_enrolled'] == true;
+        } catch (e) {
+          debugPrint('Error checking course enrollment: $e');
         }
       }
 
@@ -1297,6 +1310,290 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     }
   }
 
+  Widget _buildCourseEnrollmentButton(ContentItem item) {
+    if (item.courseId == null) return const SizedBox.shrink();
+
+    if (_isCourseEnrolled) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: PulseTheme.courseContent.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: PulseTheme.courseContent.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildAssetIcon(
+              _checkIcon,
+              color: PulseTheme.courseContent,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            const Flexible(
+              child: Text(
+                'Ești înscris la acest curs',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: PulseTheme.courseContent,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              PulseTheme.courseContent,
+              PulseTheme.courseContent.withValues(alpha: 0.78),
+            ],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: InkWell(
+          onTap: _isEnrollingCourse
+              ? null
+              : () => _confirmCourseEnrollment(item),
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: Center(
+              child: _isEnrollingCourse
+                  ? const SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.black,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text(
+                      'Înscrie-te',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmCourseEnrollment(ContentItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: PulseTheme.courseContent.withValues(alpha: 0.26),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildAssetIcon(
+                _courseIcon,
+                color: PulseTheme.courseContent,
+                size: 38,
+              ),
+              const SizedBox(height: 22),
+              const Text(
+                'Confirmă înscrierea',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Ești sigur că vrei să te înscrii la acest curs? Vei primi curând pe adresa contului detalii legate de acest curs.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 15,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text(
+                        'Anulează',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(14),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              PulseTheme.courseContent,
+                              Color(0xFFF97316),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: InkWell(
+                          onTap: () => Navigator.of(context).pop(true),
+                          borderRadius: BorderRadius.circular(14),
+                          child: const SizedBox(
+                            height: 48,
+                            child: Center(
+                              child: Text(
+                                'Confirmă înscrierea',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed == true) {
+      await _handleCourseEnrollment(item);
+    }
+  }
+
+  Future<void> _handleCourseEnrollment(ContentItem item) async {
+    if (item.courseId == null) return;
+
+    setState(() => _isEnrollingCourse = true);
+    try {
+      await _apiService.enrollInCourse(item.courseId!);
+      if (!mounted) return;
+      setState(() {
+        _isCourseEnrolled = true;
+        _isEnrollingCourse = false;
+      });
+      _showCourseEnrollmentSuccessPopup();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isEnrollingCourse = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+      );
+    }
+  }
+
+  void _showCourseEnrollmentSuccessPopup() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: PulseTheme.courseContent.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildAssetIcon(
+                _checkIcon,
+                color: PulseTheme.courseContent,
+                size: 42,
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Te-ai înscris cu succes',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Te-ai înscris la curs cu succes. Vei primi curând pe adresa contului detalii legate de acest curs.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 15,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 28),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: PulseTheme.courseContent,
+                  foregroundColor: Colors.black,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Închide',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showSuccessPopup(String message, {String? ticketCode}) {
     showDialog(
       context: context,
@@ -1491,6 +1788,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           const SizedBox(height: 20),
           _buildProgress(item.progressPercent!),
         ],
+        const SizedBox(height: 24),
+        _buildCourseEnrollmentButton(item),
         const SizedBox(height: 24),
         _buildPanelSectionTitle('Despre curs'),
         const SizedBox(height: 14),

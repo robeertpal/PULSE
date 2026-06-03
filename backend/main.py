@@ -1829,15 +1829,19 @@ def serialize_content_card(item):
 
     if item.course:
         data["course"] = {
+            "id": item.course.id,
             "emc_credits": item.course.emc_credits,
             "provider": item.course.provider,
+            "valid_from": serialize_value(item.course.valid_from),
             "valid_until": serialize_value(item.course.valid_until),
             "enrollment_url": item.course.enrollment_url,
         }
         data.update(
             {
+                "course_id": item.course.id,
                 "emc_credits": item.course.emc_credits,
                 "provider": item.course.provider,
+                "valid_from": data["course"]["valid_from"],
                 "valid_until": data["course"]["valid_until"],
             }
         )
@@ -3161,8 +3165,21 @@ def register_for_event(
         event = db.query(models.Event).filter(models.Event.id == event_id).first()
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
-            
-        if event.price_type != models.PriceTypeEnum.free and (event.price_amount or 0) > 0:
+
+        price_data = get_current_price_by_event_id(db, event_id)
+        current_price_type = (
+            price_data.get("current_price_type") if price_data else event.price_type
+        )
+        current_price_amount = (
+            price_data.get("current_price_amount") if price_data else event.price_amount
+        )
+        is_currently_free = (
+            current_price_type == "free"
+            or current_price_type == models.PriceTypeEnum.free
+            or (current_price_amount or 0) == 0
+        )
+
+        if not is_currently_free:
             raise HTTPException(status_code=400, detail="Acest eveniment este cu plată.")
 
         existing = db.query(models.UserEventRegistration).filter(
@@ -4879,25 +4896,27 @@ def get_my_tickets(
 ):
     try:
         rows = (
-            db.query(models.UserEventRegistration, models.Event)
-            .join(models.Event, models.UserEventRegistration.event_id == models.Event.id)
-            .options(
-                joinedload(models.Event.content_item),
-                joinedload(models.Event.city)
+            db.query(
+                models.UserEventRegistration,
+                models.Event,
+                models.ContentItem,
+                models.City,
             )
+            .outerjoin(models.Event, models.UserEventRegistration.event_id == models.Event.id)
+            .outerjoin(models.ContentItem, models.ContentItem.id == models.Event.content_item_id)
+            .outerjoin(models.City, models.City.id == models.Event.city_id)
             .filter(
                 models.UserEventRegistration.user_id == user_id,
-                models.UserEventRegistration.ticket_code.isnot(None)
             )
-            .order_by(models.UserEventRegistration.registered_at.desc())
+            .order_by(
+                models.UserEventRegistration.registered_at.desc().nullslast(),
+                models.UserEventRegistration.id.desc(),
+            )
             .all()
         )
         
         result = []
-        for reg, event in rows:
-            content_item = event.content_item if event else None
-            city = event.city if event else None
-            
+        for reg, event, content_item, city in rows:
             result.append({
                 "registration_id": reg.id,
                 "event_id": reg.event_id,
@@ -4914,6 +4933,138 @@ def get_my_tickets(
                 "thumbnail_url": content_item.thumbnail_url if content_item else None,
             })
         return result
+    except Exception as e:
+        raise_safe_error(e)
+
+
+@app.get("/api/courses/{course_id}/enrollment-status")
+def get_course_enrollment_status(
+    course_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        course = db.query(models.Course).filter(models.Course.id == course_id).first()
+        if not course:
+            raise HTTPException(status_code=404, detail="Cursul nu există.")
+
+        enrollment = (
+            db.query(models.UserCourse)
+            .filter(
+                models.UserCourse.user_id == user_id,
+                models.UserCourse.course_id == course_id,
+            )
+            .first()
+        )
+        if enrollment:
+            return {
+                "is_enrolled": True,
+                "status": enrollment.status.value if enrollment.status else None,
+                "user_course_id": enrollment.id,
+                "progress_percent": enrollment.progress_percent,
+                "enrolled_at": serialize_value(enrollment.enrolled_at),
+            }
+        return {
+            "is_enrolled": False,
+            "status": None,
+            "user_course_id": None,
+            "progress_percent": None,
+            "enrolled_at": None,
+        }
+    except Exception as e:
+        raise_safe_error(e)
+
+
+@app.post("/api/courses/{course_id}/enroll")
+def enroll_in_course(
+    course_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        course = db.query(models.Course).filter(models.Course.id == course_id).first()
+        if not course:
+            raise HTTPException(status_code=404, detail="Cursul nu există.")
+
+        existing = (
+            db.query(models.UserCourse)
+            .filter(
+                models.UserCourse.user_id == user_id,
+                models.UserCourse.course_id == course_id,
+            )
+            .first()
+        )
+        if existing:
+            return {
+                "message": "Ești deja înscris la acest curs.",
+                "is_enrolled": True,
+                "status": existing.status.value if existing.status else None,
+                "user_course_id": existing.id,
+                "progress_percent": existing.progress_percent,
+                "enrolled_at": serialize_value(existing.enrolled_at),
+            }
+
+        enrollment = models.UserCourse(
+            user_id=user_id,
+            course_id=course_id,
+            progress_percent=0,
+            enrolled_at=datetime.now(timezone.utc),
+            status=models.UserCourseStatus.enrolled,
+        )
+        db.add(enrollment)
+        db.commit()
+        db.refresh(enrollment)
+        return {
+            "message": "Înscriere reușită.",
+            "is_enrolled": True,
+            "status": enrollment.status.value,
+            "user_course_id": enrollment.id,
+            "progress_percent": enrollment.progress_percent,
+            "enrolled_at": serialize_value(enrollment.enrolled_at),
+        }
+    except Exception as e:
+        db.rollback()
+        raise_safe_error(e)
+
+
+@app.get("/api/me/courses")
+def get_my_courses(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        rows = (
+            db.query(models.UserCourse, models.Course, models.ContentItem)
+            .join(models.Course, models.Course.id == models.UserCourse.course_id)
+            .join(models.ContentItem, models.ContentItem.id == models.Course.content_item_id)
+            .filter(models.UserCourse.user_id == user_id)
+            .order_by(
+                models.UserCourse.enrolled_at.desc().nullslast(),
+                models.UserCourse.id.desc(),
+            )
+            .all()
+        )
+
+        return [
+            {
+                "user_course_id": user_course.id,
+                "course_id": course.id,
+                "content_item_id": content_item.id,
+                "course_title": content_item.title,
+                "short_description": content_item.short_description,
+                "provider": course.provider,
+                "emc_credits": course.emc_credits,
+                "valid_from": serialize_value(course.valid_from),
+                "valid_until": serialize_value(course.valid_until),
+                "progress_percent": user_course.progress_percent,
+                "status": user_course.status.value if user_course.status else None,
+                "enrolled_at": serialize_value(user_course.enrolled_at),
+                "hero_image_url": content_item.hero_image_url,
+                "thumbnail_url": content_item.thumbnail_url,
+                "content_type": serialize_value(content_item.content_type),
+            }
+            for user_course, course, content_item in rows
+        ]
     except Exception as e:
         raise_safe_error(e)
 
