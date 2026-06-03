@@ -1,43 +1,47 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 class PulseTheme {
   // â”€â”€ Core Palette â”€â”€
-  static const Color primary = Color(0xFF2563EB);
-  static const Color primaryLight = Color(0xFF60A5FA);
-  static const Color primaryDark = Color(0xFF1D4ED8);
-  static const Color background = Color(0xFF050B1A);
-  static const Color surface = Color(0xFF0D1730);
-  static const Color surfaceElevated = Color(0xFF101B37);
-  static const Color textPrimary = Color(0xFFF8FBFF);
-  static const Color textSecondary = Color(0xFFB9C5E4);
-  static const Color textTertiary = Color(0xFF7180A6);
-  static const Color border = Color(0xFF263455);
-  static const Color borderLight = Color(0xFF1A2746);
+  static const Color primary = Color(0xFFFF2D72);
+  static const Color primaryLight = Color(0xFFFF8A3D);
+  static const Color primaryDark = Color(0xFFC91F55);
+  static const Color background = Color(0xFF090A10);
+  static const Color surface = Color(0xFF15131B);
+  static const Color surfaceElevated = Color(0xFF1E1722);
+  static const Color textPrimary = Color(0xFFFFFAFC);
+  static const Color textSecondary = Color(0xFFCFC4D0);
+  static const Color textTertiary = Color(0xFF8D8090);
+  static const Color border = Color(0xFF342632);
+  static const Color borderLight = Color(0xFF261D27);
 
   // â”€â”€ Category Palette â”€â”€
-  static const Color magazineContent = Color(0xFF10B981);
-  static const Color courseContent = Color(0xFF8B5CF6);
-  static const Color eventContent = Color(0xFFF59E0B);
-  static const Color newsContent = Color(0xFFEF4444);
+  static const Color magazineContent = Color(0xFFFF5DA2);
+  static const Color courseContent = Color(0xFFFF8A3D);
+  static const Color eventContent = Color(0xFFFFB347);
+  static const Color newsContent = Color(0xFFFF4B4B);
 
   // â”€â”€ Gradient Definitions â”€â”€
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF2563EB), Color(0xFF7C3AED)],
+    colors: [Color(0xFFFF2D72), Color(0xFFFF8A3D)],
   );
 
   static const LinearGradient shimmerGradient = LinearGradient(
     begin: Alignment(-1.0, -0.3),
     end: Alignment(1.0, 0.3),
-    colors: [Color(0xFF101B37), Color(0xFF1A2746), Color(0xFF101B37)],
+    colors: [
+      Color(0xFF15131B),
+      Color(0xFF241A22),
+      Color(0xFF15131B),
+    ],
     stops: [0.0, 0.5, 1.0],
   );
 
   static const LinearGradient avatarRingGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF2563EB), Color(0xFF8B5CF6), Color(0xFFEC4899)],
+    colors: [Color(0xFFFF2D72), Color(0xFFFF6B4A), Color(0xFFFFB347)],
   );
 
   // â”€â”€ Shadows â”€â”€
@@ -93,7 +97,7 @@ class PulseTheme {
       scaffoldBackgroundColor: background,
       colorScheme: const ColorScheme.dark(
         primary: primaryLight,
-        secondary: Color(0xFF8B5CF6),
+        secondary: Color(0xFFFF8A3D),
         surface: surface,
         onSurface: textPrimary,
         error: Color(0xFFEF4444),
@@ -142,8 +146,16 @@ class PulseTheme {
           fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
-        bodyLarge: TextStyle(color: textPrimary, fontSize: 16, height: 1.5),
-        bodyMedium: TextStyle(color: textSecondary, fontSize: 14, height: 1.45),
+        bodyLarge: TextStyle(
+          color: textPrimary,
+          fontSize: 16,
+          height: 1.5,
+        ),
+        bodyMedium: TextStyle(
+          color: textSecondary,
+          fontSize: 14,
+          height: 1.45,
+        ),
         labelLarge: TextStyle(
           color: textPrimary,
           fontSize: 14,
@@ -162,3 +174,4 @@ class PulseTheme {
     );
   }
 }
+

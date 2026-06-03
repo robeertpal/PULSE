@@ -31,14 +31,14 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  static const Color _darkCanvas = Color(0xFF050B1A);
-  static const Color _darkCanvasAlt = Color(0xFF081226);
-  static const Color _darkViolet = Color(0xFF120B2E);
-  static const Color _darkSurface = Color(0xFF0D1730);
-  static const Color _darkText = Color(0xFFF8FBFF);
-  static const Color _darkMuted = Color(0xFFB9C5E4);
-  static const Color _neonBlue = Color(0xFF38BDF8);
-  static const Color _neonPurple = Color(0xFF8B5CF6);
+  static const Color _darkCanvas = Color(0xFF090A10);
+  static const Color _darkCanvasAlt = Color(0xFF111018);
+  static const Color _darkViolet = Color(0xFF1B1017);
+  static const Color _darkSurface = Color(0xFF15131B);
+  static const Color _darkText = Color(0xFFFFFAFC);
+  static const Color _darkMuted = Color(0xFFCFC4D0);
+  static const Color _neonBlue = Color(0xFFFF8A3D);
+  static const Color _neonPurple = Color(0xFFFF2D72);
 
   int _selectedIndex = 0; // Bottom nav index
   int _selectedHomeTab = 0;
@@ -518,7 +518,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _verticalContentCard(ContentItem item) {
     return SizedBox(
       width: double.infinity,
-      height: 274,
+      height: 260,
       child: ContentCard.fromModel(
         item,
         isSaved: _savedContentIds.contains(item.id),
@@ -1676,25 +1676,69 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       children: [
         _verticalContentCard(item),
         if (reason != null && reason.trim().isNotEmpty) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.07),
-              borderRadius: BorderRadius.circular(16),
+              color: _darkSurface.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(18),
               border: Border.all(color: _neonPurple.withValues(alpha: 0.18)),
+              boxShadow: [
+                BoxShadow(
+                  color: _neonPurple.withValues(alpha: 0.10),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                  spreadRadius: -14,
+                ),
+              ],
             ),
-            child: Text(
-              reason,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: _darkMuted,
-                fontSize: 12,
-                height: 1.35,
-                fontWeight: FontWeight.w700,
-              ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    gradient: PulseTheme.primaryGradient,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.auto_awesome_rounded,
+                    color: Colors.white,
+                    size: 15,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'De ce recomand\u0103m',
+                        style: TextStyle(
+                          color: _darkText,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        reason,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _darkMuted,
+                          fontSize: 12,
+                          height: 1.34,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -2290,7 +2334,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             onSaveToggle: _toggleSavedContent,
             onItemTap: _openContentItem,
             darkMode: true,
-            height: 222,
+            height: 210,
             viewportFraction: 0.94,
           ),
         ),
@@ -2650,10 +2694,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           vertical: 10,
         ),
         decoration: BoxDecoration(
-          color: isSelected
-              ? _neonPurple.withValues(alpha: 0.18)
-              : Colors.transparent,
+          color: isSelected ? null : Colors.transparent,
+          gradient: isSelected ? PulseTheme.primaryGradient : null,
           borderRadius: BorderRadius.circular(22),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: _neonPurple.withValues(alpha: 0.30),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                    spreadRadius: -10,
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

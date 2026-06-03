@@ -328,19 +328,19 @@ class _ContentCardState extends State<ContentCard>
 
   Widget _buildCardBody() {
     final cardColor = widget.darkMode
-        ? const Color(0xFF101A33).withValues(alpha: 0.70)
+        ? const Color(0xFF17131B).withValues(alpha: 0.78)
         : PulseTheme.surface;
     final borderColor = widget.darkMode
-        ? Colors.white.withValues(alpha: 0.10)
+        ? Colors.white.withValues(alpha: 0.09)
         : PulseTheme.border.withValues(alpha: 0.6);
     final titleColor = widget.darkMode ? Colors.white : PulseTheme.textPrimary;
     final subtitleColor = widget.darkMode
-        ? const Color(0xFFB9C5E4)
+        ? PulseTheme.textSecondary
         : PulseTheme.textSecondary;
-    final imageHeight = widget.darkMode ? 104.0 : 120.0;
-    final cardRadius = widget.darkMode ? 22.0 : 24.0;
+    final imageHeight = widget.darkMode ? 96.0 : 120.0;
+    final cardRadius = widget.darkMode ? 20.0 : 24.0;
     final contentPadding = widget.darkMode
-        ? const EdgeInsets.fromLTRB(14, 13, 14, 14)
+        ? const EdgeInsets.fromLTRB(14, 12, 14, 13)
         : const EdgeInsets.all(16.0);
 
     return ScaleTransition(
@@ -355,15 +355,15 @@ class _ContentCardState extends State<ContentCard>
           boxShadow: [
             BoxShadow(
               color: widget.darkMode
-                  ? widget.categoryColor.withValues(alpha: 0.20)
+                  ? PulseTheme.primary.withValues(alpha: 0.16)
                   : widget.categoryColor.withValues(alpha: 0.08),
-              blurRadius: widget.darkMode ? 26 : 20,
+              blurRadius: widget.darkMode ? 24 : 20,
               offset: Offset(0, widget.darkMode ? 10 : 8),
-              spreadRadius: -2,
+              spreadRadius: -8,
             ),
             BoxShadow(
               color: Colors.black.withValues(
-                alpha: widget.darkMode ? 0.32 : 0.03,
+                alpha: widget.darkMode ? 0.36 : 0.03,
               ),
               blurRadius: widget.darkMode ? 24 : 10,
               offset: Offset(0, widget.darkMode ? 8 : 4),
@@ -385,10 +385,10 @@ class _ContentCardState extends State<ContentCard>
                     end: Alignment.bottomRight,
                     colors: [
                       widget.categoryColor.withValues(
-                        alpha: widget.darkMode ? 0.26 : 0.12,
+                        alpha: widget.darkMode ? 0.22 : 0.12,
                       ),
-                      widget.categoryColor.withValues(
-                        alpha: widget.darkMode ? 0.08 : 0.04,
+                      PulseTheme.primaryLight.withValues(
+                        alpha: widget.darkMode ? 0.10 : 0.04,
                       ),
                     ],
                   ),
@@ -423,13 +423,13 @@ class _ContentCardState extends State<ContentCard>
                         ),
                         decoration: BoxDecoration(
                           color: widget.categoryColor.withValues(
-                            alpha: widget.darkMode ? 0.18 : 0.1,
+                            alpha: widget.darkMode ? 0.16 : 0.1,
                           ),
                           borderRadius: BorderRadius.circular(999),
                           border: widget.darkMode
                               ? Border.all(
                                   color: widget.categoryColor.withValues(
-                                    alpha: 0.28,
+                                    alpha: 0.30,
                                   ),
                                 )
                               : null,
