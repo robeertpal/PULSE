@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/ad_item.dart';
@@ -419,6 +420,35 @@ class ApiService {
     }
   }
 
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      headers['Content-Type'] = 'application/json';
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/me/change-password'),
+            headers: headers,
+            body: jsonEncode({
+              'current_password': currentPassword,
+              'new_password': newPassword,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception(
+          _responseErrorMessage(response, 'Schimbarea parolei a esuat'),
+        );
+      }
+    } catch (error) {
+      throw _friendlyNetworkException(error, 'schimbarea parolei');
+    }
+  }
+
   Future<Map<String, dynamic>> getMyProfile() async {
     try {
       final headers = await _buildAuthHeaders();
@@ -440,6 +470,250 @@ class ApiService {
       return decoded;
     } catch (e) {
       debugPrint('Error fetching profile: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> updateMyProfile(
+    Map<String, dynamic> changes,
+  ) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .patch(
+            Uri.parse('$baseUrl/api/me/profile'),
+            headers: {...headers, 'Content-Type': 'application/json'},
+            body: jsonEncode(changes),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut salva profilul.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns actualizare profil neasteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error updating profile: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadMyProfileAvatar({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/api/me/profile/avatar'),
+      );
+      request.headers.addAll(headers);
+      request.files.add(
+        http.MultipartFile.fromBytes('file', bytes, filename: fileName),
+      );
+
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 30),
+      );
+      final response = await http.Response.fromStream(streamedResponse);
+
+      await _handleAuthFailure(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut incarca poza de profil.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns upload avatar neasteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error uploading profile avatar: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getMyEmcActivity() async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/me/emc-activity'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut incarca activitatea EMC.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Raspuns activitate EMC neasteptat.');
+      }
+      return decoded.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      debugPrint('Error fetching EMC activity: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getMyPayments() async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/me/payments'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut incarca tranzactiile.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Raspuns tranzactii neasteptat.');
+      }
+      return decoded.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      debugPrint('Error fetching payments: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getMyPaymentMethods() async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/me/payment-methods'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut incarca metodele de plata.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Raspuns metode de plata neasteptat.');
+      }
+      return decoded.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      debugPrint('Error fetching payment methods: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> addMyPaymentMethod({
+    required String cardBrand,
+    required String cardLast4,
+    required int expMonth,
+    required int expYear,
+    bool isDefault = false,
+  }) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/me/payment-methods'),
+            headers: {...headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'card_brand': cardBrand,
+              'card_last4': cardLast4,
+              'exp_month': expMonth,
+              'exp_year': expYear,
+              'is_default': isDefault,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut salva cardul.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns adaugare card neasteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error adding payment method: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteMyPaymentMethod(int id) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .delete(
+            Uri.parse('$baseUrl/api/me/payment-methods/$id'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut sterge cardul.'),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error deleting payment method: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> setDefaultMyPaymentMethod(int id) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .patch(
+            Uri.parse('$baseUrl/api/me/payment-methods/$id/default'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut seta cardul implicit.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns card implicit neasteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error setting default payment method: $e');
       rethrow;
     }
   }
@@ -1233,5 +1507,32 @@ class ApiService {
       debugPrint('Error fetching ads: $e');
       rethrow;
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getMyTickets() async {
+    final url = '$baseUrl/api/me/tickets';
+    final headers = await _buildAuthHeaders();
+    late final http.Response response;
+    try {
+      response = await http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(const Duration(seconds: 15));
+    } catch (error) {
+      throw _friendlyNetworkException(error, 'incarcarea biletelor', url: url);
+    }
+
+    await _handleAuthFailure(response);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        _responseErrorMessage(response, 'Eroare la incarcarea biletelor.'),
+      );
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! List) {
+      throw Exception('Raspuns neasteptat pentru bilete.');
+    }
+    return decoded.whereType<Map<String, dynamic>>().toList();
   }
 }
