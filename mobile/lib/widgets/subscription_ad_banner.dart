@@ -1,14 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 
 class SubscriptionAdBanner extends StatelessWidget {
   final String imageUrl;
 
-  const SubscriptionAdBanner({
-    super.key,
-    required this.imageUrl,
-  });
+  const SubscriptionAdBanner({super.key, required this.imageUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +68,7 @@ class SubscriptionAdBanner extends StatelessWidget {
                   ),
                 ),
               ),
-              
+
               // Curent
               Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -81,7 +78,10 @@ class SubscriptionAdBanner extends StatelessWidget {
                   children: [
                     // Badge "PULSE Premium"
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: PulseTheme.primary.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
@@ -100,7 +100,7 @@ class SubscriptionAdBanner extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    
+
                     // Main Text
                     const Text(
                       'Deblochează\nPotențialul Tău Medical',
@@ -112,12 +112,15 @@ class SubscriptionAdBanner extends StatelessWidget {
                         letterSpacing: -0.3,
                       ),
                     ),
-                    
+
                     const SizedBox(height: 14),
-                    
+
                     // "Button"
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: PulseTheme.primary,
                         borderRadius: BorderRadius.circular(20),
@@ -126,7 +129,7 @@ class SubscriptionAdBanner extends StatelessWidget {
                             color: PulseTheme.primary.withValues(alpha: 0.4),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
-                          )
+                          ),
                         ],
                       ),
                       child: Row(
@@ -163,4 +166,3 @@ class SubscriptionAdBanner extends StatelessWidget {
     );
   }
 }
-

@@ -1,7 +1,7 @@
 import os
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_security.db")
 os.environ.setdefault("ENVIRONMENT", "development")
@@ -150,6 +150,268 @@ class SecurityTests(unittest.TestCase):
 
         self.assertFalse(sent)
         self.assertEqual(len(fake_db.added), 1)
+
+    def test_smtp_config_accepts_render_email_env_names(self):
+        with patch.dict(
+            os.environ,
+            {
+                "EMAIL_PROVIDER": "smtp",
+                "SMTP_HOST": "smtp.example.com",
+                "SMTP_PORT": "587",
+                "SMTP_USER": "smtp-user@example.com",
+                "SMTP_PASSWORD": "secret",
+                "SMTP_FROM": "Pulse <no-reply@example.com>",
+            },
+            clear=True,
+        ):
+            config = main.get_smtp_config()
+
+        self.assertEqual(config.provider, "smtp")
+        self.assertEqual(config.host, "smtp.example.com")
+        self.assertEqual(config.port, 587)
+        self.assertEqual(config.email_from, "Pulse <no-reply@example.com>")
+        self.assertEqual(config.from_env_name, "SMTP_FROM")
+        self.assertTrue(config.use_starttls)
+        self.assertFalse(config.use_ssl)
+
+    def test_brevo_smtp_config_defaults_and_sender_name(self):
+        with patch.dict(
+            os.environ,
+            {
+                "EMAIL_PROVIDER": "brevo_smtp",
+                "SMTP_USER": "login@smtp-brevo.com",
+                "SMTP_PASSWORD": "secret",
+                "EMAIL_FROM": "pulse.medichub@gmail.com",
+                "SMTP_FROM": "fallback@example.com",
+                "EMAIL_FROM_NAME": "PULSE",
+                "EMAIL_REPLY_TO": "reply@example.com",
+            },
+            clear=True,
+        ):
+            config = main.get_smtp_config()
+
+        self.assertEqual(config.provider, "brevo_smtp")
+        self.assertEqual(config.host, "smtp-relay.brevo.com")
+        self.assertEqual(config.port, 587)
+        self.assertEqual(config.email_from, "pulse.medichub@gmail.com")
+        self.assertEqual(config.from_env_name, "EMAIL_FROM")
+        self.assertEqual(config.sender_header, "PULSE <pulse.medichub@gmail.com>")
+        self.assertEqual(config.email_reply_to, "reply@example.com")
+        self.assertTrue(config.use_starttls)
+        self.assertFalse(config.use_ssl)
+        self.assertFalse(config.force_ipv4)
+
+    def test_brevo_api_sends_via_https_not_smtp(self):
+        response = MagicMock()
+        response.status_code = 201
+        response.text = '{"messageId":"abc-123"}'
+        response.json.return_value = {"messageId": "abc-123"}
+
+        with patch.dict(
+            os.environ,
+            {
+                "EMAIL_PROVIDER": "brevo_api",
+                "BREVO_API_KEY": "brevo-key",
+                "BREVO_API_TIMEOUT_SECONDS": "7",
+                "EMAIL_FROM": "pulse.medichub@gmail.com",
+                "EMAIL_FROM_NAME": "PULSE",
+                "EMAIL_REPLY_TO": "reply@example.com",
+            },
+            clear=True,
+        ), patch("main.httpx.post", return_value=response) as post, patch("main.smtplib.SMTP") as smtp, patch(
+            "main.smtplib.SMTP_SSL"
+        ) as smtp_ssl:
+            main.send_email(
+                email_type="test",
+                to_email="doctor@example.com",
+                subject="Test subject",
+                text_content="Plain text",
+                html_content="<p>HTML</p>",
+            )
+
+        smtp.assert_not_called()
+        smtp_ssl.assert_not_called()
+        post.assert_called_once()
+        _, kwargs = post.call_args
+        self.assertEqual(kwargs["headers"]["api-key"], "brevo-key")
+        self.assertEqual(kwargs["timeout"], 7)
+        self.assertEqual(kwargs["json"]["sender"], {"name": "PULSE", "email": "pulse.medichub@gmail.com"})
+        self.assertEqual(kwargs["json"]["to"], [{"email": "doctor@example.com"}])
+        self.assertEqual(kwargs["json"]["replyTo"], {"email": "reply@example.com"})
+        self.assertEqual(kwargs["json"]["subject"], "Test subject")
+        self.assertEqual(kwargs["json"]["htmlContent"], "<p>HTML</p>")
+        self.assertEqual(kwargs["json"]["textContent"], "Plain text")
+
+    def test_brevo_api_non_2xx_raises_with_status_and_body(self):
+        response = MagicMock()
+        response.status_code = 401
+        response.text = '{"message":"invalid api key"}'
+        response.json.return_value = {"message": "invalid api key"}
+
+        with patch.dict(
+            os.environ,
+            {
+                "EMAIL_PROVIDER": "brevo_api",
+                "BREVO_API_KEY": "bad-key",
+                "EMAIL_FROM": "pulse.medichub@gmail.com",
+            },
+            clear=True,
+        ), patch("main.httpx.post", return_value=response):
+            with self.assertRaisesRegex(RuntimeError, "status 401"):
+                main.send_email(
+                    email_type="test",
+                    to_email="doctor@example.com",
+                    subject="Test",
+                    text_content="Plain",
+                    html_content="<p>HTML</p>",
+                )
+
+    def test_brevo_api_requires_api_key_and_email_from(self):
+        with patch.dict(os.environ, {"EMAIL_PROVIDER": "brevo_api"}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "BREVO_API_KEY"):
+                main.send_email(
+                    email_type="test",
+                    to_email="doctor@example.com",
+                    subject="Test",
+                    text_content="Plain",
+                    html_content="<p>HTML</p>",
+                )
+
+    def test_bool_env_parses_false_values_as_false(self):
+        false_values = ["false", "0", "no", "off", ""]
+        for value in false_values:
+            with self.subTest(value=value), patch.dict(os.environ, {"SMTP_FORCE_IPV4": value}, clear=True):
+                self.assertFalse(main.parse_bool_env("SMTP_FORCE_IPV4", True))
+
+    def test_smtp_port_465_uses_ssl_without_starttls(self):
+        smtp_client = MagicMock()
+
+        with patch.dict(
+            os.environ,
+            {
+                "SMTP_HOST": "smtp.example.com",
+                "SMTP_PORT": "465",
+                "SMTP_USER": "smtp-user@example.com",
+                "SMTP_PASSWORD": "secret",
+                "FROM_EMAIL": "no-reply@example.com",
+                "SMTP_FORCE_IPV4": "false",
+            },
+            clear=True,
+        ), patch("main.smtplib.SMTP_SSL", return_value=smtp_client) as smtp_ssl, patch(
+            "main.smtplib.SMTP"
+        ) as smtp_plain, patch("main.ssl.create_default_context", return_value=MagicMock()) as ssl_context:
+            main.send_smtp_email(
+                email_type="test",
+                to_email="doctor@example.com",
+                subject="Test",
+                text_content="Test",
+                html_content="<p>Test</p>",
+            )
+
+        smtp_ssl.assert_called_once_with("smtp.example.com", 465, timeout=20, context=ssl_context.return_value)
+        smtp_plain.assert_not_called()
+        smtp_client.starttls.assert_not_called()
+        smtp_client.login.assert_called_once_with("smtp-user@example.com", "secret")
+        self.assertTrue(smtp_client.send_message.called)
+        smtp_client.quit.assert_called_once()
+
+    def test_ipv4_smtp_ssl_socket_wraps_ipv4_with_sni(self):
+        ssl_context = MagicMock()
+        smtp = main.IPv4SMTP_SSL.__new__(main.IPv4SMTP_SSL)
+        smtp.context = ssl_context
+
+        with patch(
+            "main.socket.getaddrinfo",
+            return_value=[(None, None, None, "", ("142.250.102.109", 465))],
+        ) as getaddrinfo, patch(
+            "main.socket.create_connection",
+            return_value=MagicMock(),
+        ) as create_connection:
+            smtp._get_socket("smtp.example.com", 465, 20)
+
+        getaddrinfo.assert_called_once_with("smtp.example.com", 465, main.socket.AF_INET, main.socket.SOCK_STREAM)
+        create_connection.assert_called_once_with(("142.250.102.109", 465), 20)
+        ssl_context.wrap_socket.assert_called_once_with(create_connection.return_value, server_hostname="smtp.example.com")
+
+    def test_ipv4_smtp_socket_uses_ipv4_address(self):
+        smtp = main.IPv4SMTP.__new__(main.IPv4SMTP)
+
+        with patch(
+            "main.socket.getaddrinfo",
+            return_value=[(None, None, None, "", ("142.250.102.109", 587))],
+        ) as getaddrinfo, patch(
+            "main.socket.create_connection",
+            return_value=MagicMock(),
+        ) as create_connection:
+            smtp._get_socket("smtp.example.com", 587, 20)
+
+        getaddrinfo.assert_called_once_with("smtp.example.com", 587, main.socket.AF_INET, main.socket.SOCK_STREAM)
+        create_connection.assert_called_once_with(("142.250.102.109", 587), 20)
+
+    def test_smtp_force_ipv4_starttls_flow_uses_ipv4_class(self):
+        smtp_client = MagicMock()
+
+        with patch("main.IPv4SMTP", return_value=smtp_client) as smtp_ipv4, patch.dict(
+            os.environ,
+            {
+                "SMTP_HOST": "smtp.example.com",
+                "SMTP_PORT": "587",
+                "SMTP_USER": "smtp-user@example.com",
+                "SMTP_PASSWORD": "secret",
+                "FROM_EMAIL": "no-reply@example.com",
+                "SMTP_STARTTLS": "true",
+                "SMTP_FORCE_IPV4": "true",
+            },
+            clear=True,
+        ), patch("main.ssl.create_default_context", return_value=MagicMock()) as ssl_context:
+            main.send_smtp_email(
+                email_type="test",
+                to_email="doctor@example.com",
+                subject="Test",
+                text_content="Test",
+                html_content="<p>Test</p>",
+            )
+
+        smtp_ipv4.assert_called_once_with("smtp.example.com", 587, timeout=20)
+        smtp_client.starttls.assert_called_once_with(context=ssl_context.return_value)
+        self.assertEqual(smtp_client.ehlo.call_count, 2)
+        smtp_client.login.assert_called_once_with("smtp-user@example.com", "secret")
+        smtp_client.quit.assert_called_once()
+
+    def test_smtp_quit_failure_after_send_does_not_fail_delivery(self):
+        smtp_client = MagicMock()
+        smtp_client.quit.side_effect = TimeoutError("quit timed out")
+
+        with patch.dict(
+            os.environ,
+            {
+                "EMAIL_PROVIDER": "brevo_smtp",
+                "SMTP_USER": "login@smtp-brevo.com",
+                "SMTP_PASSWORD": "secret",
+                "EMAIL_FROM": "pulse.medichub@gmail.com",
+                "EMAIL_REPLY_TO": "pulse.medichub@gmail.com",
+            },
+            clear=True,
+        ), patch("main.smtplib.SMTP", return_value=smtp_client), patch(
+            "main.ssl.create_default_context", return_value=MagicMock()
+        ):
+            main.send_smtp_email(
+                email_type="test",
+                to_email="doctor@example.com",
+                subject="Test",
+                text_content="Test",
+                html_content="<p>Test</p>",
+            )
+
+        smtp_client.send_message.assert_called_once()
+        sent_message = smtp_client.send_message.call_args.args[0]
+        self.assertEqual(sent_message["From"], "pulse <pulse.medichub@gmail.com>")
+        self.assertEqual(sent_message["Reply-To"], "pulse.medichub@gmail.com")
+
+    def test_smtp_force_ipv4_errors_clearly_without_ipv4_address(self):
+        with patch("main.socket.getaddrinfo", return_value=[]):
+            with self.assertRaisesRegex(RuntimeError, "has no IPv4 address"):
+                main.resolve_smtp_ipv4("smtp.example.com", 587)
 
 
 if __name__ == "__main__":

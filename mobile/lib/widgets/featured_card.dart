@@ -300,7 +300,7 @@ class _FeaturedSlide extends StatelessWidget {
                     Row(
                       children: [
                         _TypeBadge(
-                        label: _labelForType(item.contentType),
+                          label: _labelForType(item.contentType),
                           color: color,
                           contentType: item.contentType,
                           iconOnly: iconOnlyTypeBadge,
@@ -605,9 +605,7 @@ extension _FeaturedCardEmcBadgeContentItemX on ContentItem {
     }
 
     if (contentType == 'publication') {
-      final parsedCredits = _parsePositiveEmcCredits(
-        publicationEmcCreditsText,
-      );
+      final parsedCredits = _parsePositiveEmcCredits(publicationEmcCreditsText);
       if (parsedCredits != null) return '+$parsedCredits';
     }
 

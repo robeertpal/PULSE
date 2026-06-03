@@ -1,20 +1,19 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/pulse_theme.dart';
 
 class PremiumLoadingIndicator extends StatefulWidget {
   final String text;
-  
-  const PremiumLoadingIndicator({
-    super.key,
-    this.text = 'Se pregătește...',
-  });
+
+  const PremiumLoadingIndicator({super.key, this.text = 'Se pregătește...'});
 
   @override
-  State<PremiumLoadingIndicator> createState() => _PremiumLoadingIndicatorState();
+  State<PremiumLoadingIndicator> createState() =>
+      _PremiumLoadingIndicatorState();
 }
 
-class _PremiumLoadingIndicatorState extends State<PremiumLoadingIndicator> with SingleTickerProviderStateMixin {
+class _PremiumLoadingIndicatorState extends State<PremiumLoadingIndicator>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
@@ -54,7 +53,7 @@ class _PremiumLoadingIndicatorState extends State<PremiumLoadingIndicator> with 
                   blurRadius: 30,
                   spreadRadius: 5,
                   offset: const Offset(0, 10),
-                )
+                ),
               ],
             ),
             child: Row(
@@ -107,4 +106,3 @@ class _PremiumLoadingIndicatorState extends State<PremiumLoadingIndicator> with 
     );
   }
 }
-

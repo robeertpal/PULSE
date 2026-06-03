@@ -25,7 +25,7 @@ class AuthStorage {
   Future<bool> isAuthenticated() async {
     final prefs = await SharedPreferences.getInstance();
     final isAuthenticated = prefs.getBool(_isAuthenticatedKey) ?? false;
-    final sessionToken = prefs.getString(_sessionTokenKey);
+    final sessionToken = await getSessionToken();
     return isAuthenticated && sessionToken != null && sessionToken.isNotEmpty;
   }
 

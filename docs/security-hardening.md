@@ -127,6 +127,15 @@ Configurează în Render aceleași valori necesare backend-ului:
 - `ADMIN_USERNAME`: email/user admin pentru ManagementSystem. Necesar local și Render.
 - `ADMIN_PASSWORD_HASH`: hash PBKDF2 pentru parola admin. Necesar local și Render.
 - `ADMIN_SESSION_TTL_MINUTES`: TTL token admin. Necesar local și Render.
+- `EMAIL_PROVIDER=brevo_api`: providerul de email tranzacțional pentru Render. `smtp` și `brevo_smtp` rămân suportate doar ca fallback/local.
+- `BREVO_API_KEY`: cheia Brevo Transactional Email API. Necesar Render.
+- `BREVO_API_TIMEOUT_SECONDS`: timeout HTTPS către Brevo API, implicit `20`.
+- `EMAIL_FROM`: adresa expeditorului verificată în Brevo Senders, de exemplu `pulse.medichub@gmail.com`. Necesar Render.
+- `SMTP_FROM` sau `FROM_EMAIL`: fallback pentru adresa expeditorului dacă `EMAIL_FROM` lipsește.
+- `EMAIL_FROM_NAME=PULSE`: numele afișat în headerul `From`.
+- `EMAIL_REPLY_TO`: adresa pentru răspunsuri, fallback la `EMAIL_FROM`. Recomandat `pulse.medichub@gmail.com`.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_STARTTLS`, `SMTP_USE_SSL`, `SMTP_FORCE_IPV4`: folosite doar pentru providerii fallback SMTP, nu pentru `brevo_api`.
+- `SMTP_TIMEOUT_SECONDS`: timeout conexiune SMTP, implicit `20`.
 - `AZURE_STORAGE_CONNECTION_STRING`: secret Azure Storage. Necesar local și Render, valoarea vine din Azure.
 - `AZURE_STORAGE_CONTAINER_NAME`: container Azure. Necesar local și Render.
 - `AZURE_STORAGE_PUBLIC_BASE_URL`: URL public container/media. Necesar local și Render.
@@ -145,7 +154,10 @@ Configurează în Render aceleași valori necesare backend-ului:
 - Health check path rămâne `/health`.
 - Python version recomandat: 3.12 sau versiunea folosită deja de Render.
 - Activează auto-deploy GitHub pe branch-ul existent.
-- Verifică logurile Render să nu afișeze valori din `.env`.
+- Verifică logurile Render pentru linia `Email config status`: trebuie să arate `provider=brevo_api`, `missing=none`, `brevo_api_key_configured=True`, `from=...`, `reply_to=...` și `brevo_api_timeout_seconds=...`, fără să afișeze cheia.
+- Dacă trimiterea emailului eșuează, logurile backend trebuie să conțină `Brevo API email send failed` cu providerul, recipientul, subiectul, status code/body Brevo când există, durata în milisecunde și excepția exactă.
+- Senderul `EMAIL_FROM` trebuie verificat în Brevo la Senders, altfel Brevo poate refuza trimiterea.
+- Verifică logurile Render să nu afișeze valori secrete din `.env`.
 
 ## Firebase manual
 

@@ -1,10 +1,12 @@
 from collections import defaultdict, deque
 import base64
+from dataclasses import dataclass
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from decimal import Decimal
 from email.message import EmailMessage
+from email.utils import formataddr
 import html
 import enum
 import hashlib
@@ -14,8 +16,13 @@ import json
 import logging
 import os
 import re
+import random
+import string
 import secrets
 import smtplib
+import socket
+import ssl
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -27,6 +34,7 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
 from pypdf import PdfReader
 from sqlalchemy import bindparam, func, text
 from sqlalchemy.exc import IntegrityError
@@ -43,8 +51,10 @@ from schemas import (
     PasswordResetVerify,
     UserCreate,
     UserActivityCreate,
+    UserInterestsUpdate,
     UserLogin,
     UserLogout,
+    UserChangePassword,
 )
 
 try:
@@ -73,6 +83,18 @@ def parse_int_env(name: str, default: int) -> int:
         return default
 
 
+def parse_bool_env(name: str, default: bool = False) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"", "0", "false", "no", "off"}:
+        return False
+    return default
+
+
 def docs_enabled() -> bool:
     return os.getenv("ENABLE_API_DOCS", "true" if not IS_PRODUCTION else "false").strip().lower() == "true"
 
@@ -84,6 +106,261 @@ app = FastAPI(
     openapi_url="/openapi.json" if docs_enabled() else None,
 )
 logger = logging.getLogger("pulse.admin")
+BREVO_TRANSACTIONAL_EMAIL_URL = "https://api.brevo.com/v3/smtp/email"
+
+
+@dataclass(frozen=True)
+class SmtpConfig:
+    provider: str
+    host: str
+    port: int
+    user: str
+    password: str
+    email_from: str
+    email_from_name: str
+    email_reply_to: str
+    brevo_api_key: str
+    brevo_api_timeout_seconds: int
+    use_ssl: bool
+    use_starttls: bool
+    timeout_seconds: int
+    from_env_name: str
+    force_ipv4: bool
+
+    @property
+    def missing_fields(self) -> list[str]:
+        missing = []
+        if self.provider == "brevo_api":
+            if not self.brevo_api_key:
+                missing.append("BREVO_API_KEY")
+            if not self.email_from:
+                missing.append("EMAIL_FROM")
+            return missing
+        if not self.host:
+            missing.append("SMTP_HOST")
+        if not self.port:
+            missing.append("SMTP_PORT")
+        if not self.user:
+            missing.append("SMTP_USER")
+        if not self.password:
+            missing.append("SMTP_PASSWORD")
+        if not self.email_from:
+            missing.append("SMTP_FROM/FROM_EMAIL/EMAIL_FROM")
+        return missing
+
+    @property
+    def sender_header(self) -> str:
+        if self.email_from_name:
+            return formataddr((self.email_from_name, self.email_from))
+        return self.email_from
+
+
+def first_configured_env(names: list[str], default: str = "") -> tuple[str, str]:
+    for name in names:
+        value = os.getenv(name)
+        if value is not None and value.strip():
+            return value.strip(), name
+    return default.strip(), ""
+
+
+def get_smtp_config() -> SmtpConfig:
+    provider = os.getenv("EMAIL_PROVIDER", "smtp").strip().lower() or "smtp"
+    is_brevo_smtp = provider == "brevo_smtp"
+    default_host = "smtp-relay.brevo.com" if is_brevo_smtp else ""
+    smtp_host = os.getenv("SMTP_HOST", default_host).strip()
+    smtp_port = parse_int_env("SMTP_PORT", 587)
+    smtp_user = os.getenv("SMTP_USER", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+    email_from, from_env_name = first_configured_env(
+        ["EMAIL_FROM", "SMTP_FROM", "FROM_EMAIL"],
+        smtp_user,
+    )
+    use_ssl = parse_bool_env("SMTP_USE_SSL", False if is_brevo_smtp else smtp_port == 465)
+    use_starttls = parse_bool_env("SMTP_STARTTLS", True if is_brevo_smtp else not use_ssl)
+    if use_ssl:
+        use_starttls = False
+    return SmtpConfig(
+        provider=provider,
+        host=smtp_host,
+        port=smtp_port,
+        user=smtp_user,
+        password=smtp_password,
+        email_from=email_from,
+        email_from_name=os.getenv("EMAIL_FROM_NAME", "pulse").strip(),
+        email_reply_to=os.getenv("EMAIL_REPLY_TO", email_from).strip() or email_from,
+        brevo_api_key=os.getenv("BREVO_API_KEY", "").strip(),
+        brevo_api_timeout_seconds=parse_int_env("BREVO_API_TIMEOUT_SECONDS", 20),
+        use_ssl=use_ssl,
+        use_starttls=use_starttls,
+        timeout_seconds=parse_int_env("SMTP_TIMEOUT_SECONDS", 20),
+        from_env_name=from_env_name or "SMTP_USER",
+        force_ipv4=parse_bool_env("SMTP_FORCE_IPV4", False if is_brevo_smtp else IS_PRODUCTION),
+    )
+
+
+def log_smtp_config_status() -> None:
+    config = get_smtp_config()
+    logger.info(
+        "Email config status environment=%s provider=%s host=%s port=%s ssl=%s starttls=%s "
+        "force_ipv4=%s user_configured=%s password_configured=%s brevo_api_key_configured=%s "
+        "brevo_api_timeout_seconds=%s from=%s from_name=%s reply_to=%s from_env=%s missing=%s",
+        ENVIRONMENT,
+        config.provider,
+        config.host or "<missing>",
+        config.port,
+        config.use_ssl,
+        config.use_starttls,
+        config.force_ipv4,
+        bool(config.user),
+        bool(config.password),
+        bool(config.brevo_api_key),
+        config.brevo_api_timeout_seconds,
+        config.email_from or "<missing>",
+        config.email_from_name or "<missing>",
+        config.email_reply_to or "<missing>",
+        config.from_env_name,
+        ",".join(config.missing_fields) or "none",
+    )
+
+
+@app.on_event("startup")
+def log_startup_smtp_config() -> None:
+    log_smtp_config_status()
+
+
+def resolve_smtp_ipv4(host: str, port: int) -> str:
+    try:
+        addresses = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        logger.exception("SMTP IPv4 DNS resolution failed host=%s port=%s error=%r", host, port, exc)
+        raise RuntimeError(f"SMTP IPv4 DNS resolution failed for {host}:{port}: {exc}") from exc
+    if not addresses:
+        logger.error("SMTP IPv4 DNS resolution returned no addresses host=%s port=%s", host, port)
+        raise RuntimeError(f"SMTP host {host}:{port} has no IPv4 address")
+    return addresses[0][4][0]
+
+
+class IPv4SMTP(smtplib.SMTP):
+    selected_ipv4: str
+
+    def _get_socket(self, host: str, port: int, timeout: float):
+        self.selected_ipv4 = resolve_smtp_ipv4(host, port)
+        logger.info("SMTP IPv4 connection resolved host=%s ipv4_address=%s port=%s ssl=False", host, self.selected_ipv4, port)
+        return socket.create_connection((self.selected_ipv4, port), timeout)
+
+
+class IPv4SMTP_SSL(smtplib.SMTP_SSL):
+    selected_ipv4: str
+
+    def _get_socket(self, host: str, port: int, timeout: float):
+        self.selected_ipv4 = resolve_smtp_ipv4(host, port)
+        logger.info("SMTP IPv4 connection resolved host=%s ipv4_address=%s port=%s ssl=True", host, self.selected_ipv4, port)
+        raw_socket = socket.create_connection((self.selected_ipv4, port), timeout)
+        return self.context.wrap_socket(raw_socket, server_hostname=host)
+
+
+def send_brevo_api_email(
+    *,
+    email_type: str,
+    to_email: str,
+    subject: str,
+    text_content: str,
+    html_content: str,
+    config: SmtpConfig,
+) -> None:
+    logger.info(
+        "Brevo API email send attempt provider=%s type=%s recipient=%s subject=%s from=%s reply_to=%s",
+        config.provider,
+        email_type,
+        to_email,
+        subject,
+        config.email_from or "<missing>",
+        config.email_reply_to or "<missing>",
+    )
+    missing_fields = config.missing_fields
+    if missing_fields:
+        message = f"Brevo API configuration is incomplete: missing {', '.join(missing_fields)}"
+        logger.error(
+            "Brevo API email send failed provider=%s type=%s recipient=%s subject=%s error=%s",
+            config.provider,
+            email_type,
+            to_email,
+            subject,
+            message,
+        )
+        raise RuntimeError(message)
+
+    payload = {
+        "sender": {
+            "name": config.email_from_name,
+            "email": config.email_from,
+        },
+        "to": [{"email": to_email}],
+        "replyTo": {"email": config.email_reply_to},
+        "subject": subject,
+        "htmlContent": html_content,
+        "textContent": text_content,
+    }
+    headers = {
+        "api-key": config.brevo_api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    started_at = time.perf_counter()
+    try:
+        response = httpx.post(
+            BREVO_TRANSACTIONAL_EMAIL_URL,
+            headers=headers,
+            json=payload,
+            timeout=config.brevo_api_timeout_seconds,
+        )
+    except Exception as exc:
+        duration_ms = int((time.perf_counter() - started_at) * 1000)
+        logger.exception(
+            "Brevo API email send failed provider=%s type=%s recipient=%s subject=%s duration_ms=%s error=%r",
+            config.provider,
+            email_type,
+            to_email,
+            subject,
+            duration_ms,
+            exc,
+        )
+        raise
+
+    duration_ms = int((time.perf_counter() - started_at) * 1000)
+    response_body = response.text
+    message_id = None
+    try:
+        response_json = response.json()
+        message_id = response_json.get("messageId")
+    except ValueError:
+        response_json = None
+
+    if 200 <= response.status_code < 300:
+        logger.info(
+            "Brevo API email send succeeded provider=%s type=%s recipient=%s subject=%s duration_ms=%s status_code=%s messageId=%s",
+            config.provider,
+            email_type,
+            to_email,
+            subject,
+            duration_ms,
+            response.status_code,
+            message_id or "<missing>",
+        )
+        return
+
+    logger.error(
+        "Brevo API email send failed provider=%s type=%s recipient=%s subject=%s duration_ms=%s status_code=%s body=%s",
+        config.provider,
+        email_type,
+        to_email,
+        subject,
+        duration_ms,
+        response.status_code,
+        response_body,
+    )
+    raise RuntimeError(f"Brevo API email send failed with status {response.status_code}: {response_body}")
 
 DEFAULT_LOCAL_ORIGINS = ",".join(
     [
@@ -387,8 +664,8 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 EMAIL_VERIFICATION_EXPIRY_MINUTES = 10
 EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = 60
-EMAIL_VERIFICATION_SUBJECT = "Confirmă adresa de email • pulse"
-PASSWORD_RESET_SUBJECT = "Resetează parola contului pulse"
+EMAIL_VERIFICATION_SUBJECT = "Confirmă adresa de email"
+PASSWORD_RESET_SUBJECT = "Resetează parola contului"
 
 
 def create_email_otp() -> str:
@@ -569,54 +846,171 @@ def build_password_reset_html(otp_code: str) -> str:
     )
 
 
-def send_email_verification_email(to_email: str, otp_code: str) -> None:
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
-    smtp_port = parse_int_env("SMTP_PORT", 587)
-    smtp_user = os.getenv("SMTP_USER", "").strip()
-    smtp_password = os.getenv("SMTP_PASSWORD", "")
-    email_from = os.getenv("EMAIL_FROM", smtp_user).strip()
-    if not smtp_host or not smtp_port or not smtp_user or not smtp_password or not email_from:
-        raise RuntimeError("SMTP configuration is incomplete")
+def send_smtp_email(
+    *,
+    email_type: str,
+    to_email: str,
+    subject: str,
+    text_content: str,
+    html_content: str,
+) -> None:
+    config = get_smtp_config()
+    logger.info(
+        "SMTP email send attempt provider=%s type=%s recipient=%s subject=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s from=%s reply_to=%s",
+        config.provider,
+        email_type,
+        to_email,
+        subject,
+        config.host or "<missing>",
+        config.port,
+        config.use_ssl,
+        config.use_starttls,
+        config.force_ipv4,
+        config.email_from or "<missing>",
+        config.email_reply_to or "<missing>",
+    )
+    missing_fields = config.missing_fields
+    if missing_fields:
+        message = f"SMTP configuration is incomplete: missing {', '.join(missing_fields)}"
+        logger.error("SMTP email send failed provider=%s type=%s recipient=%s error=%s", config.provider, email_type, to_email, message)
+        raise RuntimeError(message)
 
     message = EmailMessage()
-    message["Subject"] = EMAIL_VERIFICATION_SUBJECT
-    message["From"] = email_from
+    message["Subject"] = subject
+    message["From"] = config.sender_header
     message["To"] = to_email
-    message.set_content(
-        "Bine ai venit în pulse!\n\n"
-        f"Codul tău de verificare este {otp_code}. Codul expiră în 10 minute."
-    )
-    message.add_alternative(build_email_verification_html(otp_code), subtype="html")
+    message["Reply-To"] = config.email_reply_to
+    message.set_content(text_content)
+    message.add_alternative(html_content, subtype="html")
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as smtp:
-        smtp.starttls()
-        smtp.login(smtp_user, smtp_password)
+    started_at = time.perf_counter()
+    smtp = None
+    sent = False
+    try:
+        ssl_context = ssl.create_default_context()
+        if config.use_ssl:
+            smtp_ssl_class = IPv4SMTP_SSL if config.force_ipv4 else smtplib.SMTP_SSL
+            smtp = smtp_ssl_class(config.host, config.port, timeout=config.timeout_seconds, context=ssl_context)
+        else:
+            smtp_class = IPv4SMTP if config.force_ipv4 else smtplib.SMTP
+            smtp = smtp_class(config.host, config.port, timeout=config.timeout_seconds)
+            if config.use_starttls:
+                smtp.ehlo()
+                smtp.starttls(context=ssl_context)
+                smtp.ehlo()
+        smtp.login(config.user, config.password)
         smtp.send_message(message)
+        sent = True
+    except Exception as exc:
+        duration_ms = int((time.perf_counter() - started_at) * 1000)
+        logger.exception(
+            "SMTP email send failed provider=%s type=%s recipient=%s subject=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s duration_ms=%s error=%r",
+            config.provider,
+            email_type,
+            to_email,
+            subject,
+            config.host,
+            config.port,
+            config.use_ssl,
+            config.use_starttls,
+            config.force_ipv4,
+            duration_ms,
+            exc,
+        )
+        raise
+    finally:
+        if smtp is not None:
+            try:
+                smtp.quit()
+            except Exception as exc:
+                if sent:
+                    logger.warning(
+                        "SMTP quit failed after accepted send provider=%s type=%s recipient=%s subject=%s host=%s port=%s error=%r",
+                        config.provider,
+                        email_type,
+                        to_email,
+                        subject,
+                        config.host,
+                        config.port,
+                        exc,
+                    )
+                else:
+                    try:
+                        smtp.close()
+                    except Exception:
+                        pass
+
+    duration_ms = int((time.perf_counter() - started_at) * 1000)
+    logger.info(
+        "SMTP email send succeeded provider=%s type=%s recipient=%s subject=%s host=%s port=%s ssl=%s starttls=%s force_ipv4=%s duration_ms=%s",
+        config.provider,
+        email_type,
+        to_email,
+        subject,
+        config.host,
+        config.port,
+        config.use_ssl,
+        config.use_starttls,
+        config.force_ipv4,
+        duration_ms,
+    )
+
+
+def send_email(
+    *,
+    email_type: str,
+    to_email: str,
+    subject: str,
+    text_content: str,
+    html_content: str,
+) -> None:
+    config = get_smtp_config()
+    if config.provider == "brevo_api":
+        send_brevo_api_email(
+            email_type=email_type,
+            to_email=to_email,
+            subject=subject,
+            text_content=text_content,
+            html_content=html_content,
+            config=config,
+        )
+        return
+    if config.provider in {"smtp", "brevo_smtp"}:
+        send_smtp_email(
+            email_type=email_type,
+            to_email=to_email,
+            subject=subject,
+            text_content=text_content,
+            html_content=html_content,
+        )
+        return
+    raise RuntimeError(f"Unsupported EMAIL_PROVIDER: {config.provider}")
+
+
+def send_email_verification_email(to_email: str, otp_code: str) -> None:
+    send_email(
+        email_type="email_verification",
+        to_email=to_email,
+        subject=EMAIL_VERIFICATION_SUBJECT,
+        text_content=(
+            "Bine ai venit în pulse!\n\n"
+            f"Codul tău de verificare este {otp_code}. Codul expiră în 10 minute."
+        ),
+        html_content=build_email_verification_html(otp_code),
+    )
 
 
 def send_password_reset_email(to_email: str, otp_code: str) -> None:
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
-    smtp_port = parse_int_env("SMTP_PORT", 587)
-    smtp_user = os.getenv("SMTP_USER", "").strip()
-    smtp_password = os.getenv("SMTP_PASSWORD", "")
-    email_from = os.getenv("EMAIL_FROM", smtp_user).strip()
-    if not smtp_host or not smtp_port or not smtp_user or not smtp_password or not email_from:
-        raise RuntimeError("SMTP configuration is incomplete")
-
-    message = EmailMessage()
-    message["Subject"] = PASSWORD_RESET_SUBJECT
-    message["From"] = email_from
-    message["To"] = to_email
-    message.set_content(
-        "Resetare parolă pulse\n\n"
-        f"Codul tău de resetare este {otp_code}. Codul expiră în 10 minute."
+    send_email(
+        email_type="password_reset",
+        to_email=to_email,
+        subject=PASSWORD_RESET_SUBJECT,
+        text_content=(
+            "Resetare parolă pulse\n\n"
+            f"Codul tău de resetare este {otp_code}. Codul expiră în 10 minute."
+        ),
+        html_content=build_password_reset_html(otp_code),
     )
-    message.add_alternative(build_password_reset_html(otp_code), subtype="html")
-
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as smtp:
-        smtp.starttls()
-        smtp.login(smtp_user, smtp_password)
-        smtp.send_message(message)
 
 
 def create_email_verification(
@@ -953,6 +1347,72 @@ def _resolve_institution_id(db: Session, payload: UserCreate) -> Optional[int]:
     return institution.id
 
 
+EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
+CNP_CONTROL_WEIGHTS = "279146358279"
+CNP_VALID_COUNTY_CODES = set(range(1, 47)) | {51, 52}
+
+
+def normalize_email_for_registration(email: str) -> str:
+    normalized = (email or "").strip().lower()
+    if not normalized or not EMAIL_PATTERN.fullmatch(normalized):
+        raise HTTPException(status_code=400, detail="Adresa de email nu este validă.")
+    return normalized
+
+
+def normalize_person_name(value: str, field_label: str) -> str:
+    compacted = re.sub(r"\s+", " ", (value or "").strip().lower())
+    if not compacted:
+        raise HTTPException(status_code=400, detail=f"{field_label} este obligatoriu.")
+    compacted = re.sub(r"\s*-\s*", "-", compacted)
+    return re.sub(r"[^\W\d_]+", lambda match: match.group(0).capitalize(), compacted, flags=re.UNICODE)
+
+
+def validate_cnp(cnp: str) -> str:
+    digits = (cnp or "").strip()
+    if not re.fullmatch(r"\d{13}", digits):
+        raise HTTPException(status_code=400, detail="CNP-ul introdus nu este valid.")
+
+    sex_century = int(digits[0])
+    if sex_century not in range(1, 10):
+        raise HTTPException(status_code=400, detail="CNP-ul introdus nu este valid.")
+
+    year = int(digits[1:3])
+    month = int(digits[3:5])
+    day = int(digits[5:7])
+    if sex_century in {1, 2, 7, 8, 9}:
+        full_year = 1900 + year
+    elif sex_century in {3, 4}:
+        full_year = 1800 + year
+    else:
+        full_year = 2000 + year
+    try:
+        datetime(full_year, month, day)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="CNP-ul introdus nu este valid.") from exc
+
+    county_code = int(digits[7:9])
+    if county_code not in CNP_VALID_COUNTY_CODES:
+        raise HTTPException(status_code=400, detail="CNP-ul introdus nu este valid.")
+
+    control_sum = sum(int(digit) * int(weight) for digit, weight in zip(digits[:12], CNP_CONTROL_WEIGHTS))
+    expected_control = control_sum % 11
+    if expected_control == 10:
+        expected_control = 1
+    if int(digits[12]) != expected_control:
+        raise HTTPException(status_code=400, detail="CNP-ul introdus nu este valid.")
+
+    return digits
+
+
+def validate_correspondence_address(address: Optional[str]) -> str:
+    normalized = re.sub(r"\s+", " ", (address or "").strip())
+    has_text = re.search(r"[A-Za-zĂÂÎȘȚăâîșț]", normalized) is not None
+    has_number = re.search(r"\d+", normalized) is not None
+    if not normalized or not has_text or not has_number:
+        raise HTTPException(status_code=400, detail="Adresa trebuie să conțină strada și numărul.")
+    return normalized
+
+
 def _resolve_interest_ids(db: Session, interest_ids: List[int]) -> List[int]:
     unique_ids = sorted({int(item) for item in interest_ids if int(item) > 0})
     if not unique_ids:
@@ -974,11 +1434,13 @@ def _resolve_interest_ids(db: Session, interest_ids: List[int]) -> List[int]:
 def _ensure_registration_schema(db: Session) -> None:
     statements = [
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS correspondence_address TEXT",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS birth_date VARCHAR(50)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS institution_id INTEGER",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS cuim VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS cod_parafa VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS professional_registration_code VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS titlu_universitar VARCHAR(255)",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS photo_url TEXT",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS specialization_secondary_name VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS acord_email BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS acord_sms BOOLEAN NOT NULL DEFAULT FALSE",
@@ -1802,6 +2264,8 @@ def serialize_event_view_row(row, partners=None):
 
 def raise_safe_error(exc: Exception, detail: str = "Request failed", status_code: int = 500):
     logger.exception("Request failed: %s", type(exc).__name__)
+    if isinstance(exc, HTTPException):
+        raise exc
     raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
@@ -2657,7 +3121,147 @@ def get_events(
     except Exception as e:
         raise_safe_error(e)
 
+def generate_ticket_code(db: Session, event_id: int, user_id: int) -> str:
+    while True:
+        rand_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        code = f"PULSE-EVT-{event_id}-USER-{user_id}-{rand_str}"
+        existing = db.query(models.UserEventRegistration).filter(models.UserEventRegistration.ticket_code == code).first()
+        if not existing:
+            return code
 
+@app.get("/api/events/{event_id}/registration-status")
+def get_event_registration_status(
+    event_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        reg = db.query(models.UserEventRegistration).filter(
+            models.UserEventRegistration.user_id == user_id,
+            models.UserEventRegistration.event_id == event_id
+        ).first()
+        if reg:
+            return {
+                "is_registered": True,
+                "status": reg.status.value,
+                "ticket_code": reg.ticket_code
+            }
+        return {"is_registered": False, "status": None, "ticket_code": None}
+    except Exception as e:
+        raise_safe_error(e)
+
+
+@app.post("/api/events/{event_id}/register")
+def register_for_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        event = db.query(models.Event).filter(models.Event.id == event_id).first()
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+            
+        if event.price_type != models.PriceTypeEnum.free and (event.price_amount or 0) > 0:
+            raise HTTPException(status_code=400, detail="Acest eveniment este cu plată.")
+
+        existing = db.query(models.UserEventRegistration).filter(
+            models.UserEventRegistration.user_id == user_id,
+            models.UserEventRegistration.event_id == event_id
+        ).first()
+        if existing:
+            return {"message": "Deja înregistrat"}
+
+        ticket_code = generate_ticket_code(db, event_id, user_id)
+        reg = models.UserEventRegistration(
+            user_id=user_id,
+            event_id=event_id,
+            registered_at=datetime.now(timezone.utc),
+            status=models.RegistrationStatus.registered,
+            ticket_code=ticket_code
+        )
+        db.add(reg)
+        db.commit()
+        return {"message": "Înregistrat cu succes", "ticket_code": ticket_code}
+    except Exception as e:
+        db.rollback()
+        raise_safe_error(e)
+
+
+class EventPaymentRegisterPayload(BaseModel):
+    payment_method_id: int
+
+@app.post("/api/events/{event_id}/pay-and-register")
+def pay_and_register_for_event(
+    event_id: int,
+    payload: EventPaymentRegisterPayload,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        event = db.query(models.Event).filter(models.Event.id == event_id).first()
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+            
+        price_data = get_current_price_by_event_id(db, event_id)
+        if not price_data:
+            raise HTTPException(status_code=400, detail="Nu s-a putut obține prețul.")
+
+        current_price_type = price_data.get("current_price_type")
+        current_price_amount = price_data.get("current_price_amount")
+        
+        if current_price_type == "free" or current_price_type == models.PriceTypeEnum.free or (current_price_amount or 0) == 0:
+            raise HTTPException(status_code=400, detail="Acest eveniment este gratuit.")
+
+        existing = db.query(models.UserEventRegistration).filter(
+            models.UserEventRegistration.user_id == user_id,
+            models.UserEventRegistration.event_id == event_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Ești deja înscris la acest eveniment.")
+
+        payment_method = db.query(models.UserPaymentMethod).filter(
+            models.UserPaymentMethod.id == payload.payment_method_id,
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None)
+        ).first()
+        
+        if not payment_method:
+            raise HTTPException(status_code=404, detail="Metoda de plată nu a fost găsită.")
+
+        transaction_id = f"demo_tx_{int(datetime.now(timezone.utc).timestamp())}"
+        payment = models.Payment(
+            user_id=user_id,
+            content_item_id=event.content_item_id,
+            payment_method_id=payment_method.id,
+            amount=current_price_amount,
+            currency="RON",
+            provider="demo",
+            provider_transaction_id=transaction_id,
+            status=models.PaymentStatus.paid,
+            paid_at=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(payment)
+        
+        ticket_code = generate_ticket_code(db, event_id, user_id)
+        reg = models.UserEventRegistration(
+            user_id=user_id,
+            event_id=event_id,
+            registered_at=datetime.now(timezone.utc),
+            status=models.RegistrationStatus.confirmed,
+            ticket_code=ticket_code
+        )
+        db.add(reg)
+        
+        db.commit()
+        return {
+            "message": "Plata și înscrierea au fost realizate cu succes",
+            "ticket_code": ticket_code
+        }
+    except Exception as e:
+        db.rollback()
+        raise_safe_error(e)
 @app.get("/events/{event_id}")
 def get_event_detail(
     event_id: int,
@@ -3357,14 +3961,20 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
     require_rate_limit(request, "register", "AUTH_RATE_LIMIT_PER_MINUTE", 10)
     _ensure_registration_schema(db)
     user_model = get_user_model()
-    existing_user = db.query(user_model).filter(user_model.email == payload.email).first()
+    email = normalize_email_for_registration(payload.email)
+    first_name = normalize_person_name(payload.first_name, "Numele")
+    last_name = normalize_person_name(payload.last_name, "Prenumele")
+    cnp = validate_cnp(payload.cnp)
+    correspondence_address = validate_correspondence_address(payload.correspondence_address)
+
+    existing_user = db.query(user_model).filter(func.lower(user_model.email) == email).first()
     if existing_user is not None:
-        raise HTTPException(status_code=409, detail="An account with this email already exists")
+        raise HTTPException(status_code=409, detail="Există deja un cont creat cu această adresă de email.")
 
     if not payload.password or len(payload.password) < 8:
         raise HTTPException(status_code=422, detail="Password must have at least 8 characters")
     if not payload.gdpr_consent:
-        raise HTTPException(status_code=422, detail="GDPR consent is required")
+        raise HTTPException(status_code=422, detail="Trebuie să accepți Termenii și Condițiile pentru a crea contul.")
 
     county_id = _resolve_county_id(db, payload)
     city_id = _resolve_city_id(db, payload, county_id)
@@ -3375,11 +3985,11 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
     interest_ids = _resolve_interest_ids(db, payload.interest_ids)
 
     missing = []
-    if not payload.first_name:
+    if not first_name:
         missing.append("first_name")
-    if not payload.last_name:
+    if not last_name:
         missing.append("last_name")
-    if not payload.cnp:
+    if not cnp:
         missing.append("cnp")
     if not payload.phone:
         missing.append("phone")
@@ -3395,27 +4005,31 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
 
     now = datetime.utcnow()
     user = user_model(
-        email=payload.email,
+        email=email,
         password_hash=hash_password(payload.password),
         is_active=True,
         created_at=now,
         updated_at=now,
     )
     db.add(user)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Există deja un cont creat cu această adresă de email.") from exc
 
     profile_kwargs = {
         "user_id": user.id,
-        "first_name": payload.first_name,
-        "last_name": payload.last_name,
-        "cnp": payload.cnp,
+        "first_name": first_name,
+        "last_name": last_name,
+        "cnp": cnp,
         "phone": payload.phone,
         "city_id": city_id,
         "occupation_id": occupation_id,
         "specialization_id": specialization_id,
         "professional_grade_id": professional_grade_id,
         "institution_id": institution_id,
-        "correspondence_address": payload.correspondence_address,
+        "correspondence_address": correspondence_address,
         "acord_email": payload.acord_email,
         "acord_sms": payload.acord_sms,
         "gdpr_consent": payload.gdpr_consent,
@@ -3435,7 +4049,11 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
 
     profile = models.UserProfile(**profile_kwargs)
     db.add(profile)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Există deja un cont creat cu această adresă de email.") from exc
 
     for interest_id in interest_ids:
         db.add(
@@ -3451,13 +4069,21 @@ def register_user(payload: UserCreate, request: Request, db: Session = Depends(g
                 created_at=now,
             )
         )
-    email_verification_sent = create_email_verification(
-        db,
-        user.id,
-        user.email,
-        now,
-        raise_on_email_error=False,
-    )
+    try:
+        email_verification_sent = create_email_verification(
+            db,
+            user.id,
+            user.email,
+            now,
+            raise_on_email_error=IS_PRODUCTION or get_smtp_config().provider == "brevo_api",
+        )
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Registration failed because email verification could not be delivered user_id=%s", user.id)
+        raise HTTPException(
+            status_code=503,
+            detail="Contul nu a fost creat deoarece emailul de verificare nu a putut fi trimis. Încearcă din nou.",
+        ) from exc
     db.commit()
 
     return {
@@ -3539,7 +4165,15 @@ def resend_email_otp(
                 detail=f"Poți solicita un cod nou peste {retry_after} secunde.",
             )
 
-    create_email_verification(db, user.id, user.email, now)
+    try:
+        create_email_verification(db, user.id, user.email, now)
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Email verification resend failed because email could not be delivered user_id=%s", user.id)
+        raise HTTPException(
+            status_code=503,
+            detail="Codul de verificare nu a putut fi trimis. Încearcă din nou.",
+        ) from exc
     db.commit()
     return {
         "message": "Verification code resent successfully",
@@ -3579,7 +4213,15 @@ def request_password_reset(
                 detail=f"Poți solicita un cod nou peste {retry_after} secunde.",
             )
 
-    create_password_reset(db, user.id, user.email, now)
+    try:
+        create_password_reset(db, user.id, user.email, now)
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Password reset request failed because email could not be delivered user_id=%s", user.id)
+        raise HTTPException(
+            status_code=503,
+            detail="Codul de resetare nu a putut fi trimis. Încearcă din nou.",
+        ) from exc
     db.commit()
     return {
         "message": "Password reset code sent successfully",
@@ -3718,8 +4360,34 @@ def logout_user(payload: UserLogout, db: Session = Depends(get_db)):
     return {"message": "Logout successful"}
 
 
-@app.get("/api/me/profile")
-def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+class MyProfileUpdate(BaseModel):
+    email: Optional[str] = Field(default=None, max_length=255)
+    first_name: Optional[str] = Field(default=None, max_length=255)
+    last_name: Optional[str] = Field(default=None, max_length=255)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    birth_date: Optional[str] = Field(default=None, max_length=50)
+    correspondence_address: Optional[str] = Field(default=None, max_length=1000)
+    city_id: Optional[int] = Field(default=None, gt=0)
+    occupation_id: Optional[int] = Field(default=None, gt=0)
+    specialization_id: Optional[int] = Field(default=None, gt=0)
+    specialization_secondary_name: Optional[str] = Field(default=None, max_length=255)
+    professional_grade_id: Optional[int] = Field(default=None, gt=0)
+    institution_id: Optional[int] = Field(default=None, gt=0)
+    cuim: Optional[str] = Field(default=None, max_length=255)
+    cod_parafa: Optional[str] = Field(default=None, max_length=255)
+    titlu_universitar: Optional[str] = Field(default=None, max_length=255)
+
+
+class MyPaymentMethodCreate(BaseModel):
+    card_brand: Optional[str] = Field(default=None, max_length=50)
+    card_last4: str = Field(min_length=4, max_length=4)
+    exp_month: int = Field(ge=1, le=12)
+    exp_year: int = Field(ge=2024, le=2100)
+    is_default: bool = False
+
+
+def get_my_profile_payload(user_id: int, db: Session):
+    _ensure_registration_schema(db)
     user_model = get_user_model()
     user = db.query(user_model).filter(user_model.id == user_id).first()
     if user is None:
@@ -3733,6 +4401,7 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
             joinedload(models.UserProfile.occupation),
             joinedload(models.UserProfile.specialization),
             joinedload(models.UserProfile.professional_grade),
+            joinedload(models.UserProfile.institution),
         )
         .first()
     )
@@ -3751,11 +4420,563 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
         "total_emc_points": getattr(profile, "total_emc_points", 0) or 0,
         "email": user.email,
         "phone": profile.phone,
+        "photo_url": getattr(profile, "photo_url", None),
+        "avatar_url": getattr(profile, "photo_url", None),
+        "profile_photo_url": getattr(profile, "photo_url", None),
         "county_name": profile.city.county.name if getattr(profile.city, "county", None) else None,
         "city_name": profile.city.name if profile.city else None,
         "occupation_name": profile.occupation.name if profile.occupation else None,
         "specialization_name": profile.specialization.name if profile.specialization else None,
         "professional_grade_name": profile.professional_grade.name if profile.professional_grade else None,
+        "institution_name": profile.institution.name if profile.institution else None,
+    }
+
+
+@app.get("/api/me/profile")
+def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    return get_my_profile_payload(user_id, db)
+
+
+@app.patch("/api/me/profile")
+def update_my_profile(
+    payload: MyProfileUpdate,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _ensure_registration_schema(db)
+    user_model = get_user_model()
+    user = db.query(user_model).filter(user_model.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    profile = (
+        db.query(models.UserProfile)
+        .filter(models.UserProfile.user_id == user_id)
+        .first()
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    data = pydantic_dump(payload, exclude_unset=True)
+
+    if "email" in data and data["email"] is not None:
+        email = data["email"].strip().lower()
+        if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$", email):
+            raise HTTPException(status_code=400, detail="Adresa de email nu este validă.")
+        existing = (
+            db.query(user_model)
+            .filter(user_model.email == email, user_model.id != user_id)
+            .first()
+        )
+        if existing is not None:
+            raise HTTPException(status_code=409, detail="Emailul este deja folosit.")
+        user.email = email
+
+    if "city_id" in data and data["city_id"] is not None:
+        city = db.query(models.City).filter(models.City.id == data["city_id"]).first()
+        if city is None:
+            raise HTTPException(status_code=422, detail="Orașul selectat nu este valid.")
+
+    lookup_checks = [
+        ("occupation_id", models.Occupation, "Rolul selectat nu este valid."),
+        ("specialization_id", models.Specialization, "Specializarea selectată nu este validă."),
+        ("professional_grade_id", models.ProfessionalGrade, "Gradul profesional selectat nu este valid."),
+        ("institution_id", models.Institution, "Instituția selectată nu este validă."),
+    ]
+    for field, model, message in lookup_checks:
+        if field in data and data[field] is not None:
+            exists = db.query(model).filter(model.id == data[field]).first()
+            if exists is None:
+                raise HTTPException(status_code=422, detail=message)
+
+    profile_fields = {
+        "first_name",
+        "last_name",
+        "phone",
+        "birth_date",
+        "correspondence_address",
+        "city_id",
+        "occupation_id",
+        "specialization_id",
+        "specialization_secondary_name",
+        "professional_grade_id",
+        "institution_id",
+        "cuim",
+        "cod_parafa",
+        "titlu_universitar",
+    }
+    for field in profile_fields:
+        if field in data:
+            value = data[field]
+            if isinstance(value, str):
+                value = value.strip()
+            setattr(profile, field, value)
+
+    now = datetime.utcnow()
+    profile.updated_at = now
+    user.updated_at = now
+    db.commit()
+
+    return get_my_profile_payload(user_id, db)
+
+
+@app.post("/api/me/change-password")
+def change_my_password(
+    payload: UserChangePassword,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    user_model = get_user_model()
+    user = db.query(user_model).filter(user_model.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Utilizatorul nu a fost găsit")
+
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Parola curentă este incorectă")
+
+    user.password_hash = hash_password(payload.new_password)
+    user.updated_at = datetime.utcnow()
+    db.commit()
+    return {"message": "Parola a fost schimbată cu succes"}
+
+
+@app.post("/api/me/profile/avatar")
+async def upload_my_profile_avatar(
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    require_rate_limit(request, "profile_avatar_upload", "WRITE_RATE_LIMIT_PER_MINUTE", 20)
+    _ensure_registration_schema(db)
+    profile = (
+        db.query(models.UserProfile)
+        .filter(models.UserProfile.user_id == user_id)
+        .first()
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    upload_result = await handle_upload(
+        file=file,
+        folder=f"user-avatars/{user_id}",
+        max_size=IMAGE_MAX_SIZE,
+        allowed_content_types=IMAGE_ALLOWED_CONTENT_TYPES,
+        allowed_extensions=IMAGE_ALLOWED_EXTENSIONS,
+    )
+    profile.photo_url = upload_result["url"]
+    profile.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        **upload_result,
+        "photo_url": profile.photo_url,
+        "avatar_url": profile.photo_url,
+        "profile_photo_url": profile.photo_url,
+    }
+
+
+def _emc_source_title(db: Session, source_type: str, source_id: int) -> Optional[str]:
+    normalized = (source_type or "").strip().lower()
+    if normalized == "course":
+        row = (
+            db.query(models.ContentItem.title)
+            .join(models.Course, models.Course.content_item_id == models.ContentItem.id)
+            .filter(models.Course.id == source_id)
+            .first()
+        )
+        return row[0] if row else None
+    if normalized == "event":
+        row = (
+            db.query(models.ContentItem.title)
+            .join(models.Event, models.Event.content_item_id == models.ContentItem.id)
+            .filter(models.Event.id == source_id)
+            .first()
+        )
+        return row[0] if row else None
+    if normalized == "publication":
+        row = (
+            db.query(models.Publication.name, models.ContentItem.title)
+            .join(models.ContentItem, models.Publication.content_item_id == models.ContentItem.id)
+            .filter(models.Publication.id == source_id)
+            .first()
+        )
+        if row:
+            return row[0] or row[1]
+    return None
+
+
+@app.get("/api/me/emc-activity")
+def get_my_emc_activity(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(models.UserEmcPointLog)
+        .filter(models.UserEmcPointLog.user_id == user_id)
+        .order_by(models.UserEmcPointLog.awarded_at.desc().nullslast(), models.UserEmcPointLog.id.desc())
+        .all()
+    )
+    return [
+        {
+            "id": row.id,
+            "source_type": row.source_type,
+            "source_id": row.source_id,
+            "source_title": _emc_source_title(db, row.source_type, row.source_id) or "Activitate EMC",
+            "points": row.points,
+            "awarded_at": serialize_value(row.awarded_at),
+        }
+        for row in rows
+    ]
+
+
+def _serialize_payment_method(row: models.UserPaymentMethod) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "provider": row.provider,
+        "provider_customer_id": row.provider_customer_id,
+        "provider_payment_method_id": row.provider_payment_method_id,
+        "card_brand": row.card_brand,
+        "card_last4": row.card_last4,
+        "exp_month": row.exp_month,
+        "exp_year": row.exp_year,
+        "is_default": row.is_default,
+        "created_at": serialize_value(row.created_at),
+        "updated_at": serialize_value(row.updated_at),
+    }
+
+
+@app.get("/api/me/payment-methods")
+def get_my_payment_methods(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .order_by(
+            models.UserPaymentMethod.is_default.desc(),
+            models.UserPaymentMethod.created_at.desc(),
+            models.UserPaymentMethod.id.desc(),
+        )
+        .all()
+    )
+    return [_serialize_payment_method(row) for row in rows]
+
+
+@app.post("/api/me/payment-methods")
+def add_my_payment_method(
+    payload: MyPaymentMethodCreate,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    card_last4 = payload.card_last4.strip()
+    if not re.fullmatch(r"\d{4}", card_last4):
+        raise HTTPException(status_code=422, detail="Ultimele 4 cifre ale cardului nu sunt valide.")
+
+    brand = (payload.card_brand or "Card").strip()[:50] or "Card"
+    active_count = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .count()
+    )
+    make_default = payload.is_default or active_count == 0
+    now = datetime.utcnow()
+
+    if make_default:
+        (
+            db.query(models.UserPaymentMethod)
+            .filter(
+                models.UserPaymentMethod.user_id == user_id,
+                models.UserPaymentMethod.deleted_at.is_(None),
+            )
+            .update(
+                {
+                    models.UserPaymentMethod.is_default: False,
+                    models.UserPaymentMethod.updated_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
+
+    payment_method = models.UserPaymentMethod(
+        user_id=user_id,
+        provider="demo",
+        provider_customer_id=f"demo_cus_{user_id}",
+        provider_payment_method_id=f"demo_pm_{int(time.time())}_{secrets.token_hex(4)}",
+        card_brand=brand,
+        card_last4=card_last4,
+        exp_month=payload.exp_month,
+        exp_year=payload.exp_year,
+        is_default=make_default,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(payment_method)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Metoda de plată există deja.")
+    db.refresh(payment_method)
+    return _serialize_payment_method(payment_method)
+
+
+@app.delete("/api/me/payment-methods/{method_id}")
+def delete_my_payment_method(
+    method_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    payment_method = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.id == method_id,
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if payment_method is None:
+        raise HTTPException(status_code=404, detail="Cardul nu a fost găsit.")
+
+    was_default = payment_method.is_default
+    now = datetime.utcnow()
+    payment_method.deleted_at = now
+    payment_method.updated_at = now
+
+    if was_default:
+        replacement = (
+            db.query(models.UserPaymentMethod)
+            .filter(
+                models.UserPaymentMethod.user_id == user_id,
+                models.UserPaymentMethod.id != method_id,
+                models.UserPaymentMethod.deleted_at.is_(None),
+            )
+            .order_by(models.UserPaymentMethod.created_at.desc(), models.UserPaymentMethod.id.desc())
+            .first()
+        )
+        if replacement is not None:
+            replacement.is_default = True
+            replacement.updated_at = now
+
+    db.commit()
+    return {"success": True}
+
+
+@app.patch("/api/me/payment-methods/{method_id}/default")
+def set_default_payment_method(
+    method_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    payment_method = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.id == method_id,
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if payment_method is None:
+        raise HTTPException(status_code=404, detail="Cardul nu a fost găsit.")
+
+    now = datetime.utcnow()
+    (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .update(
+            {
+                models.UserPaymentMethod.is_default: False,
+                models.UserPaymentMethod.updated_at: now,
+            },
+            synchronize_session=False,
+        )
+    )
+    payment_method.is_default = True
+    payment_method.updated_at = now
+    db.commit()
+    db.refresh(payment_method)
+    return _serialize_payment_method(payment_method)
+
+
+@app.get("/api/me/payments")
+def get_my_payments(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        rows = (
+            db.query(
+                models.Payment,
+                models.Event.id.label("event_id"),
+                models.UserEventRegistration.status.label("registration_status"),
+                models.UserEventRegistration.ticket_code
+            )
+            .options(
+                joinedload(models.Payment.payment_method),
+                joinedload(models.Payment.content_item)
+            )
+            .outerjoin(models.Event, models.Event.content_item_id == models.Payment.content_item_id)
+            .outerjoin(
+                models.UserEventRegistration,
+                (models.UserEventRegistration.event_id == models.Event.id) &
+                (models.UserEventRegistration.user_id == user_id)
+            )
+            .filter(models.Payment.user_id == user_id)
+            .order_by(
+                models.Payment.paid_at.desc().nullslast(),
+                models.Payment.created_at.desc()
+            )
+            .all()
+        )
+        result = []
+        for row, event_id, reg_status, ticket_code in rows:
+            data = {
+                "id": row.id,
+                "amount": float(row.amount) if row.amount is not None else 0.0,
+                "currency": row.currency,
+                "provider": row.provider,
+                "provider_transaction_id": row.provider_transaction_id,
+                "status": row.status.value if row.status else None,
+                "paid_at": serialize_value(row.paid_at),
+                "created_at": serialize_value(row.created_at),
+                "subscription_id": row.subscription_id,
+                "payment_method_id": row.payment_method_id,
+                "content_item_id": row.content_item_id,
+                "content_title": row.content_item.title if row.content_item else None,
+                "content_type": row.content_item.content_type.value if row.content_item and row.content_item.content_type else None,
+                "event_id": event_id,
+                "registration_status": reg_status.value if reg_status else None,
+                "ticket_code": ticket_code,
+            }
+            if row.payment_method:
+                data["card_brand"] = row.payment_method.card_brand
+                data["card_last4"] = row.payment_method.card_last4
+            else:
+                data["card_brand"] = None
+                data["card_last4"] = None
+            result.append(data)
+        return result
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=traceback.format_exc())
+
+@app.get("/api/me/tickets")
+def get_my_tickets(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        rows = (
+            db.query(models.UserEventRegistration, models.Event)
+            .join(models.Event, models.UserEventRegistration.event_id == models.Event.id)
+            .options(
+                joinedload(models.Event.content_item),
+                joinedload(models.Event.city)
+            )
+            .filter(
+                models.UserEventRegistration.user_id == user_id,
+                models.UserEventRegistration.ticket_code.isnot(None)
+            )
+            .order_by(models.UserEventRegistration.registered_at.desc())
+            .all()
+        )
+        
+        result = []
+        for reg, event in rows:
+            content_item = event.content_item if event else None
+            city = event.city if event else None
+            
+            result.append({
+                "registration_id": reg.id,
+                "event_id": reg.event_id,
+                "content_item_id": content_item.id if content_item else None,
+                "event_title": content_item.title if content_item else None,
+                "ticket_code": reg.ticket_code,
+                "registration_status": reg.status.value if reg.status else None,
+                "registered_at": serialize_value(reg.registered_at),
+                "start_date": serialize_value(event.start_date) if event else None,
+                "end_date": serialize_value(event.end_date) if event else None,
+                "venue_name": event.venue_name if event else None,
+                "city_name": city.name if city else None,
+                "hero_image_url": content_item.hero_image_url if content_item else None,
+                "thumbnail_url": content_item.thumbnail_url if content_item else None,
+            })
+        return result
+    except Exception as e:
+        raise_safe_error(e)
+
+@app.put("/api/me/interests")
+def update_my_interests(
+    payload: UserInterestsUpdate,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _ensure_registration_schema(db)
+    user_model = get_user_model()
+    user = db.query(user_model).filter(user_model.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    profile = (
+        db.query(models.UserProfile)
+        .filter(models.UserProfile.user_id == user_id)
+        .first()
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    interest_ids = _resolve_interest_ids(db, payload.interest_ids)
+    now = datetime.utcnow()
+
+    try:
+        db.query(models.UserProfileInterest).filter(
+            models.UserProfileInterest.user_profile_id == profile.id
+        ).delete(synchronize_session=False)
+        db.query(models.UserInterest).filter(
+            models.UserInterest.user_id == user_id
+        ).delete(synchronize_session=False)
+
+        for interest_id in interest_ids:
+            db.add(
+                models.UserProfileInterest(
+                    user_profile_id=profile.id,
+                    interest_id=interest_id,
+                )
+            )
+            db.add(
+                models.UserInterest(
+                    user_id=user_id,
+                    interest_id=interest_id,
+                    created_at=now,
+                )
+            )
+
+        profile.updated_at = now
+        user.updated_at = now
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Failed to update user interests user_id=%s", user_id)
+        raise HTTPException(
+            status_code=400,
+            detail="Nu am putut salva interesele momentan.",
+        ) from exc
+
+    return {
+        "message": "Interests updated successfully",
+        "interest_ids": interest_ids,
     }
 
 
@@ -4004,7 +5225,6 @@ def get_audit_logs(db: Session = Depends(get_db)):
 # ADMIN ENDPOINTS
 # -------------------------
 
-from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Dict, Optional, List
 from sqlalchemy import func
 
@@ -4134,6 +5354,17 @@ def validate_upload_file(file: UploadFile, allowed_content_types: set, allowed_e
     content_type = (file.content_type or "").lower()
     sanitized_name = sanitize_filename(file.filename or "upload")
     extension = Path(sanitized_name).suffix.lower()
+    inferred_image_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }
+
+    if content_type in {"", "application/octet-stream"}:
+        inferred = inferred_image_types.get(extension)
+        if inferred in allowed_content_types:
+            content_type = inferred
 
     if content_type not in allowed_content_types:
         allowed = ", ".join(sorted(allowed_content_types))

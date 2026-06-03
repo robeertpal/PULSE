@@ -10,6 +10,8 @@ import '../services/auth_storage.dart';
 import '../utils/validators.dart' as validators;
 import '../widgets/auth_shell.dart';
 import 'email_verification_screen.dart';
+import 'interests_selection_screen.dart';
+import 'terms_and_conditions_screen.dart';
 
 class _OptionItem {
   const _OptionItem({
@@ -54,6 +56,31 @@ class _ProfessionalRule {
   final String registrationCodeLabel;
 }
 
+class _RegisterSectionLabel extends StatelessWidget {
+  const _RegisterSectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 12),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.88),
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.4,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
 
@@ -82,7 +109,6 @@ class _RegisterPageState extends State<RegisterPage> {
       'assets/icons/numbers.rectangle.fill.svg';
   static const _signatureIcon = 'assets/icons/signature.svg';
   static const _titleIcon = 'assets/icons/graduation.svg';
-  static const _interestsIcon = 'assets/icons/heart.svg';
   static const _dropdownIcon = 'assets/icons/arrow.right.svg';
   static const _eyeIcon = 'assets/icons/eye.fill.svg';
   static const _eyeSlashIcon = 'assets/icons/eye.slash.fill.svg';
@@ -105,7 +131,6 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _showPassword = false;
   bool _showConfirmPassword = false;
   bool _acordEmail = false;
-  bool _acordSms = false;
   bool _gdprConsent = false;
   bool _isLoadingOptions = false;
   bool _isSubmitting = false;
@@ -120,7 +145,6 @@ class _RegisterPageState extends State<RegisterPage> {
   List<_OptionItem> _specializations = const [];
   List<_OptionItem> _professionalGrades = const [];
   List<_OptionItem> _institutions = const [];
-  List<_OptionItem> _interests = const [];
 
   int? _selectedCountyId;
   int? _selectedCityId;
@@ -129,7 +153,6 @@ class _RegisterPageState extends State<RegisterPage> {
   int? _selectedSecondarySpecializationId;
   int? _selectedProfessionalGradeId;
   int? _selectedInstitutionId;
-  final Set<int> _selectedInterestIds = {};
 
   static const List<String> _titluriUniversitare = [
     'Fără titlu universitar',
@@ -149,7 +172,6 @@ class _RegisterPageState extends State<RegisterPage> {
   static String get _professionalGradesUrl =>
       '${ApiService.baseUrl}/professional-grades';
   static String get _institutionsUrl => '${ApiService.baseUrl}/institutions';
-  static String get _interestsUrl => '${ApiService.baseUrl}/interests';
 
   @override
   void initState() {
@@ -332,7 +354,6 @@ class _RegisterPageState extends State<RegisterPage> {
         _fetchOptions(_specializationsUrl),
         _fetchOptions(_professionalGradesUrl),
         _fetchOptions(_institutionsUrl),
-        _fetchOptions(_interestsUrl),
       ]);
 
       if (!mounted) return;
@@ -343,7 +364,6 @@ class _RegisterPageState extends State<RegisterPage> {
         _specializations = results[3];
         _professionalGrades = results[4];
         _institutions = results[5];
-        _interests = results[6];
 
         _selectedCountyId = null;
         _selectedCityId = null;
@@ -360,7 +380,7 @@ class _RegisterPageState extends State<RegisterPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _loadError = e.toString().replaceFirst('Exception: ', '');
+        _loadError = pulseDisplayErrorMessage(e);
       });
     } finally {
       if (mounted) {
@@ -393,6 +413,9 @@ class _RegisterPageState extends State<RegisterPage> {
   String? _codParafaValidator(String? value) =>
       validators.codParafaValidator(value);
 
+  String? _addressValidator(String? value) =>
+      validators.addressValidator(value);
+
   String? _numberValidator(int? value, {required String label}) {
     if (value == null) return '$label este obligatoriu';
     return null;
@@ -416,11 +439,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 null &&
             _cnpValidator(_cnpController.text) == null &&
             _phoneValidator(_phoneController.text) == null &&
-            _requiredValidator(
-                  _addressController.text,
-                  label: 'Adresă corespondență',
-                ) ==
-                null &&
+            _addressValidator(_addressController.text) == null &&
             _numberValidator(_selectedCountyId, label: 'Județ') == null &&
             _numberValidator(_selectedCityId, label: 'Oraș') == null;
       case 2:
@@ -485,13 +504,15 @@ class _RegisterPageState extends State<RegisterPage> {
     }
 
     final rule = _selectedOccupationRule;
-    final email = _emailController.text.trim();
+    final email = _emailController.text.trim().toLowerCase();
+    final firstName = validators.normalizePersonName(_firstNameController.text);
+    final lastName = validators.normalizePersonName(_lastNameController.text);
     final payload = <String, dynamic>{
       'email': email,
       'firebase_uid': 'local_${email.toLowerCase().hashCode.abs()}',
       'password': _passwordController.text,
-      'first_name': _firstNameController.text.trim(),
-      'last_name': _lastNameController.text.trim(),
+      'first_name': firstName,
+      'last_name': lastName,
       'cnp': _cnpController.text.trim(),
       'phone': _fullPhoneNumber(),
       'correspondence_address': _addressController.text.trim(),
@@ -502,7 +523,6 @@ class _RegisterPageState extends State<RegisterPage> {
       'specialization_secondary_name': _selectedSecondarySpecialization?.name,
       'professional_grade_id': _selectedProfessionalGradeId,
       'institution_id': _selectedInstitutionId,
-      'interest_ids': _selectedInterestIds.toList(),
       'cuim': rule.requiresCuim ? _cuimController.text.trim() : null,
       'cod_parafa': rule.requiresCodParafa
           ? _codParafaController.text.trim()
@@ -514,7 +534,7 @@ class _RegisterPageState extends State<RegisterPage> {
           ? _selectedTitluUniversitar
           : null,
       'acord_email': _acordEmail,
-      'acord_sms': _acordSms,
+      'acord_sms': false,
       'gdpr_consent': _gdprConsent,
     };
 
@@ -526,9 +546,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
     try {
       final data = await _apiService.register(payload);
-      await AuthStorage().saveUserName(
-        '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}',
-      );
+      await AuthStorage().saveUserName('$firstName $lastName');
       if (!mounted) return;
       final verificationRequired = data['email_verification_required'] == true;
       final verificationSent = data['email_verification_sent'] != false;
@@ -546,18 +564,25 @@ class _RegisterPageState extends State<RegisterPage> {
       if (verificationRequired) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) =>
-                EmailVerificationScreen(email: _emailController.text.trim()),
+            builder: (_) => EmailVerificationScreen(
+              email: email,
+              password: _passwordController.text,
+            ),
           ),
         );
       } else {
-        Navigator.of(context).pop();
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => InterestsSelectionScreen(
+              email: email,
+              password: _passwordController.text,
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      await showPulseErrorDialog(context, e);
     } finally {
       if (mounted) {
         setState(() {
@@ -593,27 +618,36 @@ class _RegisterPageState extends State<RegisterPage> {
       contentPadding: const EdgeInsets.fromLTRB(12, 19, 12, 19),
       errorMaxLines: 3,
       helperMaxLines: 2,
-      errorStyle: const TextStyle(height: 1.25),
+      errorStyle: const TextStyle(
+        color: AuthShell.authErrorColor,
+        height: 1.25,
+      ),
       helperStyle: const TextStyle(height: 1.25),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: const BorderSide(color: AuthShell.pulseOrange, width: 1.4),
+        borderSide: const BorderSide(color: AuthShell.pulsePurple, width: 1.4),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide(color: Colors.red.shade300, width: 1.2),
+        borderSide: const BorderSide(
+          color: AuthShell.authErrorColor,
+          width: 1.2,
+        ),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide(color: Colors.red.shade400, width: 1.3),
+        borderSide: const BorderSide(
+          color: AuthShell.authErrorColor,
+          width: 1.3,
+        ),
       ),
     );
   }
@@ -792,6 +826,12 @@ class _RegisterPageState extends State<RegisterPage> {
             )
             .toList(),
         onChanged: onChanged,
+        dropdownColor: const Color(0xFF0B0F1D),
+        style: const TextStyle(
+          color: AuthShell.textPrimary,
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+        ),
         validator: required
             ? (value) => _numberValidator(value, label: label)
             : null,
@@ -827,6 +867,7 @@ class _RegisterPageState extends State<RegisterPage> {
         ).copyWith(helperText: helperText, enabled: false),
         items: const [],
         onChanged: null,
+        dropdownColor: const Color(0xFF0B0F1D),
       ),
     );
   }
@@ -859,6 +900,12 @@ class _RegisterPageState extends State<RegisterPage> {
                 if (value == null) return;
                 setState(() => _phonePrefix = value);
               },
+              dropdownColor: const Color(0xFF0B0F1D),
+              style: const TextStyle(
+                color: AuthShell.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -882,44 +929,116 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  Widget _interestPicker() {
-    if (_interests.isEmpty) return const SizedBox.shrink();
+  StepStyle _stepStyleFor(int step) {
+    final isCurrent = step == _currentStep;
+    final isCompleted = step < _currentStep;
+
+    return StepStyle(
+      color: Colors.white.withValues(alpha: isCompleted ? 0.3 : 0.2),
+      gradient: isCurrent ? AuthShell.pulseGradient : null,
+      border: Border.all(
+        color: Colors.white.withValues(alpha: isCurrent ? 0.42 : 0.2),
+      ),
+      indexStyle: TextStyle(
+        color: Colors.white.withValues(alpha: isCurrent ? 1 : 0.9),
+        fontSize: 12,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 0,
+      ),
+    );
+  }
+
+  Widget _stepIconBuilder(int stepIndex, StepState stepState) {
+    if (stepState == StepState.complete) {
+      return const Icon(Icons.check, color: Colors.white, size: 18);
+    }
+
+    return Text(
+      '${stepIndex + 1}',
+      style: TextStyle(
+        color: Colors.white.withValues(
+          alpha: stepIndex == _currentStep ? 1 : 0.9,
+        ),
+        fontSize: 12,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 0,
+      ),
+    );
+  }
+
+  Widget _termsAgreementTile() {
+    final showError = !_gdprConsent && _currentStep == 2;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: InputDecorator(
-        decoration: _fieldDecoration(
-          'Interese',
-          hintText: 'Interese',
-          iconAsset: _interestsIcon,
-        ),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _interests.map((interest) {
-            final selected = _selectedInterestIds.contains(interest.id);
-            return FilterChip(
-              label: Text(interest.name),
-              selected: selected,
-              selectedColor: const Color(0xFFFFE4CF),
-              checkmarkColor: AuthShell.pulsePurple,
-              backgroundColor: Colors.white,
-              side: BorderSide(
-                color: selected
-                    ? AuthShell.pulseOrange
-                    : const Color(0xFFE8DDEC),
+      padding: const EdgeInsets.only(top: 2, bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Checkbox(
+            value: _gdprConsent,
+            activeColor: AuthShell.pulsePurple,
+            checkColor: Colors.white,
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.34)),
+            onChanged: (value) => setState(() => _gdprConsent = value ?? false),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      const Text(
+                        'Sunt de acord cu ',
+                        style: TextStyle(
+                          color: AuthShell.textPrimary,
+                          fontSize: 15,
+                          height: 1.35,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const TermsAndConditionsScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Termenii și Condițiile',
+                          style: TextStyle(
+                            color: AuthShell.pulsePurple,
+                            decoration: TextDecoration.underline,
+                            decorationColor: AuthShell.pulsePurple,
+                            fontSize: 15,
+                            height: 1.35,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (showError)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Trebuie să accepți Termenii și Condițiile pentru a crea contul.',
+                        style: TextStyle(
+                          color: AuthShell.authErrorColor,
+                          fontSize: 12.5,
+                          height: 1.3,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-              onSelected: (value) {
-                setState(() {
-                  if (value) {
-                    _selectedInterestIds.add(interest.id);
-                  } else {
-                    _selectedInterestIds.remove(interest.id);
-                  }
-                });
-              },
-            );
-          }).toList(),
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -928,9 +1047,10 @@ class _RegisterPageState extends State<RegisterPage> {
     final rule = _selectedOccupationRule;
     return [
       Step(
-        title: const Text('Cont'),
+        title: const Text('Date cont'),
         isActive: _currentStep >= 0,
         state: _currentStep > 0 ? StepState.complete : StepState.indexed,
+        stepStyle: _stepStyleFor(0),
         content: Column(
           children: [
             _textField(
@@ -967,6 +1087,7 @@ class _RegisterPageState extends State<RegisterPage> {
         title: const Text('Date personale'),
         isActive: _currentStep >= 1,
         state: _currentStep > 1 ? StepState.complete : StepState.indexed,
+        stepStyle: _stepStyleFor(1),
         content: Column(
           children: [
             _textField(
@@ -994,8 +1115,7 @@ class _RegisterPageState extends State<RegisterPage> {
             _textField(
               controller: _addressController,
               label: 'Adresă corespondență',
-              validator: (value) =>
-                  _requiredValidator(value, label: 'Adresă corespondență'),
+              validator: _addressValidator,
               hintText: 'Stradă, număr, bloc, apartament',
               iconAsset: _homeIcon,
             ),
@@ -1037,8 +1157,9 @@ class _RegisterPageState extends State<RegisterPage> {
         ),
       ),
       Step(
-        title: const Text('Profesional'),
+        title: const Text('Date profesionale'),
         isActive: _currentStep >= 2,
+        stepStyle: _stepStyleFor(2),
         content: Column(
           children: [
             _dropdownField(
@@ -1153,43 +1274,30 @@ class _RegisterPageState extends State<RegisterPage> {
                       .toList(),
                   onChanged: (value) =>
                       setState(() => _selectedTitluUniversitar = value),
+                  dropdownColor: const Color(0xFF0B0F1D),
+                  style: const TextStyle(
+                    color: AuthShell.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
                   validator: (value) =>
                       _requiredValidator(value, label: 'Titlu universitar'),
                 ),
               ),
-            _interestPicker(),
+            const _RegisterSectionLabel('Acorduri'),
             CheckboxListTile(
               value: _acordEmail,
               contentPadding: EdgeInsets.zero,
               activeColor: AuthShell.pulsePurple,
               checkColor: Colors.white,
-              title: const Text('Sunt de acord să primesc email-uri'),
+              title: const Text(
+                'Sunt de acord să primesc email-uri',
+                style: TextStyle(color: AuthShell.textPrimary),
+              ),
               onChanged: (value) =>
                   setState(() => _acordEmail = value ?? false),
             ),
-            CheckboxListTile(
-              value: _acordSms,
-              contentPadding: EdgeInsets.zero,
-              activeColor: AuthShell.pulsePurple,
-              checkColor: Colors.white,
-              title: const Text('Sunt de acord să primesc SMS-uri'),
-              onChanged: (value) => setState(() => _acordSms = value ?? false),
-            ),
-            CheckboxListTile(
-              value: _gdprConsent,
-              contentPadding: EdgeInsets.zero,
-              activeColor: AuthShell.pulsePurple,
-              checkColor: Colors.white,
-              title: const Text('Accept prelucrarea datelor personale'),
-              subtitle: !_gdprConsent && _currentStep == 2
-                  ? Text(
-                      'Consimțământul GDPR este obligatoriu.',
-                      style: TextStyle(color: Colors.red.shade700),
-                    )
-                  : null,
-              onChanged: (value) =>
-                  setState(() => _gdprConsent = value ?? false),
-            ),
+            _termsAgreementTile(),
           ],
         ),
       ),
@@ -1271,6 +1379,13 @@ class _RegisterPageState extends State<RegisterPage> {
                           colorScheme: Theme.of(context).colorScheme.copyWith(
                             primary: AuthShell.pulsePurple,
                             secondary: AuthShell.pulseOrange,
+                            surface: const Color(0xFF0B0F1D),
+                            onSurface: AuthShell.textPrimary,
+                          ),
+                          canvasColor: Colors.transparent,
+                          textTheme: Theme.of(context).textTheme.apply(
+                            bodyColor: AuthShell.textPrimary,
+                            displayColor: AuthShell.textPrimary,
                           ),
                         ),
                         child: Stepper(
@@ -1278,9 +1393,9 @@ class _RegisterPageState extends State<RegisterPage> {
                           margin: EdgeInsets.zero,
                           currentStep: _currentStep,
                           connectorColor: WidgetStateProperty.resolveWith(
-                            (_) =>
-                                AuthShell.pulseOrange.withValues(alpha: 0.28),
+                            (_) => Colors.white.withValues(alpha: 0.56),
                           ),
+                          stepIconBuilder: _stepIconBuilder,
                           controlsBuilder: (context, details) {
                             final isLastStep = _currentStep == 2;
                             return Padding(

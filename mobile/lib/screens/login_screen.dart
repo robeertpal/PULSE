@@ -106,9 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      await showPulseErrorDialog(context, e);
     } finally {
       if (mounted) {
         setState(() {
@@ -188,26 +186,35 @@ class _LoginScreenState extends State<LoginScreen> {
         fontWeight: FontWeight.w600,
         height: 1.2,
       ),
-      errorStyle: const TextStyle(height: 1.25),
+      errorStyle: const TextStyle(
+        color: AuthShell.authErrorColor,
+        height: 1.25,
+      ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: const BorderSide(color: AuthShell.pulseOrange, width: 1.4),
+        borderSide: const BorderSide(color: AuthShell.pulsePurple, width: 1.4),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide(color: Colors.red.shade300, width: 1.2),
+        borderSide: const BorderSide(
+          color: AuthShell.authErrorColor,
+          width: 1.2,
+        ),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide(color: Colors.red.shade400, width: 1.3),
+        borderSide: const BorderSide(
+          color: AuthShell.authErrorColor,
+          width: 1.3,
+        ),
       ),
     );
   }
@@ -321,7 +328,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             const SizedBox(height: 24),
                             AuthPrimaryButton(
-                              label: 'Intră în cont',
+                              label: 'Autentificare',
                               isLoading: _isSubmitting,
                               onPressed: _submitLogin,
                             ),

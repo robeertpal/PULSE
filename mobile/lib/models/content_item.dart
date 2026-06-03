@@ -24,6 +24,7 @@ class ContentItem {
   final String? attendanceMode;
   final String? priceType;
   final num? priceAmount;
+  final int? eventId;
   final String? accreditationStatus;
   final String? provider;
   final String? courseStatus;
@@ -68,6 +69,7 @@ class ContentItem {
     this.attendanceMode,
     this.priceType,
     this.priceAmount,
+    this.eventId,
     this.accreditationStatus,
     this.provider,
     this.courseStatus,
@@ -191,6 +193,7 @@ class ContentItem {
           json['attendance_mode'] ?? json['event']?['attendance_mode'],
       priceType: json['price_type'] ?? json['event']?['price_type'],
       priceAmount: json['price_amount'] ?? json['event']?['price_amount'],
+      eventId: json['event']?['id'],
       accreditationStatus:
           json['accreditation_status'] ??
           json['event']?['accreditation_status'],
