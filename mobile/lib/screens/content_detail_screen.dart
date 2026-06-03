@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../models/content_item.dart';
 import '../services/api_service.dart';
 import '../theme/pulse_theme.dart';
+import 'author_profile_screen.dart';
 import '../widgets/ai_summary.dart';
 import '../widgets/content_card.dart';
 import '../widgets/content_type_badge.dart';
@@ -1022,6 +1023,31 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     }
   }
 
+  Future<void> _openAuthorProfile(ContentItem item) async {
+    final authorId = item.authorId;
+    if (authorId == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AuthorProfileScreen(
+          authorId: authorId,
+          initialName: item.authorName,
+        ),
+      ),
+    );
+    try {
+      final isFollowing = await _apiService.getFollowStatus(
+        targetType: 'author',
+        targetId: authorId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _isFollowingAuthor = isFollowing;
+      });
+    } catch (_) {
+      // The detail page can keep its current optimistic state.
+    }
+  }
+
   Widget _buildAuthorFollowCard(ContentItem item) {
     if (item.authorId == null) return const SizedBox.shrink();
     final authorName = item.authorName?.trim().isNotEmpty == true
@@ -1039,41 +1065,70 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
-              border: Border.all(color: accent.withValues(alpha: 0.22)),
-            ),
-            child: Icon(Icons.person_rounded, color: accent, size: 20),
-          ),
-          const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Autor',
-                  style: TextStyle(
-                    color: PulseTheme.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+              child: InkWell(
+                onTap: () => _openAuthorProfile(item),
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.14),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: accent.withValues(alpha: 0.22),
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.person_rounded,
+                          color: accent,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Autor',
+                              style: TextStyle(
+                                color: PulseTheme.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              authorName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: PulseTheme.textPrimary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: PulseTheme.textSecondary.withValues(alpha: 0.8),
+                        size: 20,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  authorName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: PulseTheme.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           const SizedBox(width: 10),

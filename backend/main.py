@@ -33,7 +33,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from pypdf import PdfReader
-from sqlalchemy import bindparam, func, text
+from sqlalchemy import bindparam, func, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, object_session
 
@@ -7889,6 +7889,62 @@ def get_author_or_404(db: Session, author_id: int):
     return author
 
 
+def author_name_match_values(author: models.Author) -> list[str]:
+    return sorted(
+        {
+            value
+            for value in {
+                normalize_author_name_key(author_display_name(author)),
+                normalize_author_name_key(author_display_name(author, include_title=True)),
+            }
+            if value
+        }
+    )
+
+
+def public_content_for_author_query(db: Session, author: models.Author):
+    name_values = author_name_match_values(author)
+    conditions = [models.PublicationAuthor.author_id == author.id]
+    if name_values:
+        conditions.append(func.lower(func.trim(models.ContentItem.author_name)).in_(name_values))
+    return (
+        visible_content_card_query(db)
+        .outerjoin(models.Publication, models.Publication.content_item_id == models.ContentItem.id)
+        .outerjoin(models.PublicationAuthor, models.PublicationAuthor.publication_id == models.Publication.id)
+        .filter(or_(*conditions))
+    )
+
+
+def serialize_author_profile(db: Session, author: models.Author, content_items: Optional[list] = None):
+    if content_items is None:
+        content_items = (
+            public_content_for_author_query(db, author)
+            .order_by(*public_content_ordering())
+            .limit(60)
+            .all()
+        )
+    data = serialize_author(author)
+    specialization_names = sorted(
+        {
+            item.specialization.name
+            for item in content_items
+            if item.specialization and item.specialization.name
+        }
+    )
+    category_names = sorted(
+        {
+            item.category.name
+            for item in content_items
+            if item.category and item.category.name
+        }
+    )
+    data["display_name"] = author_display_name(author, include_title=True)
+    data["specialization_names"] = specialization_names
+    data["category_names"] = category_names
+    data["content_count"] = len({item.id for item in content_items})
+    return data
+
+
 def event_partner_data(payload: BaseModel, exclude_unset: bool = False):
     data = pydantic_dump(payload, exclude_unset=exclude_unset)
     result = {
@@ -7933,15 +7989,50 @@ def get_authors(
         raise_safe_error(e, status_code=400)
 
 
+@app.get("/authors/{author_id}/content")
+def get_author_content(
+    author_id: int,
+    skip: int = 0,
+    limit: int = Query(default=30, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    try:
+        author = get_author_or_404(db, author_id)
+        items = (
+            public_content_for_author_query(db, author)
+            .order_by(*public_content_ordering())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        seen_ids = set()
+        result = []
+        for item in items:
+            if item.id in seen_ids:
+                continue
+            seen_ids.add(item.id)
+            result.append(serialize_content_card(item))
+        return result
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
 @app.get("/authors/{author_id}")
 def get_author(
     author_id: int,
-    authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    require_admin_authorization(authorization)
     try:
-        return serialize_author(get_author_or_404(db, author_id))
+        author = get_author_or_404(db, author_id)
+        content_items = (
+            public_content_for_author_query(db, author)
+            .order_by(*public_content_ordering())
+            .limit(60)
+            .all()
+        )
+        return serialize_author_profile(db, author, content_items)
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
