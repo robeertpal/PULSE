@@ -293,6 +293,13 @@ class _FeaturedSlide extends StatelessWidget {
                   child: EmcBadge(points: emcPoints),
                 ),
               Positioned(
+                right: 16,
+                top: emcPoints != null ? 54 : 16,
+                child: _FeaturedInfoButton(
+                  text: _infoTextForFeaturedType(item.contentType),
+                ),
+              ),
+              Positioned(
                 left: 22,
                 right: 22,
                 bottom: darkMode ? 18 : 22,
@@ -511,6 +518,121 @@ class _FeaturedIndicators extends StatelessWidget {
   }
 }
 
+class _FeaturedInfoButton extends StatelessWidget {
+  const _FeaturedInfoButton({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _showInfoSheet(context),
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: const Color(0xFF090A10).withValues(alpha: 0.70),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: PulseTheme.primaryLight.withValues(alpha: 0.28),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.30),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+              spreadRadius: -6,
+            ),
+          ],
+        ),
+        child: const Icon(
+          Icons.info_outline_rounded,
+          color: Colors.white,
+          size: 16,
+        ),
+      ),
+    );
+  }
+
+  void _showInfoSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+              decoration: BoxDecoration(
+                color: PulseTheme.surface.withValues(alpha: 0.96),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: PulseTheme.primaryLight.withValues(alpha: 0.18),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: PulseTheme.primary.withValues(alpha: 0.18),
+                    blurRadius: 26,
+                    offset: const Offset(0, 14),
+                    spreadRadius: -16,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          gradient: PulseTheme.primaryGradient,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.info_outline_rounded,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'De ce apare acest material',
+                          style: TextStyle(
+                            color: PulseTheme.textPrimary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    text,
+                    style: const TextStyle(
+                      color: PulseTheme.textSecondary,
+                      fontSize: 13,
+                      height: 1.4,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _FeaturedSkeleton extends StatelessWidget {
   const _FeaturedSkeleton();
 
@@ -650,4 +772,20 @@ String _formatDate(DateTime date) {
     'dec',
   ];
   return '${date.day} ${months[date.month - 1]} ${date.year}';
+}
+
+String _infoTextForFeaturedType(String type) {
+  switch (type) {
+    case 'course':
+      return 'Material afi\u0219at pentru explorarea cursurilor disponibile \u0219i a con\u021binutului educa\u021bional relevant.';
+    case 'event':
+      return 'Material afi\u0219at pentru a descoperi evenimente medicale publicate \u00een platform\u0103.';
+    case 'publication':
+      return 'Revist\u0103 afi\u0219at\u0103 pentru acces rapid la publica\u021bii \u0219i edi\u021bii medicale disponibile.';
+    case 'news':
+    case 'article':
+      return 'Material afi\u0219at pentru a descoperi nout\u0103\u021bi \u0219i articole medicale publicate.';
+    default:
+      return 'Material afi\u0219at pentru a explora con\u021binut medical relevant \u00een PULSE.';
+  }
 }
