@@ -220,6 +220,7 @@ class UserProfile(Base):
     first_name = Column(String(255), nullable=False)
     last_name = Column(String(255), nullable=False)
     cnp = Column(String(13))
+    birth_date = Column(String(50))
     phone = Column(String(50))
     correspondence_address = Column(Text)
     city_id = Column(Integer, ForeignKey("cities.id"), nullable=False)
@@ -232,6 +233,7 @@ class UserProfile(Base):
     cod_parafa = Column(String(255))
     professional_registration_code = Column(String(255))
     titlu_universitar = Column(String(255))
+    photo_url = Column(Text)
     acord_email = Column(Boolean, nullable=False, default=False)
     acord_sms = Column(Boolean, nullable=False, default=False)
     gdpr_consent = Column(Boolean, nullable=False, default=False)
@@ -606,6 +608,7 @@ class UserEventRegistration(Base):
     event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
     registered_at = Column(DateTime(timezone=True))
     status = Column(Enum(RegistrationStatus, name="registration_status"), nullable=False)
+    ticket_code = Column(String(100), unique=True)
 
 
 class UserActivityLog(Base):
@@ -687,6 +690,8 @@ class Payment(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     subscription_id = Column(Integer, ForeignKey("user_subscriptions.id"))
+    content_item_id = Column(Integer, ForeignKey("content_items.id", ondelete="SET NULL"))
+    payment_method_id = Column(Integer, ForeignKey("user_payment_methods.id", ondelete="SET NULL"))
     amount = Column(Numeric(10, 2), nullable=False)
     currency = Column(String(10), nullable=False, default="RON")
     provider = Column(String(100))
@@ -694,6 +699,27 @@ class Payment(Base):
     status = Column(Enum(PaymentStatus, name="payment_status"), nullable=False)
     paid_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True))
+
+    payment_method = relationship("UserPaymentMethod")
+    content_item = relationship("ContentItem")
+
+
+class UserPaymentMethod(Base):
+    __tablename__ = "user_payment_methods"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    provider = Column(String(100), nullable=False)
+    provider_customer_id = Column(String(255))
+    provider_payment_method_id = Column(String(255), nullable=False)
+    card_brand = Column(String(50))
+    card_last4 = Column(String(4))
+    exp_month = Column(Integer)
+    exp_year = Column(Integer)
+    is_default = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    deleted_at = Column(DateTime(timezone=True))
 
 
 class AuditLog(Base):

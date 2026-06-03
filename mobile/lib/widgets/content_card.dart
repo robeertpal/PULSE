@@ -362,7 +362,9 @@ class _ContentCardState extends State<ContentCard>
               spreadRadius: -2,
             ),
             BoxShadow(
-              color: Colors.black.withValues(alpha: widget.darkMode ? 0.32 : 0.03),
+              color: Colors.black.withValues(
+                alpha: widget.darkMode ? 0.32 : 0.03,
+              ),
               blurRadius: widget.darkMode ? 24 : 10,
               offset: Offset(0, widget.darkMode ? 8 : 4),
             ),

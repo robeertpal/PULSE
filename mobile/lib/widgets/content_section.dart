@@ -144,9 +144,7 @@ class ContentSection extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: categoryColor.withValues(
-                  alpha: darkMode ? 0.16 : 0.08,
-                ),
+                color: categoryColor.withValues(alpha: darkMode ? 0.16 : 0.08),
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
                   color: categoryColor.withValues(

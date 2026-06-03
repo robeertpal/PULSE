@@ -37,7 +37,9 @@ class _SplashScreenState extends State<SplashScreen> {
       while (mounted && !isOnline) {
         isOnline = await _apiService.checkHealth();
         if (isOnline) break;
-        await Future.delayed(const Duration(seconds: 3)); // Reîncearcă la fiecare 3 secunde
+        await Future.delayed(
+          const Duration(seconds: 3),
+        ); // Reîncearcă la fiecare 3 secunde
       }
     }();
 
@@ -61,7 +63,8 @@ class _SplashScreenState extends State<SplashScreen> {
   void _navigateToHome() {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const HomeScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
@@ -73,11 +76,14 @@ class _SplashScreenState extends State<SplashScreen> {
   void _navigateToLogin() {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => const AuthWelcomeScreen(),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const AuthWelcomeScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
-        transitionDuration: const Duration(milliseconds: 1000), // Cinematic slow fade
+        transitionDuration: const Duration(
+          milliseconds: 1000,
+        ), // Cinematic slow fade
       ),
     );
   }

@@ -11,6 +11,7 @@ import '../widgets/content_type_badge.dart';
 import '../widgets/emc_badge.dart';
 import '../widgets/favorite_button.dart';
 import '../widgets/skeleton_loading.dart';
+import '../widgets/event_payment_modal.dart';
 
 class ContentDetailScreen extends StatefulWidget {
   final int contentItemId;
@@ -53,6 +54,11 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   List<ContentItem> _recommendations = [];
   DateTime? _openedAt;
   bool _didTrackView = false;
+
+  bool _isEventRegistered = false;
+  String? _eventRegistrationStatus;
+  String? _eventTicketCode;
+  bool _isRegisteringEvent = false;
 
   @override
   void initState() {
@@ -112,6 +118,19 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
             metadata: _activityMetadataFor(item, source: 'content_detail'),
           ),
         );
+      }
+
+      if (item.contentType == 'event' && item.eventId != null) {
+        try {
+          final regData = await _apiService.checkEventRegistration(
+            item.eventId!,
+          );
+          _isEventRegistered = regData['is_registered'] == true;
+          _eventRegistrationStatus = regData['status'];
+          _eventTicketCode = regData['ticket_code'];
+        } catch (e) {
+          debugPrint('Error checking event registration: $e');
+        }
       }
 
       if (!mounted) return;
@@ -691,25 +710,89 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (item.contentType == 'event')
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: PulseTheme.eventContent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        _contentLabel(item).toUpperCase(),
-                        style: const TextStyle(
-                          color: PulseTheme.eventContent,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
+                    if (_isEventRegistered)
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 24),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
                         ),
-                      ),
-                    )
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(
+                              0xFF10B981,
+                            ).withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: Color(0xFF10B981),
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Ești înscris la acest eveniment',
+                                  style: TextStyle(
+                                    color: Color(0xFF10B981),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_eventTicketCode != null) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Cod bilet: $_eventTicketCode',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: PulseTheme.eventContent.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _contentLabel(item).toUpperCase(),
+                          style: const TextStyle(
+                            color: PulseTheme.eventContent,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      )
                   else if (item.contentType == 'news')
                     _buildMainPageBadge(
                       _contentLabel(item),
@@ -940,10 +1023,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              [
-                ?date,
-                '${_readingMinutes(item)} min citire',
-              ].join(' • '),
+              [?date, '${_readingMinutes(item)} min citire'].join(' • '),
               style: const TextStyle(
                 color: PulseTheme.textSecondary,
                 fontSize: 13,
@@ -1103,6 +1183,229 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     );
   }
 
+  Widget _buildEventRegistrationButton(ContentItem item) {
+    if (item.eventId == null) return const SizedBox.shrink();
+
+    final isFree = item.priceType == 'free' || (item.priceAmount ?? 0) == 0;
+
+    if (_isEventRegistered) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: PulseTheme.eventContent.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: PulseTheme.eventContent.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.check_circle_rounded,
+              color: PulseTheme.eventContent,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _eventRegistrationStatus == 'confirmed'
+                  ? 'Ești înscris (Confirmat)'
+                  : 'Ești înscris',
+              style: const TextStyle(
+                color: PulseTheme.eventContent,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ElevatedButton(
+      onPressed: _isRegisteringEvent
+          ? null
+          : () => _handleEventRegistration(item, isFree),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: PulseTheme.eventContent,
+        foregroundColor: Colors.black,
+        disabledBackgroundColor: Colors.white.withValues(alpha: 0.1),
+        minimumSize: const Size(double.infinity, 56),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 0,
+      ),
+      child: _isRegisteringEvent
+          ? const SizedBox(
+              height: 24,
+              width: 24,
+              child: CircularProgressIndicator(
+                color: Colors.black,
+                strokeWidth: 2,
+              ),
+            )
+          : Text(
+              isFree ? 'Participă gratuit' : 'Participă la eveniment',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+    );
+  }
+
+  Future<void> _handleEventRegistration(ContentItem item, bool isFree) async {
+    if (isFree) {
+      setState(() => _isRegisteringEvent = true);
+      try {
+        final res = await _apiService.registerForEvent(item.eventId!);
+        final tCode = res['ticket_code'] as String?;
+        if (!mounted) return;
+        setState(() {
+          _isEventRegistered = true;
+          _eventRegistrationStatus = 'registered';
+          _eventTicketCode = tCode;
+          _isRegisteringEvent = false;
+        });
+        _showSuccessPopup(
+          'Te-ai înscris cu succes la acest eveniment!',
+          ticketCode: tCode,
+        );
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _isRegisteringEvent = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+        );
+      }
+    } else {
+      EventPaymentModal.show(
+        context: context,
+        eventId: item.eventId!,
+        title: item.title,
+        amount: item.priceAmount?.toDouble() ?? 0.0,
+        currency: 'RON',
+        onSuccess: (tCode) {
+          setState(() {
+            _isEventRegistered = true;
+            _eventRegistrationStatus = 'confirmed';
+            _eventTicketCode = tCode;
+          });
+          _showSuccessPopup(
+            'Plata a fost procesată și ești înscris la eveniment!',
+            ticketCode: tCode,
+          );
+        },
+      );
+    }
+  }
+
+  void _showSuccessPopup(String message, {String? ticketCode}) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: PulseTheme.eventContent.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: PulseTheme.eventContent.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: PulseTheme.eventContent,
+                  size: 40,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Felicitări!',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 15,
+                  height: 1.4,
+                ),
+              ),
+              if (ticketCode != null) ...[
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Cod bilet',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        ticketCode,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: PulseTheme.eventContent,
+                  foregroundColor: Colors.black,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text(
+                  'Închide',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildEventContent(ContentItem item) {
     final accent = _accentFor(item);
 
@@ -1126,6 +1429,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _buildEventRegistrationButton(item),
+        const SizedBox(height: 24),
         _buildPanelSectionTitle('Detalii'),
         const SizedBox(height: 16),
         _buildEventInfoRow(
