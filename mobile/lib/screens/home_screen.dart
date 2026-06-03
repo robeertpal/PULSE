@@ -888,7 +888,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-<<<<<<< HEAD
+
   Widget _buildHeaderIconButton({
     IconData? icon,
     String? iconAsset,
@@ -1282,7 +1282,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ],
           ),
         ),
-=======
+
   Widget _buildScrollableHomeHeader({required bool showFilterButton}) {
     return _animatedSection(
       0,
@@ -1305,7 +1305,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         showFilterButton:
             showFilterButton &&
             (_categories.isNotEmpty || _specializations.isNotEmpty),
->>>>>>> origin/main
+
       ),
     );
   }
@@ -2570,7 +2570,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
         child: SafeArea(
-<<<<<<< HEAD
+
         bottom: false,
         child: Column(
           children: [
@@ -2611,7 +2611,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     items: _news,
                   ),
                 ],
-=======
+
           bottom: false,
           child: Column(
             children: [
@@ -2652,7 +2652,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                   ],
                 ),
->>>>>>> origin/main
+
               ),
             ],
           ),
