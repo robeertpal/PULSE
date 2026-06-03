@@ -1282,7 +1282,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ],
           ),
         ),
-
+      ),
+    );
+  }
   Widget _buildScrollableHomeHeader({required bool showFilterButton}) {
     return _animatedSection(
       0,
