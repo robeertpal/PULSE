@@ -8,6 +8,7 @@ class ContentItem {
   final String? heroImageUrl;
   final String? thumbnailUrl;
   final DateTime? publishedAt;
+  final int? authorId;
   final String? authorName;
   final bool isFeatured;
   final String? tag; // Virtual field for UI
@@ -24,7 +25,6 @@ class ContentItem {
   final String? attendanceMode;
   final String? priceType;
   final num? priceAmount;
-  final int? eventId;
   final String? accreditationStatus;
   final String? provider;
   final String? courseStatus;
@@ -53,6 +53,7 @@ class ContentItem {
     this.heroImageUrl,
     this.thumbnailUrl,
     this.publishedAt,
+    this.authorId,
     this.authorName,
     this.isFeatured = false,
     this.tag,
@@ -69,7 +70,6 @@ class ContentItem {
     this.attendanceMode,
     this.priceType,
     this.priceAmount,
-    this.eventId,
     this.accreditationStatus,
     this.provider,
     this.courseStatus,
@@ -142,6 +142,13 @@ class ContentItem {
       return DateTime.tryParse(value.toString());
     }
 
+    int? parseInt(dynamic value) {
+      if (value == null) return null;
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value.toString());
+    }
+
     final rawPartners = json['partners'] ?? json['event']?['partners'];
     final partners = rawPartners is List
         ? rawPartners
@@ -176,6 +183,7 @@ class ContentItem {
       heroImageUrl: json['hero_image_url'],
       thumbnailUrl: json['thumbnail_url'],
       publishedAt: parseDate(json['published_at']),
+      authorId: parseInt(json['author_id'] ?? json['author']?['id']),
       authorName: json['author_name'],
       isFeatured: json['is_featured'] ?? false,
       tag: derivedTag,
@@ -193,7 +201,6 @@ class ContentItem {
           json['attendance_mode'] ?? json['event']?['attendance_mode'],
       priceType: json['price_type'] ?? json['event']?['price_type'],
       priceAmount: json['price_amount'] ?? json['event']?['price_amount'],
-      eventId: json['event']?['id'],
       accreditationStatus:
           json['accreditation_status'] ??
           json['event']?['accreditation_status'],
