@@ -222,19 +222,21 @@ class _FeaturedSlide extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(darkMode ? 24 : 28),
           border: darkMode
-              ? Border.all(color: Colors.white.withValues(alpha: 0.12))
+              ? Border.all(color: PulseTheme.primaryLight.withValues(alpha: 0.18))
               : null,
           boxShadow: [
             BoxShadow(
-              color: color.withValues(alpha: darkMode ? 0.30 : 0.24),
-              blurRadius: darkMode ? 34 : 28,
-              offset: const Offset(0, 14),
-              spreadRadius: -6,
+              color: darkMode
+                  ? PulseTheme.primary.withValues(alpha: 0.18)
+                  : color.withValues(alpha: 0.24),
+              blurRadius: darkMode ? 30 : 28,
+              offset: const Offset(0, 12),
+              spreadRadius: -10,
             ),
             BoxShadow(
-              color: Colors.black.withValues(alpha: darkMode ? 0.40 : 0.08),
-              blurRadius: darkMode ? 28 : 18,
-              offset: const Offset(0, 10),
+              color: Colors.black.withValues(alpha: darkMode ? 0.44 : 0.08),
+              blurRadius: darkMode ? 26 : 18,
+              offset: const Offset(0, 9),
               spreadRadius: -4,
             ),
           ],
@@ -255,8 +257,8 @@ class _FeaturedSlide extends StatelessWidget {
                     end: Alignment.bottomCenter,
                     colors: [
                       Colors.black.withValues(alpha: 0.05),
-                      Colors.black.withValues(alpha: darkMode ? 0.34 : 0.26),
-                      Colors.black.withValues(alpha: darkMode ? 0.86 : 0.78),
+                      Colors.black.withValues(alpha: darkMode ? 0.28 : 0.26),
+                      Colors.black.withValues(alpha: darkMode ? 0.88 : 0.78),
                     ],
                     stops: const [0.0, 0.44, 1.0],
                   ),
@@ -269,6 +271,7 @@ class _FeaturedSlide extends StatelessWidget {
                     end: Alignment.centerRight,
                     colors: [
                       Colors.black.withValues(alpha: 0.42),
+                      PulseTheme.primaryDark.withValues(alpha: 0.12),
                       Colors.transparent,
                     ],
                   ),
@@ -300,7 +303,7 @@ class _FeaturedSlide extends StatelessWidget {
                     Row(
                       children: [
                         _TypeBadge(
-                          label: _labelForType(item.contentType),
+                        label: _labelForType(item.contentType),
                           color: color,
                           contentType: item.contentType,
                           iconOnly: iconOnlyTypeBadge,
@@ -605,7 +608,9 @@ extension _FeaturedCardEmcBadgeContentItemX on ContentItem {
     }
 
     if (contentType == 'publication') {
-      final parsedCredits = _parsePositiveEmcCredits(publicationEmcCreditsText);
+      final parsedCredits = _parsePositiveEmcCredits(
+        publicationEmcCreditsText,
+      );
       if (parsedCredits != null) return '+$parsedCredits';
     }
 

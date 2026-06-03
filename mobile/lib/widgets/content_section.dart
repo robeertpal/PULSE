@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../theme/pulse_theme.dart';
 import 'empty_state_card.dart';
 
 class ContentSection extends StatelessWidget {
@@ -118,14 +119,15 @@ class ContentSection extends StatelessWidget {
                   width: 48,
                   height: 2,
                   decoration: BoxDecoration(
-                    color: categoryColor.withValues(
-                      alpha: darkMode ? 0.86 : 0.34,
-                    ),
+                    gradient: darkMode ? PulseTheme.primaryGradient : null,
+                    color: darkMode
+                        ? null
+                        : categoryColor.withValues(alpha: 0.34),
                     borderRadius: BorderRadius.circular(999),
                     boxShadow: darkMode
                         ? [
                             BoxShadow(
-                              color: categoryColor.withValues(alpha: 0.42),
+                              color: PulseTheme.primary.withValues(alpha: 0.34),
                               blurRadius: 14,
                               spreadRadius: -3,
                             ),
@@ -144,12 +146,14 @@ class ContentSection extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: categoryColor.withValues(alpha: darkMode ? 0.16 : 0.08),
+                color: darkMode
+                    ? PulseTheme.primary.withValues(alpha: 0.12)
+                    : categoryColor.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
-                  color: categoryColor.withValues(
-                    alpha: darkMode ? 0.32 : 0.14,
-                  ),
+                  color: darkMode
+                      ? PulseTheme.primaryLight.withValues(alpha: 0.26)
+                      : categoryColor.withValues(alpha: 0.14),
                   width: 1,
                 ),
               ),
@@ -159,7 +163,7 @@ class ContentSection extends StatelessWidget {
                   Text(
                     actionText,
                     style: TextStyle(
-                      color: categoryColor,
+                      color: darkMode ? PulseTheme.primaryLight : categoryColor,
                       fontWeight: FontWeight.w800,
                       fontSize: 13,
                       letterSpacing: -0.1,
@@ -171,7 +175,7 @@ class ContentSection extends StatelessWidget {
                     width: 12,
                     height: 12,
                     colorFilter: ColorFilter.mode(
-                      categoryColor,
+                      darkMode ? PulseTheme.primaryLight : categoryColor,
                       BlendMode.srcIn,
                     ),
                   ),
