@@ -927,6 +927,35 @@ class ApiService {
     );
   }
 
+  Future<Map<String, dynamic>> getPublicationDetails(int publicationId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/publications/$publicationId'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 404) {
+        throw Exception('Publication not found');
+      }
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut incarca detaliile publicatiei.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Unexpected publication detail response format');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching publication details: $e');
+      rethrow;
+    }
+  }
+
   Future<List<PublicationIssue>> getPublicationIssues(int publicationId) async {
     try {
       final response = await http
