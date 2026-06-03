@@ -14,7 +14,6 @@ import 'notifications_screen.dart';
 import 'publication_issues_screen.dart';
 import 'profile_screen.dart';
 import 'saved_content_screen.dart';
-import '../widgets/home_header.dart';
 import '../widgets/featured_card.dart';
 import '../widgets/content_section.dart';
 import '../widgets/content_card.dart';
@@ -73,7 +72,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   String? _errorMessage;
   String? _forYouErrorMessage;
   String _doctorName = 'Medic';
-  int _emcPoints = 0;
   int _unreadNotificationsCount = 0;
 
   static const int _sectionCount = 10;
@@ -271,7 +269,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     try {
       final profileData = await _apiService.getMyProfile();
       final freshName = profileData['display_name'] as String?;
-      final totalEmcPoints = _readTotalEmcPoints(profileData);
       if (freshName != null && freshName.trim().isNotEmpty) {
         await _authStorage.saveUserName(freshName.trim());
       }
@@ -280,28 +277,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           if (freshName != null && freshName.trim().isNotEmpty) {
             _doctorName = freshName.trim();
           }
-          _emcPoints = totalEmcPoints;
         });
       }
     } catch (e) {
       debugPrint('Eroare la obținerea numelui medicului din API: $e');
     }
-  }
-
-  int _readTotalEmcPoints(Map<String, dynamic> profileData) {
-    final directValue = profileData['total_emc_points'];
-    if (directValue is int) return directValue;
-    if (directValue is num) return directValue.toInt();
-    if (directValue is String) return int.tryParse(directValue) ?? 0;
-
-    final profile = profileData['profile'];
-    if (profile is Map<String, dynamic>) {
-      final profileValue = profile['total_emc_points'];
-      if (profileValue is int) return profileValue;
-      if (profileValue is num) return profileValue.toInt();
-      if (profileValue is String) return int.tryParse(profileValue) ?? 0;
-    }
-    return 0;
   }
 
   List<int> get _categoryFilterIds => _selectedCategoryIds.toList()..sort();
@@ -607,7 +587,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (!_selectedCategoryIds.add(id)) {
         _selectedCategoryIds.remove(id);
       }
-      _filtersExpanded = false;
     });
     _loadData();
   }
@@ -617,7 +596,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (!_selectedSpecializationIds.add(id)) {
         _selectedSpecializationIds.remove(id);
       }
-      _filtersExpanded = false;
     });
     _loadData();
   }
@@ -627,7 +605,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     setState(() {
       _selectedCategoryIds.clear();
       _selectedSpecializationIds.clear();
-      _filtersExpanded = false;
     });
     _loadData();
   }
@@ -748,32 +725,546 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _toggleFiltersPanel() {
-    setState(() {
-      _filtersExpanded = !_filtersExpanded;
-    });
+  Future<void> _showFilterDropdown() async {
+    var categoriesExpanded = false;
+    var specializationsExpanded = false;
+
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Închide filtrele',
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final size = MediaQuery.sizeOf(context);
+            final panelWidth = (size.width - 28).clamp(280.0, 360.0).toDouble();
+
+            return SafeArea(
+              child: Align(
+                alignment: Alignment.topRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 48, right: 14, left: 14),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: panelWidth,
+                          maxHeight: size.height * 0.62,
+                        ),
+                        child: Container(
+                          width: panelWidth,
+                          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                          decoration: _glassDecoration(
+                            radius: 24,
+                            opacity: 0.12,
+                            borderColor: _neonPurple.withValues(alpha: 0.24),
+                          ),
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Text(
+                                        'Filtre',
+                                        style: TextStyle(
+                                          color: _darkText,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                    _buildActiveFilterBadge(),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                _buildFilterDropdownSection(
+                                  title: 'Categorii',
+                                  expanded: categoriesExpanded,
+                                  options: _categories,
+                                  selectedIds: _selectedCategoryIds,
+                                  onToggle: () {
+                                    setDialogState(() {
+                                      categoriesExpanded = !categoriesExpanded;
+                                    });
+                                  },
+                                  onSelected: (id) {
+                                    _toggleCategory(id);
+                                    setDialogState(() {});
+                                  },
+                                ),
+                                const SizedBox(height: 8),
+                                _buildFilterDropdownSection(
+                                  title: 'Specializări',
+                                  expanded: specializationsExpanded,
+                                  options: _specializations,
+                                  selectedIds: _selectedSpecializationIds,
+                                  onToggle: () {
+                                    setDialogState(() {
+                                      specializationsExpanded =
+                                          !specializationsExpanded;
+                                    });
+                                  },
+                                  onSelected: (id) {
+                                    _toggleSpecialization(id);
+                                    setDialogState(() {});
+                                  },
+                                ),
+                                if (_hasActiveFilters) ...[
+                                  const SizedBox(height: 10),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: TextButton.icon(
+                                      onPressed: () {
+                                        _resetFilters();
+                                        setDialogState(() {});
+                                      },
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: _neonBlue,
+                                        minimumSize: const Size(0, 34),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                        ),
+                                        textStyle: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      icon: const Icon(Icons.close, size: 15),
+                                      label: const Text('Șterge filtre'),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
+            alignment: Alignment.topRight,
+            child: child,
+          ),
+        );
+      },
+    );
   }
 
-  Widget _buildScrollableHomeHeader({required bool showFilterButton}) {
-    return _animatedSection(
-      0,
-      HomeHeader(
-        doctorName: _doctorName,
-        avatarUrl: '',
-        emcPoints: _emcPoints,
-        savedCount: _savedContentIds.length,
-        unreadNotificationsCount: _unreadNotificationsCount,
-        onNotificationsTap: _openNotifications,
-        onSavedTap: _openSavedContent,
-        onProfileTap: _openProfile,
-        onLogoutTap: _logout,
-        darkMode: true,
-        onFilterTap: _toggleFiltersPanel,
-        activeFilterCount: _activeFilterCount,
-        filtersExpanded: _filtersExpanded,
-        showFilterButton:
-            showFilterButton &&
-            (_categories.isNotEmpty || _specializations.isNotEmpty),
+  Widget _buildHeaderIconButton({
+    IconData? icon,
+    String? iconAsset,
+    required VoidCallback onTap,
+    int badgeCount = 0,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.24),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                  spreadRadius: -10,
+                ),
+              ],
+            ),
+            child: Center(
+              child: iconAsset != null
+                  ? SvgPicture.asset(
+                      iconAsset,
+                      width: 17,
+                      height: 17,
+                      colorFilter: const ColorFilter.mode(
+                        _darkMuted,
+                        BlendMode.srcIn,
+                      ),
+                    )
+                  : Icon(icon, color: _darkMuted, size: 18),
+            ),
+          ),
+          if (badgeCount > 0)
+            Positioned(
+              right: -2,
+              top: -3,
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 16),
+                height: 16,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  gradient: PulseTheme.primaryGradient,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: _darkSurface, width: 1.4),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  badgeCount > 9 ? '9+' : '$badgeCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterDropdownSection({
+    required String title,
+    required bool expanded,
+    required List<FilterOption> options,
+    required Set<int> selectedIds,
+    required VoidCallback onToggle,
+    required ValueChanged<int> onSelected,
+  }) {
+    final selectedCount = options.where((option) {
+      return selectedIds.contains(option.id);
+    }).length;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: onToggle,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          color: _darkText,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    if (selectedCount > 0)
+                      Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        constraints: const BoxConstraints(minWidth: 20),
+                        height: 20,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        decoration: BoxDecoration(
+                          color: _neonPurple.withValues(alpha: 0.22),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: _neonBlue.withValues(alpha: 0.26),
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '$selectedCount',
+                          style: const TextStyle(
+                            color: _darkText,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
+                          ),
+                        ),
+                      ),
+                    AnimatedRotation(
+                      turns: expanded ? 0.5 : 0,
+                      duration: PulseTheme.animFast,
+                      curve: PulseTheme.animCurve,
+                      child: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: _darkMuted,
+                        size: 18,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: PulseTheme.animMedium,
+            curve: PulseTheme.animCurve,
+            alignment: Alignment.topCenter,
+            child: expanded
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 2, 10, 12),
+                    child: options.isEmpty
+                        ? const Text(
+                            'Nu exist\u0103 op\u021biuni disponibile.',
+                            style: TextStyle(
+                              color: _darkMuted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          )
+                        : Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: options.map((option) {
+                              return ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 170,
+                                ),
+                                child: _buildFilterChip(
+                                  option: option,
+                                  selected: selectedIds.contains(option.id),
+                                  onSelected: onSelected,
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCompactHomeMenu() async {
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Inchide meniul',
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        void closeAndRun(VoidCallback callback) {
+          Navigator.of(dialogContext).pop();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) callback();
+          });
+        }
+
+        return SafeArea(
+          child: Align(
+            alignment: Alignment.topRight,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 48, right: 14),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  child: Container(
+                    width: 220,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: _glassDecoration(
+                      radius: 22,
+                      opacity: 0.12,
+                      borderColor: _neonPurple.withValues(alpha: 0.22),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildCompactMenuItem(
+                          icon: Icons.person_outline_rounded,
+                          label: 'Profil',
+                          onTap: () => closeAndRun(_openProfile),
+                        ),
+                        _buildCompactMenuItem(
+                          icon: Icons.favorite_border_rounded,
+                          label: 'Salvate',
+                          onTap: () => closeAndRun(_openSavedContent),
+                        ),
+                        Divider(
+                          height: 1,
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                        _buildCompactMenuItem(
+                          icon: Icons.logout_rounded,
+                          label: 'Ie\u0219ire',
+                          danger: true,
+                          onTap: () => closeAndRun(_logout),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
+            alignment: Alignment.topRight,
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCompactMenuItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool danger = false,
+  }) {
+    final color = danger ? Colors.redAccent : _darkText;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStickyHomeHeader() {
+    return ClipRRect(
+      borderRadius: const BorderRadius.only(
+        bottomLeft: Radius.circular(22),
+        bottomRight: Radius.circular(22),
+      ),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          decoration: BoxDecoration(
+            color: _darkSurface.withValues(alpha: 0.78),
+            border: Border(
+              bottom: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.30),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+                spreadRadius: -10,
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 7, 14, 2),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: _openProfile,
+                      child: Container(
+                        width: 34,
+                        height: 34,
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: PulseTheme.avatarRingGradient,
+                        ),
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF0B1530),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: SvgPicture.asset(
+                              'assets/icons/people.svg',
+                              width: 17,
+                              height: 17,
+                              colorFilter: const ColorFilter.mode(
+                                _darkMuted,
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    _buildHeaderIconButton(
+                      iconAsset: 'assets/icons/bell.svg',
+                      onTap: _openNotifications,
+                      badgeCount: _unreadNotificationsCount,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildHeaderIconButton(
+                      icon: Icons.tune_rounded,
+                      onTap: _showFilterDropdown,
+                      badgeCount: _activeFilterCount,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildHeaderIconButton(
+                      icon: Icons.more_horiz_rounded,
+                      onTap: _showCompactHomeMenu,
+                    ),
+                  ],
+                ),
+              ),
+              _buildHomeTabSwitch(),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1387,70 +1878,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 4,
-                height: 16,
-                decoration: BoxDecoration(
-                  color: _neonBlue.withValues(alpha: 0.62),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: _darkText,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: _darkText,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
-        SizedBox(
-          height: 48,
-          child: ListView.separated(
-            padding: EdgeInsets.zero,
-            scrollDirection: Axis.horizontal,
-            itemBuilder: (context, index) {
-              final option = options[index];
-              return ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 180),
-                child: _buildFilterChip(
-                  option: option,
-                  selected: selectedIds.contains(option.id),
-                  onSelected: onSelected,
-                ),
-              );
-            },
-            separatorBuilder: (context, index) => const SizedBox(width: 10),
-            itemCount: options.length,
-          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: options.map((option) {
+            return ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 170),
+              child: _buildFilterChip(
+                option: option,
+                selected: selectedIds.contains(option.id),
+                onSelected: onSelected,
+              ),
+            );
+          }).toList(),
         ),
       ],
     );
   }
 
-  String _filterNameForId(List<FilterOption> options, int id, String fallback) {
-    for (final option in options) {
-      if (option.id == id) return option.name;
-    }
-    return fallback;
-  }
-
   String _activeFilterSummary() {
-    final labels = <String>[
-      ..._categoryFilterIds.map(
-        (id) => _filterNameForId(_categories, id, 'Categorie $id'),
-      ),
-      ..._specializationFilterIds.map(
-        (id) => _filterNameForId(_specializations, id, 'Specializare $id'),
-      ),
-    ];
-
-    if (labels.isEmpty) return 'Niciun filtru activ';
+    final labels = <String>[];
     if (labels.length <= 2) return labels.join(' • ');
     return '${labels.take(2).join(' • ')} +${labels.length - 2}';
   }
@@ -1990,12 +2446,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildScrollableHomeHeader(showFilterButton: true),
-                _buildHomeTabSwitch(),
-                _buildContentFilters(),
-                _buildAcasaFeed(),
-              ],
+              children: [_buildContentFilters(), _buildAcasaFeed()],
             ),
           ),
         ),
@@ -2005,11 +2456,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildScrollableHomeHeader(showFilterButton: false),
-              _buildHomeTabSwitch(),
-              _buildForYouRecommendationsContent(),
-            ],
+            children: [_buildForYouRecommendationsContent()],
           ),
         ),
       ],
@@ -2087,6 +2534,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         bottom: false,
         child: Column(
           children: [
+            if (_selectedIndex == 0) _buildStickyHomeHeader(),
             // Conținutul paginii cu tranziții
             Expanded(
               child: FadeIndexedStack(
