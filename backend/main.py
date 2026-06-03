@@ -2060,6 +2060,37 @@ def serialize_publication_issue(issue: models.PublicationIssue, include_publicat
     }
 
 
+def serialize_publication_profile(publication: models.Publication, db: Session):
+    content_item = publication.content_item
+    issue_rows = (
+        db.query(models.PublicationIssue)
+        .filter(models.PublicationIssue.publication_id == publication.id)
+        .all()
+    )
+    return {
+        "id": publication.id,
+        "publication_id": publication.id,
+        "content_item_id": publication.content_item_id,
+        "name": publication.name,
+        "logo_url": publication.logo_url,
+        "description": publication.description,
+        "emc_credits_text": publication.emc_credits_text,
+        "creditation_text": publication.creditation_text,
+        "indexing_text": publication.indexing_text,
+        "subscription_url": publication.subscription_url,
+        "authors": serialize_publication_author_links(getattr(publication, "author_links", [])),
+        "issue_count": len(issue_rows),
+        "pdf_issue_count": len([issue for issue in issue_rows if issue.issue_url]),
+        "has_pdf_issues": any(issue.issue_url for issue in issue_rows),
+        "content_title": content_item.title if content_item else None,
+        "content_short_description": content_item.short_description if content_item else None,
+        "content_body": content_item.body if content_item else None,
+        "content_hero_image_url": content_item.hero_image_url if content_item else None,
+        "content_thumbnail_url": content_item.thumbnail_url if content_item else None,
+        "content_published_at": serialize_value(content_item.published_at) if content_item else None,
+    }
+
+
 def public_publication_query(db: Session):
     return (
         db.query(models.Publication)
@@ -3498,6 +3529,15 @@ def get_publications(
         return [serialize_content_card(item) for item in items]
     except Exception as e:
         raise_safe_error(e)
+
+
+@app.get("/publications/{publication_id}")
+def get_publication_detail(
+    publication_id: int,
+    db: Session = Depends(get_db),
+):
+    publication = get_public_publication_or_404(db, publication_id)
+    return serialize_publication_profile(publication, db)
 
 
 @app.get("/publications/{publication_id}/issues")
