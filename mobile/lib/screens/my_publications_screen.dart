@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/pulse_theme.dart';
-import '../widgets/profile_ui_helpers.dart';
+import 'profile_screen.dart';
 
 class MyPublicationsScreen extends StatelessWidget {
   const MyPublicationsScreen({super.key});
