@@ -397,6 +397,23 @@ class _ContentCardState extends State<ContentCard>
                   children: [
                     // â”€â”€ Image or Placeholder Icon â”€â”€
                     Positioned.fill(child: _buildImageContent()),
+                    if (widget.darkMode)
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.08),
+                                Colors.transparent,
+                                Colors.black.withValues(alpha: 0.30),
+                              ],
+                              stops: const [0.0, 0.48, 1.0],
+                            ),
+                          ),
+                        ),
+                      ),
                     // EMC Points badge (consistent with featured cards)
                     if (widget.emcPoints != null)
                       Positioned(
@@ -422,24 +439,27 @@ class _ContentCardState extends State<ContentCard>
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: widget.categoryColor.withValues(
-                            alpha: widget.darkMode ? 0.16 : 0.1,
-                          ),
+                          gradient: widget.darkMode
+                              ? PulseTheme.primaryGradient
+                              : null,
+                          color: widget.darkMode
+                              ? null
+                              : widget.categoryColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(999),
                           border: widget.darkMode
                               ? Border.all(
-                                  color: widget.categoryColor.withValues(
-                                    alpha: 0.30,
-                                  ),
+                                  color: Colors.white.withValues(alpha: 0.16),
                                 )
                               : null,
                         ),
                         child: Text(
                           widget.tag.toUpperCase(),
                           style: TextStyle(
-                            color: widget.categoryColor,
+                            color: widget.darkMode
+                                ? Colors.white
+                                : widget.categoryColor,
                             fontSize: 10,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w900,
                             letterSpacing: 0.8,
                           ),
                         ),
@@ -460,13 +480,13 @@ class _ContentCardState extends State<ContentCard>
                       const SizedBox(height: 8),
                       Text(
                         widget.subtitle,
-                        maxLines: 1,
+                        maxLines: widget.darkMode ? 2 : 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: widget.darkMode ? 12.5 : 13,
                           color: subtitleColor,
                           fontWeight: FontWeight.w500,
-                          height: 1.25,
+                          height: 1.28,
                         ),
                       ),
                       const Spacer(),
