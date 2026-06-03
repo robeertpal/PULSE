@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 class PulseTheme {
   // â”€â”€ Core Palette â”€â”€
@@ -30,11 +30,7 @@ class PulseTheme {
   static const LinearGradient shimmerGradient = LinearGradient(
     begin: Alignment(-1.0, -0.3),
     end: Alignment(1.0, 0.3),
-    colors: [
-      Color(0xFF101B37),
-      Color(0xFF1A2746),
-      Color(0xFF101B37),
-    ],
+    colors: [Color(0xFF101B37), Color(0xFF1A2746), Color(0xFF101B37)],
     stops: [0.0, 0.5, 1.0],
   );
 
@@ -146,16 +142,8 @@ class PulseTheme {
           fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
-        bodyLarge: TextStyle(
-          color: textPrimary,
-          fontSize: 16,
-          height: 1.5,
-        ),
-        bodyMedium: TextStyle(
-          color: textSecondary,
-          fontSize: 14,
-          height: 1.45,
-        ),
+        bodyLarge: TextStyle(color: textPrimary, fontSize: 16, height: 1.5),
+        bodyMedium: TextStyle(color: textSecondary, fontSize: 14, height: 1.45),
         labelLarge: TextStyle(
           color: textPrimary,
           fontSize: 14,
@@ -174,4 +162,3 @@ class PulseTheme {
     );
   }
 }
-

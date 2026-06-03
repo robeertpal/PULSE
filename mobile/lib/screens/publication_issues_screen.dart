@@ -2644,11 +2644,7 @@ class _PremiumPill extends StatelessWidget {
   final String? svgAsset;
   final Color color;
 
-  const _PremiumPill({
-    required this.label,
-    this.svgAsset,
-    required this.color,
-  });
+  const _PremiumPill({required this.label, this.svgAsset, required this.color});
 
   @override
   Widget build(BuildContext context) {

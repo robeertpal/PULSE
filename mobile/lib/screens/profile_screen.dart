@@ -8,9 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import 'emc_activity_screen.dart';
-import 'login_screen.dart';
 import '../services/api_service.dart';
-import '../services/auth_storage.dart';
 import '../theme/pulse_theme.dart';
 import '../utils/validators.dart' as validators;
 import '../widgets/skeleton_loading.dart';
@@ -45,7 +43,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   static const _titleIcon = 'assets/icons/graduation.svg';
   static const _cardIcon = 'assets/icons/creditcard.svg';
   static const _keyIcon = 'assets/icons/key.fill.svg';
-  static const _logoutIcon = 'assets/icons/logout.svg';
   static const _eyeIcon = 'assets/icons/eye.fill.svg';
   static const _eyeSlashIcon = 'assets/icons/eye.slash.fill.svg';
   static const Color _black = Color(0xFF050505);
@@ -58,14 +55,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     end: Alignment.bottomRight,
     colors: [_pink, _orange],
   );
-  static const LinearGradient _logoutGradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFFFF2A85), Color(0xFFFF3B30)],
-  );
-
-  final AuthStorage _authStorage = AuthStorage();
-
   final ApiService _apiService = ApiService();
 
   Map<String, dynamic>? _profile;
@@ -368,39 +357,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _confirmLogout() async {
-    await showDialog<void>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.72),
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-        child: _ConfirmLogoutDialogCard(
-          onCancel: () => Navigator.of(context).pop(),
-          onConfirm: () {
-            Navigator.of(context).pop();
-            _logout();
-          },
-        ),
-      ),
-    );
-  }
-
-  Future<void> _logout() async {
-    try {
-      await _apiService.logout();
-    } catch (e) {
-      debugPrint('Logout request failed: $e');
-    }
-
-    await _authStorage.clearSession();
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
-    );
-  }
-
   Future<bool> _saveProfile(Map<String, String> changes) async {
     setState(() => _errorMessage = null);
 
@@ -634,11 +590,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         leadingWidth: 72,
         leading: Padding(
           padding: const EdgeInsets.only(left: 18),
-          child: _ProfileBackButton(
+          child: ProfileBackButton(
             onPressed: () => Navigator.of(context).maybePop(),
           ),
         ),
-        title: const _GradientHeading('Profilul meu'),
+        title: const ProfileGradientHeading('Profilul meu'),
       ),
       body: SafeArea(child: _buildBody()),
     );
@@ -731,8 +687,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 14),
         _ChangePasswordButton(onPressed: _openChangePassword),
-        const SizedBox(height: 24),
-        _LogoutButton(onPressed: _confirmLogout),
       ],
     );
   }
@@ -917,8 +871,8 @@ class _GradientDialogButton extends StatelessWidget {
   }
 }
 
-class _GradientHeading extends StatelessWidget {
-  const _GradientHeading(this.text);
+class ProfileGradientHeading extends StatelessWidget {
+  const ProfileGradientHeading(this.text, {super.key});
 
   final String text;
 
@@ -939,8 +893,8 @@ class _GradientHeading extends StatelessWidget {
   }
 }
 
-class _ProfileBackButton extends StatelessWidget {
-  const _ProfileBackButton({required this.onPressed});
+class ProfileBackButton extends StatelessWidget {
+  const ProfileBackButton({super.key, required this.onPressed});
 
   final VoidCallback onPressed;
 
@@ -4999,119 +4953,6 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
   }
 }
 
-class _ConfirmLogoutDialogCard extends StatelessWidget {
-  const _ConfirmLogoutDialogCard({
-    required this.onCancel,
-    required this.onConfirm,
-  });
-
-  final VoidCallback onCancel;
-  final VoidCallback onConfirm;
-
-  @override
-  Widget build(BuildContext context) {
-    return _GlassCard(
-      padding: const EdgeInsets.fromLTRB(22, 24, 22, 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 58,
-            height: 58,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: _ProfileScreenState._logoutGradient,
-            ),
-            child: const Center(
-              child: _SvgIcon(
-                _ProfileScreenState._logoutIcon,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          const Text(
-            'Te deconectezi?',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: PulseTheme.textPrimary,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Ești sigur că vrei să ieși din cont?',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: PulseTheme.textSecondary,
-              fontSize: 15,
-              height: 1.45,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 22),
-          Row(
-            children: [
-              Expanded(
-                child: TextButton(
-                  onPressed: onCancel,
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.12),
-                      ),
-                    ),
-                  ),
-                  child: const Text(
-                    'Anulează',
-                    style: TextStyle(
-                      color: PulseTheme.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Material(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(16),
-                  child: Ink(
-                    height: 50,
-                    decoration: BoxDecoration(
-                      gradient: _ProfileScreenState._logoutGradient,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: InkWell(
-                      onTap: onConfirm,
-                      borderRadius: BorderRadius.circular(16),
-                      child: const Center(
-                        child: Text(
-                          'Deconectare',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ChangePasswordButton extends StatelessWidget {
   const _ChangePasswordButton({required this.onPressed});
 
@@ -5143,52 +4984,6 @@ class _ChangePasswordButton extends StatelessWidget {
                 SizedBox(width: 9),
                 Text(
                   'Schimbă parola',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LogoutButton extends StatelessWidget {
-  const _LogoutButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(17),
-      child: Ink(
-        height: 50,
-        decoration: BoxDecoration(
-          gradient: _ProfileScreenState._logoutGradient,
-          borderRadius: BorderRadius.circular(17),
-        ),
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(17),
-          child: const Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _SvgIcon(
-                  _ProfileScreenState._logoutIcon,
-                  color: Colors.white,
-                  size: 20,
-                ),
-                SizedBox(width: 9),
-                Text(
-                  'Deconectare',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 15,

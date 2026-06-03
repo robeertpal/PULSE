@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 
@@ -48,7 +48,9 @@ class QuickActionsStrip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: _actions.map((action) => _QuickActionCapsule(action: action)).toList(),
+        children: _actions
+            .map((action) => _QuickActionCapsule(action: action))
+            .toList(),
       ),
     );
   }
@@ -121,10 +123,7 @@ class _QuickActionCapsuleState extends State<_QuickActionCapsule>
                   action.svgAsset,
                   width: 26,
                   height: 26,
-                  colorFilter: ColorFilter.mode(
-                    action.color,
-                    BlendMode.srcIn,
-                  ),
+                  colorFilter: ColorFilter.mode(action.color, BlendMode.srcIn),
                 ),
               ),
             ),
@@ -145,4 +144,3 @@ class _QuickActionCapsuleState extends State<_QuickActionCapsule>
     );
   }
 }
-

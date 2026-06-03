@@ -537,15 +537,17 @@ class _AdvertisementCardState extends State<AdvertisementCard>
           maxLines: titleMaxLines,
           overflow: TextOverflow.ellipsis,
           textAlign: _textAlign,
-          style: _adTitleStyle(TextStyle(
-            color: titleColor,
-            fontSize:
-                titleFontSize ??
-                (_isMegaHero || _isHero || _isGradient ? 21 : 16.5),
-            fontWeight: FontWeight.w800,
-            height: 1.13,
-            letterSpacing: 0,
-          )),
+          style: _adTitleStyle(
+            TextStyle(
+              color: titleColor,
+              fontSize:
+                  titleFontSize ??
+                  (_isMegaHero || _isHero || _isGradient ? 21 : 16.5),
+              fontWeight: FontWeight.w800,
+              height: 1.13,
+              letterSpacing: 0,
+            ),
+          ),
         ),
         if (description != null && description.isNotEmpty) ...[
           const SizedBox(height: 6),

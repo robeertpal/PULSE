@@ -10,6 +10,8 @@ import 'content_detail_screen.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
 import 'saved_content_screen.dart';
+import 'transactions_screen.dart';
+import 'tickets_screen.dart';
 
 enum NotificationType {
   emc,
@@ -287,6 +289,20 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     );
   }
 
+  Future<void> _openTransactions() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const TransactionsScreen()),
+    );
+  }
+
+  Future<void> _openTickets() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const TicketsScreen()),
+    );
+  }
+
   Future<void> _openProfile() async {
     await Navigator.push(
       context,
@@ -394,6 +410,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   emcPoints: _emcPoints,
                   onNotificationsTap: () {},
                   onSavedTap: _openSavedContent,
+                  onTransactionsTap: _openTransactions,
+                  onTicketsTap: _openTickets,
                   onProfileTap: _openProfile,
                   onLogoutTap: _logout,
                   darkMode: true,

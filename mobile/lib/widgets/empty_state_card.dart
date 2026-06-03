@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 
@@ -41,10 +41,7 @@ class EmptyStateCard extends StatelessWidget {
               iconAsset,
               width: 32,
               height: 32,
-              colorFilter: ColorFilter.mode(
-                baseColor,
-                BlendMode.srcIn,
-              ),
+              colorFilter: ColorFilter.mode(baseColor, BlendMode.srcIn),
             ),
           ),
           const SizedBox(height: 16),
@@ -62,4 +59,3 @@ class EmptyStateCard extends StatelessWidget {
     );
   }
 }
-

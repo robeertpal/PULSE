@@ -12,6 +12,8 @@ class HomeHeader extends StatefulWidget {
   final VoidCallback? onNotificationsTap;
   final VoidCallback? onSavedTap;
   final VoidCallback? onLogoutTap;
+  final VoidCallback? onTransactionsTap;
+  final VoidCallback? onTicketsTap;
   final VoidCallback? onProfileTap;
   final VoidCallback? onFilterTap;
   final int activeFilterCount;
@@ -31,6 +33,8 @@ class HomeHeader extends StatefulWidget {
     this.onNotificationsTap,
     this.onSavedTap,
     this.onLogoutTap,
+    this.onTransactionsTap,
+    this.onTicketsTap,
     this.onProfileTap,
     this.onFilterTap,
     this.activeFilterCount = 0,
@@ -277,8 +281,8 @@ class _HomeHeaderState extends State<HomeHeader> {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-          width: buttonSize,
-          height: buttonSize,
+        width: buttonSize,
+        height: buttonSize,
         decoration: BoxDecoration(
           color: widget.darkMode
               ? Colors.white.withValues(alpha: 0.08)
@@ -403,7 +407,9 @@ class _HomeHeaderState extends State<HomeHeader> {
             if (widget.activeFilterCount > 0) ...[
               SizedBox(width: isCompactMobile ? 5 : 7),
               Container(
-                constraints: BoxConstraints(minWidth: isCompactMobile ? 16 : 18),
+                constraints: BoxConstraints(
+                  minWidth: isCompactMobile ? 16 : 18,
+                ),
                 height: isCompactMobile ? 16 : 18,
                 padding: const EdgeInsets.symmetric(horizontal: 5),
                 decoration: BoxDecoration(
@@ -445,7 +451,9 @@ class _HomeHeaderState extends State<HomeHeader> {
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Închide',
-      barrierColor: Colors.black.withValues(alpha: widget.darkMode ? 0.34 : 0.07),
+      barrierColor: Colors.black.withValues(
+        alpha: widget.darkMode ? 0.34 : 0.07,
+      ),
       transitionDuration: const Duration(milliseconds: 340),
       pageBuilder: (context, animation, secondaryAnimation) {
         return SafeArea(
@@ -504,8 +512,15 @@ class _HomeHeaderState extends State<HomeHeader> {
                           ),
                           _buildDropdownItem(
                             context,
+                            'Tranzacțiile mele',
+                            'assets/icons/wallet.svg',
+                            onTap: widget.onTransactionsTap,
+                          ),
+                          _buildDropdownItem(
+                            context,
                             'Biletele mele',
                             'assets/icons/events.svg',
+                            onTap: widget.onTicketsTap,
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(

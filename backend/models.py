@@ -608,6 +608,7 @@ class UserEventRegistration(Base):
     event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
     registered_at = Column(DateTime(timezone=True))
     status = Column(Enum(RegistrationStatus, name="registration_status"), nullable=False)
+    ticket_code = Column(String(100), unique=True)
 
 
 class UserActivityLog(Base):
@@ -689,6 +690,8 @@ class Payment(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     subscription_id = Column(Integer, ForeignKey("user_subscriptions.id"))
+    content_item_id = Column(Integer, ForeignKey("content_items.id", ondelete="SET NULL"))
+    payment_method_id = Column(Integer, ForeignKey("user_payment_methods.id", ondelete="SET NULL"))
     amount = Column(Numeric(10, 2), nullable=False)
     currency = Column(String(10), nullable=False, default="RON")
     provider = Column(String(100))
@@ -696,6 +699,9 @@ class Payment(Base):
     status = Column(Enum(PaymentStatus, name="payment_status"), nullable=False)
     paid_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True))
+
+    payment_method = relationship("UserPaymentMethod")
+    content_item = relationship("ContentItem")
 
 
 class UserPaymentMethod(Base):

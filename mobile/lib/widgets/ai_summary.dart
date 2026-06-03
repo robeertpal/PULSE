@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../theme/pulse_theme.dart';
 
-const Color _editorialNavy = Color(0xFF102A43);
 const Color _medicalTeal = Color(0xFF0F766E);
 
 class AiSummaryInlineSection extends StatelessWidget {
@@ -74,9 +73,7 @@ class AiSummaryButton extends StatelessWidget {
         style: FilledButton.styleFrom(
           backgroundColor: PulseTheme.primary,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: PulseTheme.primary.withValues(
-            alpha: 0.62,
-          ),
+          disabledBackgroundColor: PulseTheme.primary.withValues(alpha: 0.62),
           disabledForegroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),

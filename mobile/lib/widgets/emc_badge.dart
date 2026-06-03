@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/pulse_theme.dart';
 
@@ -6,11 +6,8 @@ import '../theme/pulse_theme.dart';
 /// Used on Featured Carousel, Content Cards, and anywhere EMC points are shown.
 class EmcBadge extends StatelessWidget {
   final String points;
-  
-  const EmcBadge({
-    super.key,
-    required this.points,
-  });
+
+  const EmcBadge({super.key, required this.points});
 
   @override
   Widget build(BuildContext context) {
@@ -31,11 +28,7 @@ class EmcBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          SvgPicture.asset(
-            'assets/icons/EMC.svg',
-            width: 24,
-            height: 24,
-          ),
+          SvgPicture.asset('assets/icons/EMC.svg', width: 24, height: 24),
           const SizedBox(width: 6),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -68,4 +61,3 @@ class EmcBadge extends StatelessWidget {
     );
   }
 }
-

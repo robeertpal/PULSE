@@ -16,6 +16,8 @@ import json
 import logging
 import os
 import re
+import random
+import string
 import secrets
 import smtplib
 import socket
@@ -2262,6 +2264,8 @@ def serialize_event_view_row(row, partners=None):
 
 def raise_safe_error(exc: Exception, detail: str = "Request failed", status_code: int = 500):
     logger.exception("Request failed: %s", type(exc).__name__)
+    if isinstance(exc, HTTPException):
+        raise exc
     raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
@@ -3117,7 +3121,147 @@ def get_events(
     except Exception as e:
         raise_safe_error(e)
 
+def generate_ticket_code(db: Session, event_id: int, user_id: int) -> str:
+    while True:
+        rand_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        code = f"PULSE-EVT-{event_id}-USER-{user_id}-{rand_str}"
+        existing = db.query(models.UserEventRegistration).filter(models.UserEventRegistration.ticket_code == code).first()
+        if not existing:
+            return code
 
+@app.get("/api/events/{event_id}/registration-status")
+def get_event_registration_status(
+    event_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        reg = db.query(models.UserEventRegistration).filter(
+            models.UserEventRegistration.user_id == user_id,
+            models.UserEventRegistration.event_id == event_id
+        ).first()
+        if reg:
+            return {
+                "is_registered": True,
+                "status": reg.status.value,
+                "ticket_code": reg.ticket_code
+            }
+        return {"is_registered": False, "status": None, "ticket_code": None}
+    except Exception as e:
+        raise_safe_error(e)
+
+
+@app.post("/api/events/{event_id}/register")
+def register_for_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        event = db.query(models.Event).filter(models.Event.id == event_id).first()
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+            
+        if event.price_type != models.PriceTypeEnum.free and (event.price_amount or 0) > 0:
+            raise HTTPException(status_code=400, detail="Acest eveniment este cu plată.")
+
+        existing = db.query(models.UserEventRegistration).filter(
+            models.UserEventRegistration.user_id == user_id,
+            models.UserEventRegistration.event_id == event_id
+        ).first()
+        if existing:
+            return {"message": "Deja înregistrat"}
+
+        ticket_code = generate_ticket_code(db, event_id, user_id)
+        reg = models.UserEventRegistration(
+            user_id=user_id,
+            event_id=event_id,
+            registered_at=datetime.now(timezone.utc),
+            status=models.RegistrationStatus.registered,
+            ticket_code=ticket_code
+        )
+        db.add(reg)
+        db.commit()
+        return {"message": "Înregistrat cu succes", "ticket_code": ticket_code}
+    except Exception as e:
+        db.rollback()
+        raise_safe_error(e)
+
+
+class EventPaymentRegisterPayload(BaseModel):
+    payment_method_id: int
+
+@app.post("/api/events/{event_id}/pay-and-register")
+def pay_and_register_for_event(
+    event_id: int,
+    payload: EventPaymentRegisterPayload,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    try:
+        event = db.query(models.Event).filter(models.Event.id == event_id).first()
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+            
+        price_data = get_current_price_by_event_id(db, event_id)
+        if not price_data:
+            raise HTTPException(status_code=400, detail="Nu s-a putut obține prețul.")
+
+        current_price_type = price_data.get("current_price_type")
+        current_price_amount = price_data.get("current_price_amount")
+        
+        if current_price_type == "free" or current_price_type == models.PriceTypeEnum.free or (current_price_amount or 0) == 0:
+            raise HTTPException(status_code=400, detail="Acest eveniment este gratuit.")
+
+        existing = db.query(models.UserEventRegistration).filter(
+            models.UserEventRegistration.user_id == user_id,
+            models.UserEventRegistration.event_id == event_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Ești deja înscris la acest eveniment.")
+
+        payment_method = db.query(models.UserPaymentMethod).filter(
+            models.UserPaymentMethod.id == payload.payment_method_id,
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None)
+        ).first()
+        
+        if not payment_method:
+            raise HTTPException(status_code=404, detail="Metoda de plată nu a fost găsită.")
+
+        transaction_id = f"demo_tx_{int(datetime.now(timezone.utc).timestamp())}"
+        payment = models.Payment(
+            user_id=user_id,
+            content_item_id=event.content_item_id,
+            payment_method_id=payment_method.id,
+            amount=current_price_amount,
+            currency="RON",
+            provider="demo",
+            provider_transaction_id=transaction_id,
+            status=models.PaymentStatus.paid,
+            paid_at=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(payment)
+        
+        ticket_code = generate_ticket_code(db, event_id, user_id)
+        reg = models.UserEventRegistration(
+            user_id=user_id,
+            event_id=event_id,
+            registered_at=datetime.now(timezone.utc),
+            status=models.RegistrationStatus.confirmed,
+            ticket_code=ticket_code
+        )
+        db.add(reg)
+        
+        db.commit()
+        return {
+            "message": "Plata și înscrierea au fost realizate cu succes",
+            "ticket_code": ticket_code
+        }
+    except Exception as e:
+        db.rollback()
+        raise_safe_error(e)
 @app.get("/events/{event_id}")
 def get_event_detail(
     event_id: int,
@@ -4665,6 +4809,113 @@ def set_default_payment_method(
     db.refresh(payment_method)
     return _serialize_payment_method(payment_method)
 
+
+@app.get("/api/me/payments")
+def get_my_payments(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        rows = (
+            db.query(
+                models.Payment,
+                models.Event.id.label("event_id"),
+                models.UserEventRegistration.status.label("registration_status"),
+                models.UserEventRegistration.ticket_code
+            )
+            .options(
+                joinedload(models.Payment.payment_method),
+                joinedload(models.Payment.content_item)
+            )
+            .outerjoin(models.Event, models.Event.content_item_id == models.Payment.content_item_id)
+            .outerjoin(
+                models.UserEventRegistration,
+                (models.UserEventRegistration.event_id == models.Event.id) &
+                (models.UserEventRegistration.user_id == user_id)
+            )
+            .filter(models.Payment.user_id == user_id)
+            .order_by(
+                models.Payment.paid_at.desc().nullslast(),
+                models.Payment.created_at.desc()
+            )
+            .all()
+        )
+        result = []
+        for row, event_id, reg_status, ticket_code in rows:
+            data = {
+                "id": row.id,
+                "amount": float(row.amount) if row.amount is not None else 0.0,
+                "currency": row.currency,
+                "provider": row.provider,
+                "provider_transaction_id": row.provider_transaction_id,
+                "status": row.status.value if row.status else None,
+                "paid_at": serialize_value(row.paid_at),
+                "created_at": serialize_value(row.created_at),
+                "subscription_id": row.subscription_id,
+                "payment_method_id": row.payment_method_id,
+                "content_item_id": row.content_item_id,
+                "content_title": row.content_item.title if row.content_item else None,
+                "content_type": row.content_item.content_type.value if row.content_item and row.content_item.content_type else None,
+                "event_id": event_id,
+                "registration_status": reg_status.value if reg_status else None,
+                "ticket_code": ticket_code,
+            }
+            if row.payment_method:
+                data["card_brand"] = row.payment_method.card_brand
+                data["card_last4"] = row.payment_method.card_last4
+            else:
+                data["card_brand"] = None
+                data["card_last4"] = None
+            result.append(data)
+        return result
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=traceback.format_exc())
+
+@app.get("/api/me/tickets")
+def get_my_tickets(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        rows = (
+            db.query(models.UserEventRegistration, models.Event)
+            .join(models.Event, models.UserEventRegistration.event_id == models.Event.id)
+            .options(
+                joinedload(models.Event.content_item),
+                joinedload(models.Event.city)
+            )
+            .filter(
+                models.UserEventRegistration.user_id == user_id,
+                models.UserEventRegistration.ticket_code.isnot(None)
+            )
+            .order_by(models.UserEventRegistration.registered_at.desc())
+            .all()
+        )
+        
+        result = []
+        for reg, event in rows:
+            content_item = event.content_item if event else None
+            city = event.city if event else None
+            
+            result.append({
+                "registration_id": reg.id,
+                "event_id": reg.event_id,
+                "content_item_id": content_item.id if content_item else None,
+                "event_title": content_item.title if content_item else None,
+                "ticket_code": reg.ticket_code,
+                "registration_status": reg.status.value if reg.status else None,
+                "registered_at": serialize_value(reg.registered_at),
+                "start_date": serialize_value(event.start_date) if event else None,
+                "end_date": serialize_value(event.end_date) if event else None,
+                "venue_name": event.venue_name if event else None,
+                "city_name": city.name if city else None,
+                "hero_image_url": content_item.hero_image_url if content_item else None,
+                "thumbnail_url": content_item.thumbnail_url if content_item else None,
+            })
+        return result
+    except Exception as e:
+        raise_safe_error(e)
 
 @app.put("/api/me/interests")
 def update_my_interests(
