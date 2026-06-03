@@ -1325,6 +1325,65 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> getPartnerProfile(int partnerId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/partners/$partnerId'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 404) {
+        throw Exception('Partenerul nu a fost gasit.');
+      }
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut incarca partenerul.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns partener neasteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching partner profile: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<ContentItem>> getPartnerContent(
+    int partnerId, {
+    int limit = 30,
+  }) async {
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/partners/$partnerId/content',
+      ).replace(queryParameters: {'limit': limit.toString()});
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut incarca materialele partenerului.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Raspuns continut partener neasteptat.');
+      }
+      return decoded
+          .whereType<Map<String, dynamic>>()
+          .map((json) => ContentItem.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching partner content: $e');
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> getContentItemDetail(int contentItemId) async {
     try {
       final response = await http

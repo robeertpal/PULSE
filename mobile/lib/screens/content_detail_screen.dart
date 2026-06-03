@@ -6,6 +6,7 @@ import '../models/content_item.dart';
 import '../services/api_service.dart';
 import '../theme/pulse_theme.dart';
 import 'author_profile_screen.dart';
+import 'partner_profile_screen.dart';
 import '../widgets/ai_summary.dart';
 import '../widgets/content_card.dart';
 import '../widgets/content_type_badge.dart';
@@ -56,6 +57,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   bool _didTrackView = false;
   bool _isFollowingAuthor = false;
   bool _isAuthorFollowLoading = false;
+  Set<int> _followedPartnerIds = {};
+  Set<int> _partnerFollowLoadingIds = {};
 
   @override
   void initState() {
@@ -115,6 +118,20 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           debugPrint('Author follow status ignored: $e');
         }
       }
+      final followedPartnerIds = <int>{};
+      for (final partner in item.eventPartners) {
+        try {
+          final isFollowing = await _apiService.getFollowStatus(
+            targetType: 'partner',
+            targetId: partner.id,
+          );
+          if (isFollowing) {
+            followedPartnerIds.add(partner.id);
+          }
+        } catch (e) {
+          debugPrint('Partner follow status ignored: $e');
+        }
+      }
       final recommendations = await _loadRecommendationsFor(item);
       if (!_didTrackView) {
         _didTrackView = true;
@@ -135,6 +152,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         _savedContentIds = savedIds;
         _recommendations = recommendations;
         _isFollowingAuthor = isFollowingAuthor;
+        _followedPartnerIds = followedPartnerIds;
         _isLoading = false;
       });
     } catch (e) {
@@ -1166,6 +1184,295 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     );
   }
 
+  Future<void> _togglePartnerFollow(EventPartner partner) async {
+    if (_partnerFollowLoadingIds.contains(partner.id)) return;
+    final wasFollowing = _followedPartnerIds.contains(partner.id);
+    setState(() {
+      if (wasFollowing) {
+        _followedPartnerIds.remove(partner.id);
+      } else {
+        _followedPartnerIds.add(partner.id);
+      }
+      _partnerFollowLoadingIds.add(partner.id);
+    });
+
+    try {
+      if (wasFollowing) {
+        await _apiService.unfollowTarget(
+          targetType: 'partner',
+          targetId: partner.id,
+        );
+      } else {
+        await _apiService.followTarget(
+          targetType: 'partner',
+          targetId: partner.id,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wasFollowing
+                ? 'Nu mai urmaresti aceasta organizatie.'
+                : 'Urmaresti aceasta organizatie.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        if (wasFollowing) {
+          _followedPartnerIds.add(partner.id);
+        } else {
+          _followedPartnerIds.remove(partner.id);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nu am putut actualiza follow-ul.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _partnerFollowLoadingIds.remove(partner.id);
+        });
+      }
+    }
+  }
+
+  Future<void> _openPartnerProfile(EventPartner partner) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => PartnerProfileScreen(
+          partnerId: partner.id,
+          initialName: partner.name,
+          initialLogoUrl: partner.logoUrl,
+          initialWebsiteUrl: partner.websiteUrl,
+        ),
+      ),
+    );
+    try {
+      final isFollowing = await _apiService.getFollowStatus(
+        targetType: 'partner',
+        targetId: partner.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (isFollowing) {
+          _followedPartnerIds.add(partner.id);
+        } else {
+          _followedPartnerIds.remove(partner.id);
+        }
+      });
+    } catch (_) {
+      // The detail page can keep its current optimistic state.
+    }
+  }
+
+  String _partnerInitials(String name) {
+    final parts = name
+        .split(RegExp(r'\s+'))
+        .where((part) => part.trim().isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return 'P';
+    return parts.map((part) => part[0].toUpperCase()).take(2).join();
+  }
+
+  Widget _buildPartnerLogo(EventPartner partner, Color accent) {
+    final logoUrl = partner.logoUrl?.trim();
+    Widget fallback() {
+      return Container(
+        color: accent.withValues(alpha: 0.12),
+        child: Center(
+          child: Text(
+            _partnerInitials(partner.name),
+            style: TextStyle(
+              color: accent,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(15),
+      child: logoUrl != null &&
+              (logoUrl.startsWith('http://') || logoUrl.startsWith('https://'))
+          ? Image.network(
+              logoUrl,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => fallback(),
+            )
+          : fallback(),
+    );
+  }
+
+  Widget _buildPartnerFollowRow(EventPartner partner, Color accent) {
+    final isFollowing = _followedPartnerIds.contains(partner.id);
+    final isLoading = _partnerFollowLoadingIds.contains(partner.id);
+    final website = partner.websiteUrl?.trim();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(18),
+              child: InkWell(
+                onTap: () => _openPartnerProfile(partner),
+                borderRadius: BorderRadius.circular(18),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.10),
+                          ),
+                        ),
+                        child: _buildPartnerLogo(partner, accent),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              partner.name.trim().isNotEmpty
+                                  ? partner.name.trim()
+                                  : 'Organizatie',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: PulseTheme.textPrimary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            if (website != null && website.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                website,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: PulseTheme.textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: PulseTheme.textSecondary.withValues(alpha: 0.75),
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          OutlinedButton(
+            onPressed: isLoading ? null : () => _togglePartnerFollow(partner),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: isFollowing ? PulseTheme.textPrimary : accent,
+              side: BorderSide(
+                color: isFollowing
+                    ? PulseTheme.borderLight
+                    : accent.withValues(alpha: 0.42),
+              ),
+              backgroundColor: isFollowing
+                  ? Colors.white.withValues(alpha: 0.09)
+                  : accent.withValues(alpha: 0.08),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            child: isLoading
+                ? const SizedBox(
+                    width: 15,
+                    height: 15,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    isFollowing ? 'Following' : 'Follow',
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPartnerFollowSection(ContentItem item, Color accent) {
+    if (item.eventPartners.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 12, 4),
+      decoration: BoxDecoration(
+        color: PulseTheme.surfaceElevated.withValues(alpha: 0.86),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: PulseTheme.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.business_rounded,
+                  color: accent,
+                  size: 17,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Organizatii partenere',
+                  style: TextStyle(
+                    color: PulseTheme.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...item.eventPartners.map(
+            (partner) => _buildPartnerFollowRow(partner, accent),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProgress(int percent) {
     final clamped = percent.clamp(0, 100);
     return Container(
@@ -1365,6 +1672,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         ),
         if (item.eventPartners.isNotEmpty) ...[
           const SizedBox(height: 4),
+          _buildPartnerFollowSection(item, accent),
+          const SizedBox(height: 18),
           _EventPartnerCarousel(partners: item.eventPartners, accent: accent),
           const SizedBox(height: 24),
         ] else

@@ -1923,7 +1923,7 @@ def serialize_author(author: models.Author):
     }
 
 
-FOLLOW_TARGET_TYPES = {"author", "publication"}
+FOLLOW_TARGET_TYPES = {"author", "publication", "partner"}
 
 
 def normalize_follow_target_type(value: str) -> str:
@@ -1977,6 +1977,13 @@ def validate_follow_target_or_404(db: Session, target_type: str, target_id: int)
     target_type = normalize_follow_target_type(target_type)
     if target_type == "publication":
         return get_public_publication_or_404(db, target_id)
+    if target_type == "partner":
+        partner = db.query(models.EventPartner).filter(models.EventPartner.id == target_id).first()
+        if partner is None:
+            raise HTTPException(status_code=404, detail="Partenerul nu a fost gasit.")
+        if public_partner_content_query(db, target_id).first() is None:
+            raise HTTPException(status_code=404, detail="Partenerul nu are continut public.")
+        return partner
     author = db.query(models.Author).filter(models.Author.id == target_id).first()
     if author is None:
         raise HTTPException(status_code=404, detail="Autorul nu a fost gasit.")
@@ -2001,6 +2008,11 @@ def serialize_follow_target(db: Session, follow: models.Follow) -> dict:
             if author:
                 data["target_name"] = author_display_name(author, include_title=True)
                 data["author"] = serialize_author(author)
+        elif follow.target_type == "partner":
+            partner = db.query(models.EventPartner).filter(models.EventPartner.id == follow.target_id).first()
+            if partner:
+                data["target_name"] = partner.name
+                data["partner"] = serialize_event_partner(partner)
     except Exception:
         logger.exception("Failed to serialize follow target")
     return data
@@ -2139,6 +2151,31 @@ def get_public_publication_issue_or_404(db: Session, issue_id: int):
     if issue is None:
         raise HTTPException(status_code=404, detail="Publication issue not found")
     return issue
+
+
+def public_partner_content_query(db: Session, partner_id: int):
+    return (
+        visible_content_card_query(db)
+        .join(models.Event, models.Event.content_item_id == models.ContentItem.id)
+        .join(models.EventPartnerLink, models.EventPartnerLink.event_id == models.Event.id)
+        .filter(models.EventPartnerLink.partner_id == partner_id)
+    )
+
+
+def serialize_partner_profile(db: Session, partner: models.EventPartner):
+    items = public_partner_content_query(db, partner.id).limit(80).all()
+    unique_content_ids = {item.id for item in items}
+    upcoming_count = len(
+        [
+            item
+            for item in items
+            if item.event and item.event.start_date and item.event.start_date >= datetime.utcnow()
+        ]
+    )
+    data = serialize_event_partner(partner)
+    data["content_count"] = len(unique_content_ids)
+    data["upcoming_event_count"] = upcoming_count
+    return data
 
 
 def serialize_mapping(row):
@@ -2720,6 +2757,7 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
 
     followed_author_ids: set[int] = set()
     followed_publication_ids: set[int] = set()
+    followed_partner_ids: set[int] = set()
     followed_author_names: set[str] = set()
     if _safe_table_exists(db, "follows"):
         follow_rows = (
@@ -2736,6 +2774,11 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
             follow.target_id
             for follow in follow_rows
             if follow.target_type == "publication"
+        }
+        followed_partner_ids = {
+            follow.target_id
+            for follow in follow_rows
+            if follow.target_type == "partner"
         }
         if followed_author_ids:
             authors = (
@@ -2769,6 +2812,7 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
         "saved_content_ids": saved_content_ids,
         "followed_author_ids": followed_author_ids,
         "followed_publication_ids": followed_publication_ids,
+        "followed_partner_ids": followed_partner_ids,
         "followed_author_names": followed_author_names,
         "has_activity": bool(
             recent_logs
@@ -2776,6 +2820,7 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
             or user_interest_ids
             or followed_author_ids
             or followed_publication_ids
+            or followed_partner_ids
         ),
     }
 
@@ -2835,6 +2880,17 @@ def _score_for_you_item(
     if follows_author:
         score += 18.0
         reason_parts.insert(0, "urmaresti acest autor")
+
+    item_partner_ids = set()
+    if item.event and getattr(item.event, "partner_links", None):
+        item_partner_ids = {
+            link.partner_id
+            for link in item.event.partner_links
+            if link.partner_id is not None
+        }
+    if item_partner_ids.intersection(context.get("followed_partner_ids", set())):
+        score += 18.0
+        reason_parts.insert(0, "urmaresti aceasta organizatie")
 
     popularity_score = min(16.0, popularity_scores.get(item.id, 0.0))
     score += popularity_score
@@ -3566,6 +3622,46 @@ def get_publication_issue_detail(
 ):
     issue = get_public_publication_issue_or_404(db, issue_id)
     return serialize_publication_issue(issue)
+
+
+@app.get("/partners/{partner_id}")
+def get_partner_detail(
+    partner_id: int,
+    db: Session = Depends(get_db),
+):
+    partner = db.query(models.EventPartner).filter(models.EventPartner.id == partner_id).first()
+    if partner is None:
+        raise HTTPException(status_code=404, detail="Partenerul nu a fost gasit.")
+    if public_partner_content_query(db, partner_id).first() is None:
+        raise HTTPException(status_code=404, detail="Partenerul nu are continut public.")
+    return serialize_partner_profile(db, partner)
+
+
+@app.get("/partners/{partner_id}/content")
+def get_partner_content(
+    partner_id: int,
+    skip: int = 0,
+    limit: int = Query(default=30, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    partner = db.query(models.EventPartner).filter(models.EventPartner.id == partner_id).first()
+    if partner is None:
+        raise HTTPException(status_code=404, detail="Partenerul nu a fost gasit.")
+    items = (
+        public_partner_content_query(db, partner_id)
+        .order_by(*public_content_ordering())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    seen_ids = set()
+    result = []
+    for item in items:
+        if item.id in seen_ids:
+            continue
+        seen_ids.add(item.id)
+        result.append(serialize_content_card(item))
+    return result
 
 
 @app.post("/publication-issues/{issue_id}/ai-summary")
