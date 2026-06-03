@@ -13,7 +13,11 @@ import 'content_detail_screen.dart';
 import 'notifications_screen.dart';
 import 'publication_issues_screen.dart';
 import 'profile_screen.dart';
+import 'my_courses_screen.dart';
+import 'my_publications_screen.dart';
 import 'saved_content_screen.dart';
+import 'tickets_screen.dart';
+import 'transactions_screen.dart';
 import '../widgets/featured_card.dart';
 import '../widgets/content_section.dart';
 import '../widgets/content_card.dart';
@@ -519,6 +523,34 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _loadSavedContentIds();
   }
 
+  Future<void> _openTransactions() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const TransactionsScreen()),
+    );
+  }
+
+  Future<void> _openTickets() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const TicketsScreen()),
+    );
+  }
+
+  Future<void> _openMyPublications() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const MyPublicationsScreen()),
+    );
+  }
+
+  Future<void> _openMyCourses() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const MyCoursesScreen()),
+    );
+  }
+
   Future<void> _openNotifications() async {
     await Navigator.push(
       context,
@@ -796,7 +828,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           decoration: _glassDecoration(
                             radius: 24,
                             opacity: 0.10,
-                            borderColor: PulseTheme.primaryLight.withValues(alpha: 0.22),
+                            borderColor: PulseTheme.primaryLight.withValues(
+                              alpha: 0.22,
+                            ),
                           ),
                           child: SingleChildScrollView(
                             physics: const BouncingScrollPhysics(),
@@ -861,7 +895,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                         setDialogState(() {});
                                       },
                                       style: TextButton.styleFrom(
-                                        foregroundColor: PulseTheme.primaryLight,
+                                        foregroundColor:
+                                            PulseTheme.primaryLight,
                                         minimumSize: const Size(0, 34),
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 10,
@@ -1150,6 +1185,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           label: 'Salvate',
                           onTap: () => closeAndRun(_openSavedContent),
                         ),
+                        _buildCompactMenuItem(
+                          iconAsset: 'assets/icons/wallet.svg',
+                          label: 'Tranzacțiile mele',
+                          onTap: () => closeAndRun(_openTransactions),
+                        ),
+                        _buildCompactMenuItem(
+                          iconAsset: 'assets/icons/events.svg',
+                          label: 'Biletele mele',
+                          onTap: () => closeAndRun(_openTickets),
+                        ),
+                        _buildCompactMenuItem(
+                          iconAsset: 'assets/icons/books.svg',
+                          label: 'Revistele mele',
+                          onTap: () => closeAndRun(_openMyPublications),
+                        ),
+                        _buildCompactMenuItem(
+                          iconAsset: 'assets/icons/graduation.svg',
+                          label: 'Cursurile mele',
+                          onTap: () => closeAndRun(_openMyCourses),
+                        ),
                         Divider(
                           height: 1,
                           color: Colors.white.withValues(alpha: 0.08),
@@ -1188,11 +1243,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildCompactMenuItem({
-    required IconData icon,
+    IconData? icon,
+    String? iconAsset,
     required String label,
     required VoidCallback onTap,
     bool danger = false,
   }) {
+    assert(icon != null || iconAsset != null);
     final color = danger ? Colors.redAccent : _darkText;
 
     return Material(
@@ -1203,7 +1260,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           child: Row(
             children: [
-              Icon(icon, color: color, size: 18),
+              if (iconAsset != null)
+                SvgPicture.asset(
+                  iconAsset,
+                  width: 18,
+                  height: 18,
+                  colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                )
+              else
+                Icon(icon, color: color, size: 18),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -1412,7 +1477,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             duration: PulseTheme.animFast,
             curve: PulseTheme.animCurve,
             style: TextStyle(
-              color: isSelected ? Colors.white : _darkMuted.withValues(alpha: 0.66),
+              color: isSelected
+                  ? Colors.white
+                  : _darkMuted.withValues(alpha: 0.66),
               fontSize: 11.5,
               fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
               letterSpacing: 0.6,
@@ -1441,7 +1508,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   width: isSelected ? 24 : 0,
                   height: 2,
                   decoration: BoxDecoration(
-                    color: isSelected ? Colors.white.withValues(alpha: 0.92) : null,
+                    color: isSelected
+                        ? Colors.white.withValues(alpha: 0.92)
+                        : null,
                     borderRadius: BorderRadius.circular(999),
                     boxShadow: isSelected
                         ? [
@@ -1972,7 +2041,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-          color: _neonPurple.withValues(alpha: 0.16),
+        color: _neonPurple.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: _neonBlue.withValues(alpha: 0.24)),
       ),
@@ -2004,170 +2073,172 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
           child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.28),
-              blurRadius: 22,
-              offset: const Offset(0, 10),
-              spreadRadius: -8,
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(18),
-                onTap: () {
-                  setState(() {
-                    _filtersExpanded = !_filtersExpanded;
-                  });
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 4,
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: _neonPurple.withValues(alpha: 0.18),
-                          border: Border.all(
-                            color: _neonBlue.withValues(alpha: 0.18),
-                          ),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.tune,
-                          color: _darkText,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Filtre',
-                          style: TextStyle(
-                            color: _darkText,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      _buildActiveFilterBadge(),
-                      const SizedBox(width: 8),
-                      AnimatedRotation(
-                        turns: _filtersExpanded ? 0.5 : 0,
-                        duration: PulseTheme.animFast,
-                        curve: PulseTheme.animCurve,
-                        child: const Icon(
-                          Icons.keyboard_arrow_down,
-                          color: _darkMuted,
-                        ),
-                      ),
-                    ],
-                  ),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.28),
+                  blurRadius: 22,
+                  offset: const Offset(0, 10),
+                  spreadRadius: -8,
                 ),
-              ),
+              ],
             ),
-            AnimatedSize(
-              duration: PulseTheme.animMedium,
-              curve: PulseTheme.animCurve,
-              alignment: Alignment.topCenter,
-              child: _filtersExpanded
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 12),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 4),
-                          child: Text(
-                            'Restrânge conținutul după interesul tău clinic.',
-                            style: TextStyle(
-                              color: _darkMuted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              height: 1.3,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        _buildFilterRow(
-                          label: 'Categorii',
-                          options: _categories,
-                          selectedIds: _selectedCategoryIds,
-                          onSelected: _toggleCategory,
-                        ),
-                        if (_categories.isNotEmpty &&
-                            _specializations.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            child: Divider(
-                              height: 1,
-                              color: Colors.white.withValues(alpha: 0.10),
-                            ),
-                          ),
-                        _buildFilterRow(
-                          label: 'Specializări',
-                          options: _specializations,
-                          selectedIds: _selectedSpecializationIds,
-                          onSelected: _toggleSpecialization,
-                        ),
-                        if (_hasActiveFilters) ...[
-                          const SizedBox(height: 12),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton.icon(
-                              onPressed: _resetFilters,
-                              style: TextButton.styleFrom(
-                                foregroundColor: _neonBlue,
-                                minimumSize: const Size(0, 36),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                                textStyle: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: () {
+                      setState(() {
+                        _filtersExpanded = !_filtersExpanded;
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: _neonPurple.withValues(alpha: 0.18),
+                              border: Border.all(
+                                color: _neonBlue.withValues(alpha: 0.18),
                               ),
-                              icon: const Icon(Icons.close, size: 16),
-                              label: const Text('Șterge filtre'),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.tune,
+                              color: _darkText,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'Filtre',
+                              style: TextStyle(
+                                color: _darkText,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          _buildActiveFilterBadge(),
+                          const SizedBox(width: 8),
+                          AnimatedRotation(
+                            turns: _filtersExpanded ? 0.5 : 0,
+                            duration: PulseTheme.animFast,
+                            curve: PulseTheme.animCurve,
+                            child: const Icon(
+                              Icons.keyboard_arrow_down,
+                              color: _darkMuted,
                             ),
                           ),
                         ],
-                      ],
-                    )
-                  : _hasActiveFilters
-                  ? Padding(
-                      padding: const EdgeInsets.fromLTRB(52, 6, 12, 2),
-                      child: Text(
-                        _activeFilterSummary(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _darkMuted,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
                       ),
-                    )
-                  : const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
+                AnimatedSize(
+                  duration: PulseTheme.animMedium,
+                  curve: PulseTheme.animCurve,
+                  alignment: Alignment.topCenter,
+                  child: _filtersExpanded
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 12),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 4),
+                              child: Text(
+                                'Restrânge conținutul după interesul tău clinic.',
+                                style: TextStyle(
+                                  color: _darkMuted,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            _buildFilterRow(
+                              label: 'Categorii',
+                              options: _categories,
+                              selectedIds: _selectedCategoryIds,
+                              onSelected: _toggleCategory,
+                            ),
+                            if (_categories.isNotEmpty &&
+                                _specializations.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                child: Divider(
+                                  height: 1,
+                                  color: Colors.white.withValues(alpha: 0.10),
+                                ),
+                              ),
+                            _buildFilterRow(
+                              label: 'Specializări',
+                              options: _specializations,
+                              selectedIds: _selectedSpecializationIds,
+                              onSelected: _toggleSpecialization,
+                            ),
+                            if (_hasActiveFilters) ...[
+                              const SizedBox(height: 12),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton.icon(
+                                  onPressed: _resetFilters,
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: _neonBlue,
+                                    minimumSize: const Size(0, 36),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                    textStyle: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.close, size: 16),
+                                  label: const Text('Șterge filtre'),
+                                ),
+                              ),
+                            ],
+                          ],
+                        )
+                      : _hasActiveFilters
+                      ? Padding(
+                          padding: const EdgeInsets.fromLTRB(52, 6, 12, 2),
+                          child: Text(
+                            _activeFilterSummary(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _darkMuted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
             ),
-          ],
-        ),
           ),
         ),
       ),
@@ -2309,10 +2380,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           padding: const EdgeInsets.only(top: 100.0),
           child: Column(
             children: [
-              Text(
-                _errorMessage!,
-                style: const TextStyle(color: _darkMuted),
-              ),
+              Text(_errorMessage!, style: const TextStyle(color: _darkMuted)),
               const SizedBox(height: 12),
               ElevatedButton(
                 onPressed: _loadData,
@@ -2535,10 +2603,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           padding: const EdgeInsets.only(top: 100.0),
           child: Column(
             children: [
-              Text(
-                _errorMessage!,
-                style: const TextStyle(color: _darkMuted),
-              ),
+              Text(_errorMessage!, style: const TextStyle(color: _darkMuted)),
               const SizedBox(height: 12),
               ElevatedButton(
                 onPressed: _loadData,
@@ -2592,45 +2657,45 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               bottom: false,
               child: Column(
                 children: [
-            if (_selectedIndex == 0) _buildStickyHomeHeader(),
-            // Conținutul paginii cu tranziții
-            Expanded(
-              child: FadeIndexedStack(
-                duration: const Duration(milliseconds: 300),
-                index: _selectedIndex,
-                children: [
-                  _buildHomeContent(),
-                  _buildCategoryContent(
-                    title: 'Cursuri',
-                    emptyMessage: 'Nu există încă cursuri publicate.',
-                    emptyIconAsset: 'assets/icons/graduation.svg',
-                    categoryColor: PulseTheme.courseContent,
-                    items: _courses,
+                  if (_selectedIndex == 0) _buildStickyHomeHeader(),
+                  // Conținutul paginii cu tranziții
+                  Expanded(
+                    child: FadeIndexedStack(
+                      duration: const Duration(milliseconds: 300),
+                      index: _selectedIndex,
+                      children: [
+                        _buildHomeContent(),
+                        _buildCategoryContent(
+                          title: 'Cursuri',
+                          emptyMessage: 'Nu există încă cursuri publicate.',
+                          emptyIconAsset: 'assets/icons/graduation.svg',
+                          categoryColor: PulseTheme.courseContent,
+                          items: _courses,
+                        ),
+                        _buildCategoryContent(
+                          title: 'Reviste',
+                          emptyMessage: 'Nu există încă reviste publicate.',
+                          emptyIconAsset: 'assets/icons/books.svg',
+                          categoryColor: PulseTheme.magazineContent,
+                          items: _publications,
+                        ),
+                        _buildCategoryContent(
+                          title: 'Evenimente',
+                          emptyMessage: 'Nu există încă evenimente publicate.',
+                          emptyIconAsset: 'assets/icons/events.svg',
+                          categoryColor: PulseTheme.eventContent,
+                          items: _events,
+                        ),
+                        _buildCategoryContent(
+                          title: 'Știri',
+                          emptyMessage: 'Nu există încă știri publicate.',
+                          emptyIconAsset: 'assets/icons/newspaper.svg',
+                          categoryColor: PulseTheme.newsContent,
+                          items: _news,
+                        ),
+                      ],
+                    ),
                   ),
-                  _buildCategoryContent(
-                    title: 'Reviste',
-                    emptyMessage: 'Nu există încă reviste publicate.',
-                    emptyIconAsset: 'assets/icons/books.svg',
-                    categoryColor: PulseTheme.magazineContent,
-                    items: _publications,
-                  ),
-                  _buildCategoryContent(
-                    title: 'Evenimente',
-                    emptyMessage: 'Nu există încă evenimente publicate.',
-                    emptyIconAsset: 'assets/icons/events.svg',
-                    categoryColor: PulseTheme.eventContent,
-                    items: _events,
-                  ),
-                  _buildCategoryContent(
-                    title: 'Știri',
-                    emptyMessage: 'Nu există încă știri publicate.',
-                    emptyIconAsset: 'assets/icons/newspaper.svg',
-                    categoryColor: PulseTheme.newsContent,
-                    items: _news,
-                  ),
-                ],
-              ),
-            ),
                 ],
               ),
             ),
@@ -2732,9 +2797,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               width: 22,
               height: 22,
               colorFilter: ColorFilter.mode(
-                isSelected
-                    ? _darkText
-                    : _darkMuted.withValues(alpha: 0.62),
+                isSelected ? _darkText : _darkMuted.withValues(alpha: 0.62),
                 BlendMode.srcIn,
               ),
             ),
