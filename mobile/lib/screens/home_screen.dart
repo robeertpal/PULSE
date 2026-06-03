@@ -686,21 +686,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     Color? borderColor,
   }) {
     return BoxDecoration(
-      color: Colors.white.withValues(alpha: opacity),
+      color: _darkSurface.withValues(alpha: 0.64 + opacity),
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(
-        color: borderColor ?? Colors.white.withValues(alpha: 0.12),
+        color: borderColor ?? Colors.white.withValues(alpha: 0.10),
       ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.28),
-          blurRadius: 30,
-          offset: const Offset(0, 18),
+          color: Colors.black.withValues(alpha: 0.34),
+          blurRadius: 28,
+          offset: const Offset(0, 16),
           spreadRadius: -16,
         ),
         BoxShadow(
-          color: _neonPurple.withValues(alpha: 0.12),
-          blurRadius: 28,
+          color: _neonPurple.withValues(alpha: 0.14),
+          blurRadius: 26,
           spreadRadius: -18,
         ),
       ],
@@ -734,7 +734,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Închide filtrele',
-      barrierColor: Colors.black.withValues(alpha: 0.18),
+      barrierColor: Colors.black.withValues(alpha: 0.24),
       transitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
         return StatefulBuilder(
@@ -761,8 +761,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
                           decoration: _glassDecoration(
                             radius: 24,
-                            opacity: 0.12,
-                            borderColor: _neonPurple.withValues(alpha: 0.24),
+                            opacity: 0.10,
+                            borderColor: PulseTheme.primaryLight.withValues(alpha: 0.22),
                           ),
                           child: SingleChildScrollView(
                             physics: const BouncingScrollPhysics(),
@@ -827,7 +827,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                         setDialogState(() {});
                                       },
                                       style: TextButton.styleFrom(
-                                        foregroundColor: _neonBlue,
+                                        foregroundColor: PulseTheme.primaryLight,
                                         minimumSize: const Size(0, 34),
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 10,
@@ -889,12 +889,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+              color: _darkCanvas.withValues(alpha: 0.54),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: PulseTheme.primaryLight.withValues(alpha: 0.16),
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.24),
+                  color: Colors.black.withValues(alpha: 0.28),
                   blurRadius: 18,
                   offset: const Offset(0, 8),
                   spreadRadius: -10,
@@ -908,11 +910,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       width: 17,
                       height: 17,
                       colorFilter: const ColorFilter.mode(
-                        _darkMuted,
+                        _darkText,
                         BlendMode.srcIn,
                       ),
                     )
-                  : Icon(icon, color: _darkMuted, size: 18),
+                  : Icon(icon, color: _darkText, size: 18),
             ),
           ),
           if (badgeCount > 0)
@@ -959,9 +961,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
+        color: _darkCanvas.withValues(alpha: 0.42),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        border: Border.all(
+          color: PulseTheme.primaryLight.withValues(alpha: 0.12),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1194,16 +1198,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           decoration: BoxDecoration(
-            color: _darkSurface.withValues(alpha: 0.78),
+            color: _darkSurface.withValues(alpha: 0.86),
             border: Border(
-              bottom: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+              bottom: BorderSide(
+                color: PulseTheme.primaryLight.withValues(alpha: 0.14),
+              ),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.30),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+                color: Colors.black.withValues(alpha: 0.38),
+                blurRadius: 22,
+                offset: const Offset(0, 10),
                 spreadRadius: -10,
+              ),
+              BoxShadow(
+                color: PulseTheme.primary.withValues(alpha: 0.12),
+                blurRadius: 22,
+                spreadRadius: -18,
               ),
             ],
           ),
@@ -1216,26 +1227,34 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     GestureDetector(
                       onTap: _openProfile,
                       child: Container(
-                        width: 34,
-                        height: 34,
+                        width: 36,
+                        height: 36,
                         padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
+                          borderRadius: BorderRadius.circular(14),
                           gradient: PulseTheme.avatarRingGradient,
+                          boxShadow: [
+                            BoxShadow(
+                              color: PulseTheme.primary.withValues(alpha: 0.28),
+                              blurRadius: 18,
+                              offset: const Offset(0, 8),
+                              spreadRadius: -10,
+                            ),
+                          ],
                         ),
                         child: Container(
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF0B1530),
-                            shape: BoxShape.circle,
+                          decoration: BoxDecoration(
+                            color: _darkCanvas,
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Center(
-                            child: SvgPicture.asset(
-                              'assets/icons/people.svg',
-                              width: 17,
-                              height: 17,
-                              colorFilter: const ColorFilter.mode(
-                                _darkMuted,
-                                BlendMode.srcIn,
+                          child: const Center(
+                            child: Text(
+                              'P',
+                              style: TextStyle(
+                                color: _darkText,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0,
                               ),
                             ),
                           ),
@@ -1272,17 +1291,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildHomeTabSwitch() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 9),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
           child: Container(
-            padding: const EdgeInsets.all(3),
+            padding: const EdgeInsets.all(4),
             decoration: _glassDecoration(
-              radius: 18,
-              opacity: 0.08,
-              borderColor: _neonPurple.withValues(alpha: 0.20),
+              radius: 20,
+              opacity: 0.05,
+              borderColor: PulseTheme.primaryLight.withValues(alpha: 0.18),
             ),
             child: Row(
               children: [
@@ -1321,18 +1340,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: AnimatedContainer(
         duration: PulseTheme.animFast,
         curve: PulseTheme.animCurve,
-        height: 42,
+        height: 40,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(15),
-          gradient: isSelected
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    _neonBlue.withValues(alpha: 0.18),
-                    _neonPurple.withValues(alpha: 0.24),
-                  ],
-                )
+          borderRadius: BorderRadius.circular(16),
+          gradient: isSelected ? PulseTheme.primaryGradient : null,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: PulseTheme.primary.withValues(alpha: 0.30),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                    spreadRadius: -12,
+                  ),
+                ]
               : null,
         ),
         child: Center(
@@ -1340,8 +1360,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             duration: PulseTheme.animFast,
             curve: PulseTheme.animCurve,
             style: TextStyle(
-              color: isSelected ? _darkText : _darkMuted.withValues(alpha: 0.62),
-              fontSize: 12,
+              color: isSelected ? Colors.white : _darkMuted.withValues(alpha: 0.66),
+              fontSize: 11.5,
               fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
               letterSpacing: 0.6,
             ),
@@ -1355,7 +1375,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       icon,
                       size: 16,
                       color: isSelected
-                          ? _darkText
+                          ? Colors.white
                           : _darkMuted.withValues(alpha: 0.62),
                     ),
                     const SizedBox(width: 6),
@@ -1366,15 +1386,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 AnimatedContainer(
                   duration: PulseTheme.animFast,
                   curve: PulseTheme.animCurve,
-                  width: isSelected ? 30 : 0,
+                  width: isSelected ? 24 : 0,
                   height: 2,
                   decoration: BoxDecoration(
-                    gradient: isSelected ? PulseTheme.primaryGradient : null,
+                    color: isSelected ? Colors.white.withValues(alpha: 0.92) : null,
                     borderRadius: BorderRadius.circular(999),
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
-                              color: _neonPurple.withValues(alpha: 0.65),
+                              color: Colors.white.withValues(alpha: 0.38),
                               blurRadius: 12,
                               spreadRadius: -2,
                             ),
@@ -1677,19 +1697,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       children: [
         _verticalContentCard(item),
         if (reason != null && reason.trim().isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Container(
+          Transform.translate(
+            offset: const Offset(0, -6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
             decoration: BoxDecoration(
-              color: _darkSurface.withValues(alpha: 0.72),
+              color: _darkSurface.withValues(alpha: 0.88),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: _neonPurple.withValues(alpha: 0.18)),
+              border: Border.all(
+                color: PulseTheme.primaryLight.withValues(alpha: 0.18),
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: _neonPurple.withValues(alpha: 0.10),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
+                  color: _neonPurple.withValues(alpha: 0.12),
+                  blurRadius: 18,
+                  offset: const Offset(0, 9),
                   spreadRadius: -14,
                 ),
               ],
@@ -1740,6 +1765,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ),
               ],
+            ),
+          ),
             ),
           ),
         ],
