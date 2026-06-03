@@ -16,8 +16,6 @@ import json
 import logging
 import os
 import re
-import random
-import string
 import secrets
 import smtplib
 import socket
@@ -34,9 +32,8 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
 from pypdf import PdfReader
-from sqlalchemy import bindparam, func, text
+from sqlalchemy import bindparam, func, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, object_session
 
@@ -46,6 +43,7 @@ from schemas import (
     AdminLogin,
     EmailVerificationResend,
     EmailVerificationVerify,
+    FollowTargetPayload,
     PasswordResetConfirm,
     PasswordResetRequest,
     PasswordResetVerify,
@@ -54,7 +52,6 @@ from schemas import (
     UserInterestsUpdate,
     UserLogin,
     UserLogout,
-    UserChangePassword,
 )
 
 try:
@@ -1434,13 +1431,11 @@ def _resolve_interest_ids(db: Session, interest_ids: List[int]) -> List[int]:
 def _ensure_registration_schema(db: Session) -> None:
     statements = [
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS correspondence_address TEXT",
-        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS birth_date VARCHAR(50)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS institution_id INTEGER",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS cuim VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS cod_parafa VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS professional_registration_code VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS titlu_universitar VARCHAR(255)",
-        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS photo_url TEXT",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS specialization_secondary_name VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS acord_email BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS acord_sms BOOLEAN NOT NULL DEFAULT FALSE",
@@ -1932,6 +1927,101 @@ def serialize_author(author: models.Author):
     }
 
 
+FOLLOW_TARGET_TYPES = {"author", "publication", "partner"}
+
+
+def normalize_follow_target_type(value: str) -> str:
+    target_type = (value or "").strip().lower()
+    if target_type not in FOLLOW_TARGET_TYPES:
+        raise HTTPException(status_code=400, detail="Tipul de follow nu este valid.")
+    return target_type
+
+
+def normalize_author_name_key(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    return re.sub(r"\s+", " ", value).strip().lower()
+
+
+def author_display_name(author: models.Author, include_title: bool = False) -> str:
+    name = f"{author.first_name or ''} {author.last_name or ''}".strip()
+    if include_title and author.title:
+        return f"{author.title} {name}".strip()
+    return name
+
+
+def find_author_for_content_item(db: Session, item: models.ContentItem) -> Optional[models.Author]:
+    if item.publication and getattr(item.publication, "author_links", None):
+        sorted_links = sorted(
+            [link for link in item.publication.author_links if link.author],
+            key=lambda link: (
+                link.display_order if link.display_order is not None else 1,
+                link.author.last_name.lower() if link.author and link.author.last_name else "",
+                link.author.first_name.lower() if link.author and link.author.first_name else "",
+            ),
+        )
+        if sorted_links:
+            return sorted_links[0].author
+
+    author_name_key = normalize_author_name_key(item.author_name)
+    if not author_name_key:
+        return None
+
+    for author in db.query(models.Author).all():
+        possible_names = {
+            normalize_author_name_key(author_display_name(author)),
+            normalize_author_name_key(author_display_name(author, include_title=True)),
+        }
+        if author_name_key in possible_names:
+            return author
+    return None
+
+
+def validate_follow_target_or_404(db: Session, target_type: str, target_id: int):
+    target_type = normalize_follow_target_type(target_type)
+    if target_type == "publication":
+        return get_public_publication_or_404(db, target_id)
+    if target_type == "partner":
+        partner = db.query(models.EventPartner).filter(models.EventPartner.id == target_id).first()
+        if partner is None:
+            raise HTTPException(status_code=404, detail="Partenerul nu a fost gasit.")
+        if public_partner_content_query(db, target_id).first() is None:
+            raise HTTPException(status_code=404, detail="Partenerul nu are continut public.")
+        return partner
+    author = db.query(models.Author).filter(models.Author.id == target_id).first()
+    if author is None:
+        raise HTTPException(status_code=404, detail="Autorul nu a fost gasit.")
+    return author
+
+
+def serialize_follow_target(db: Session, follow: models.Follow) -> dict:
+    data = {
+        "id": follow.id,
+        "target_type": follow.target_type,
+        "target_id": follow.target_id,
+        "created_at": serialize_value(follow.created_at),
+    }
+    try:
+        if follow.target_type == "publication":
+            publication = db.query(models.Publication).filter(models.Publication.id == follow.target_id).first()
+            if publication:
+                data["target_name"] = publication.name
+                data["publication_name"] = publication.name
+        elif follow.target_type == "author":
+            author = db.query(models.Author).filter(models.Author.id == follow.target_id).first()
+            if author:
+                data["target_name"] = author_display_name(author, include_title=True)
+                data["author"] = serialize_author(author)
+        elif follow.target_type == "partner":
+            partner = db.query(models.EventPartner).filter(models.EventPartner.id == follow.target_id).first()
+            if partner:
+                data["target_name"] = partner.name
+                data["partner"] = serialize_event_partner(partner)
+    except Exception:
+        logger.exception("Failed to serialize follow target")
+    return data
+
+
 def serialize_publication_author_link(link: models.PublicationAuthor):
     author_data = serialize_author(link.author) if link.author else None
     data = {
@@ -1986,6 +2076,37 @@ def serialize_publication_issue(issue: models.PublicationIssue, include_publicat
     }
 
 
+def serialize_publication_profile(publication: models.Publication, db: Session):
+    content_item = publication.content_item
+    issue_rows = (
+        db.query(models.PublicationIssue)
+        .filter(models.PublicationIssue.publication_id == publication.id)
+        .all()
+    )
+    return {
+        "id": publication.id,
+        "publication_id": publication.id,
+        "content_item_id": publication.content_item_id,
+        "name": publication.name,
+        "logo_url": publication.logo_url,
+        "description": publication.description,
+        "emc_credits_text": publication.emc_credits_text,
+        "creditation_text": publication.creditation_text,
+        "indexing_text": publication.indexing_text,
+        "subscription_url": publication.subscription_url,
+        "authors": serialize_publication_author_links(getattr(publication, "author_links", [])),
+        "issue_count": len(issue_rows),
+        "pdf_issue_count": len([issue for issue in issue_rows if issue.issue_url]),
+        "has_pdf_issues": any(issue.issue_url for issue in issue_rows),
+        "content_title": content_item.title if content_item else None,
+        "content_short_description": content_item.short_description if content_item else None,
+        "content_body": content_item.body if content_item else None,
+        "content_hero_image_url": content_item.hero_image_url if content_item else None,
+        "content_thumbnail_url": content_item.thumbnail_url if content_item else None,
+        "content_published_at": serialize_value(content_item.published_at) if content_item else None,
+    }
+
+
 def public_publication_query(db: Session):
     return (
         db.query(models.Publication)
@@ -2034,6 +2155,31 @@ def get_public_publication_issue_or_404(db: Session, issue_id: int):
     if issue is None:
         raise HTTPException(status_code=404, detail="Publication issue not found")
     return issue
+
+
+def public_partner_content_query(db: Session, partner_id: int):
+    return (
+        visible_content_card_query(db)
+        .join(models.Event, models.Event.content_item_id == models.ContentItem.id)
+        .join(models.EventPartnerLink, models.EventPartnerLink.event_id == models.Event.id)
+        .filter(models.EventPartnerLink.partner_id == partner_id)
+    )
+
+
+def serialize_partner_profile(db: Session, partner: models.EventPartner):
+    items = public_partner_content_query(db, partner.id).limit(80).all()
+    unique_content_ids = {item.id for item in items}
+    upcoming_count = len(
+        [
+            item
+            for item in items
+            if item.event and item.event.start_date and item.event.start_date >= datetime.utcnow()
+        ]
+    )
+    data = serialize_event_partner(partner)
+    data["content_count"] = len(unique_content_ids)
+    data["upcoming_event_count"] = upcoming_count
+    return data
 
 
 def serialize_mapping(row):
@@ -2268,8 +2414,6 @@ def serialize_event_view_row(row, partners=None):
 
 def raise_safe_error(exc: Exception, detail: str = "Request failed", status_code: int = 500):
     logger.exception("Request failed: %s", type(exc).__name__)
-    if isinstance(exc, HTTPException):
-        raise exc
     raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
@@ -2615,6 +2759,47 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
         .all()
     }
 
+    followed_author_ids: set[int] = set()
+    followed_publication_ids: set[int] = set()
+    followed_partner_ids: set[int] = set()
+    followed_author_names: set[str] = set()
+    if _safe_table_exists(db, "follows"):
+        follow_rows = (
+            db.query(models.Follow)
+            .filter(models.Follow.user_id == user_id)
+            .all()
+        )
+        followed_author_ids = {
+            follow.target_id
+            for follow in follow_rows
+            if follow.target_type == "author"
+        }
+        followed_publication_ids = {
+            follow.target_id
+            for follow in follow_rows
+            if follow.target_type == "publication"
+        }
+        followed_partner_ids = {
+            follow.target_id
+            for follow in follow_rows
+            if follow.target_type == "partner"
+        }
+        if followed_author_ids:
+            authors = (
+                db.query(models.Author)
+                .filter(models.Author.id.in_(followed_author_ids))
+                .all()
+            )
+            followed_author_names = {
+                name
+                for author in authors
+                for name in {
+                    normalize_author_name_key(author_display_name(author)),
+                    normalize_author_name_key(author_display_name(author, include_title=True)),
+                }
+                if name
+            }
+
     return {
         "profile": profile,
         "profile_specialization_id": profile.specialization_id if profile else None,
@@ -2629,7 +2814,18 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
         "seen_content_ids": seen_content_ids,
         "negative_content_ids": negative_content_ids,
         "saved_content_ids": saved_content_ids,
-        "has_activity": bool(recent_logs or saved_content_ids or user_interest_ids),
+        "followed_author_ids": followed_author_ids,
+        "followed_publication_ids": followed_publication_ids,
+        "followed_partner_ids": followed_partner_ids,
+        "followed_author_names": followed_author_names,
+        "has_activity": bool(
+            recent_logs
+            or saved_content_ids
+            or user_interest_ids
+            or followed_author_ids
+            or followed_publication_ids
+            or followed_partner_ids
+        ),
     }
 
 
@@ -2668,6 +2864,37 @@ def _score_for_you_item(
             reason_parts.append("este similar cu activitatea ta recentă")
     if item.author_name:
         score += min(6.0, context["author_preferences"].get(item.author_name.strip().lower(), 0.0) * 1.2)
+
+    publication_id = item.publication.id if item.publication else None
+    if publication_id and publication_id in context.get("followed_publication_ids", set()):
+        score += 24.0
+        reason_parts.insert(0, "urmaresti aceasta publicatie")
+
+    item_author_ids = set()
+    if item.publication and getattr(item.publication, "author_links", None):
+        item_author_ids = {
+            link.author_id
+            for link in item.publication.author_links
+            if link.author_id is not None
+        }
+    author_name_key = normalize_author_name_key(item.author_name)
+    follows_author = bool(item_author_ids.intersection(context.get("followed_author_ids", set())))
+    if not follows_author and author_name_key:
+        follows_author = author_name_key in context.get("followed_author_names", set())
+    if follows_author:
+        score += 18.0
+        reason_parts.insert(0, "urmaresti acest autor")
+
+    item_partner_ids = set()
+    if item.event and getattr(item.event, "partner_links", None):
+        item_partner_ids = {
+            link.partner_id
+            for link in item.event.partner_links
+            if link.partner_id is not None
+        }
+    if item_partner_ids.intersection(context.get("followed_partner_ids", set())):
+        score += 18.0
+        reason_parts.insert(0, "urmaresti aceasta organizatie")
 
     popularity_score = min(16.0, popularity_scores.get(item.id, 0.0))
     score += popularity_score
@@ -2799,6 +3026,122 @@ def _try_generate_for_you_ai_reasons(context: dict, recommendations: list[dict])
     except Exception:
         logger.exception("Gemini For You explanation generation failed")
         return {}, None
+
+
+@app.post("/follows")
+def follow_target(
+    payload: FollowTargetPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    require_rate_limit(request, "follows", "READ_RATE_LIMIT_PER_MINUTE", 90)
+    target_type = normalize_follow_target_type(payload.target_type)
+    validate_follow_target_or_404(db, target_type, payload.target_id)
+
+    existing = (
+        db.query(models.Follow)
+        .filter(models.Follow.user_id == user_id)
+        .filter(models.Follow.target_type == target_type)
+        .filter(models.Follow.target_id == payload.target_id)
+        .first()
+    )
+    if existing:
+        return {
+            "target_type": target_type,
+            "target_id": payload.target_id,
+            "is_following": True,
+            "message": "Deja urmaresti aceasta tinta.",
+        }
+
+    follow = models.Follow(
+        user_id=user_id,
+        target_type=target_type,
+        target_id=payload.target_id,
+        created_at=datetime.utcnow(),
+    )
+    db.add(follow)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+    return {
+        "target_type": target_type,
+        "target_id": payload.target_id,
+        "is_following": True,
+        "message": "Follow adaugat.",
+    }
+
+
+@app.delete("/follows")
+def unfollow_target(
+    request: Request,
+    target_type: str = Query(...),
+    target_id: int = Query(..., gt=0),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    require_rate_limit(request, "follows", "READ_RATE_LIMIT_PER_MINUTE", 90)
+    normalized_target_type = normalize_follow_target_type(target_type)
+    validate_follow_target_or_404(db, normalized_target_type, target_id)
+    follow = (
+        db.query(models.Follow)
+        .filter(models.Follow.user_id == user_id)
+        .filter(models.Follow.target_type == normalized_target_type)
+        .filter(models.Follow.target_id == target_id)
+        .first()
+    )
+    if follow:
+        db.delete(follow)
+        db.commit()
+
+    return {
+        "target_type": normalized_target_type,
+        "target_id": target_id,
+        "is_following": False,
+        "message": "Follow eliminat.",
+    }
+
+
+@app.get("/follows")
+def get_my_follows(
+    request: Request,
+    target_type: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    require_rate_limit(request, "follows", "READ_RATE_LIMIT_PER_MINUTE", 90)
+    query = db.query(models.Follow).filter(models.Follow.user_id == user_id)
+    if target_type:
+        query = query.filter(models.Follow.target_type == normalize_follow_target_type(target_type))
+    follows = query.order_by(models.Follow.created_at.desc().nullslast()).all()
+    return [serialize_follow_target(db, follow) for follow in follows]
+
+
+@app.get("/follows/status")
+def get_follow_status(
+    request: Request,
+    target_type: str = Query(...),
+    target_id: int = Query(..., gt=0),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    require_rate_limit(request, "follows", "READ_RATE_LIMIT_PER_MINUTE", 90)
+    normalized_target_type = normalize_follow_target_type(target_type)
+    validate_follow_target_or_404(db, normalized_target_type, target_id)
+    is_following = (
+        db.query(models.Follow.id)
+        .filter(models.Follow.user_id == user_id)
+        .filter(models.Follow.target_type == normalized_target_type)
+        .filter(models.Follow.target_id == target_id)
+        .first()
+        is not None
+    )
+    return {
+        "target_type": normalized_target_type,
+        "target_id": target_id,
+        "is_following": is_following,
+    }
 
 
 @app.post("/user-activity")
@@ -2961,6 +3304,12 @@ def get_content_item_detail(
     for key, value in card_data.items():
         if data.get(key) is None:
             data[key] = value
+    author = find_author_for_content_item(db, item)
+    if author:
+        data["author_id"] = author.id
+        data["author"] = serialize_author(author)
+        if not data.get("author_name"):
+            data["author_name"] = author_display_name(author, include_title=True)
     if item.event:
         price_data = get_current_price_by_event_id(db, item.event.id)
         apply_current_price_to_payload(data, price_data)
@@ -3125,13 +3474,6 @@ def get_events(
     except Exception as e:
         raise_safe_error(e)
 
-def generate_ticket_code(db: Session, event_id: int, user_id: int) -> str:
-    while True:
-        rand_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        code = f"PULSE-EVT-{event_id}-USER-{user_id}-{rand_str}"
-        existing = db.query(models.UserEventRegistration).filter(models.UserEventRegistration.ticket_code == code).first()
-        if not existing:
-            return code
 
 @app.get("/api/events/{event_id}/registration-status")
 def get_event_registration_status(
@@ -3395,6 +3737,15 @@ def get_publications(
         raise_safe_error(e)
 
 
+@app.get("/publications/{publication_id}")
+def get_publication_detail(
+    publication_id: int,
+    db: Session = Depends(get_db),
+):
+    publication = get_public_publication_or_404(db, publication_id)
+    return serialize_publication_profile(publication, db)
+
+
 @app.get("/publications/{publication_id}/issues")
 def get_publication_issues_for_publication(
     publication_id: int,
@@ -3421,6 +3772,46 @@ def get_publication_issue_detail(
 ):
     issue = get_public_publication_issue_or_404(db, issue_id)
     return serialize_publication_issue(issue)
+
+
+@app.get("/partners/{partner_id}")
+def get_partner_detail(
+    partner_id: int,
+    db: Session = Depends(get_db),
+):
+    partner = db.query(models.EventPartner).filter(models.EventPartner.id == partner_id).first()
+    if partner is None:
+        raise HTTPException(status_code=404, detail="Partenerul nu a fost gasit.")
+    if public_partner_content_query(db, partner_id).first() is None:
+        raise HTTPException(status_code=404, detail="Partenerul nu are continut public.")
+    return serialize_partner_profile(db, partner)
+
+
+@app.get("/partners/{partner_id}/content")
+def get_partner_content(
+    partner_id: int,
+    skip: int = 0,
+    limit: int = Query(default=30, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    partner = db.query(models.EventPartner).filter(models.EventPartner.id == partner_id).first()
+    if partner is None:
+        raise HTTPException(status_code=404, detail="Partenerul nu a fost gasit.")
+    items = (
+        public_partner_content_query(db, partner_id)
+        .order_by(*public_content_ordering())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    seen_ids = set()
+    result = []
+    for item in items:
+        if item.id in seen_ids:
+            continue
+        seen_ids.add(item.id)
+        result.append(serialize_content_card(item))
+    return result
 
 
 @app.post("/publication-issues/{issue_id}/ai-summary")
@@ -4377,34 +4768,8 @@ def logout_user(payload: UserLogout, db: Session = Depends(get_db)):
     return {"message": "Logout successful"}
 
 
-class MyProfileUpdate(BaseModel):
-    email: Optional[str] = Field(default=None, max_length=255)
-    first_name: Optional[str] = Field(default=None, max_length=255)
-    last_name: Optional[str] = Field(default=None, max_length=255)
-    phone: Optional[str] = Field(default=None, max_length=50)
-    birth_date: Optional[str] = Field(default=None, max_length=50)
-    correspondence_address: Optional[str] = Field(default=None, max_length=1000)
-    city_id: Optional[int] = Field(default=None, gt=0)
-    occupation_id: Optional[int] = Field(default=None, gt=0)
-    specialization_id: Optional[int] = Field(default=None, gt=0)
-    specialization_secondary_name: Optional[str] = Field(default=None, max_length=255)
-    professional_grade_id: Optional[int] = Field(default=None, gt=0)
-    institution_id: Optional[int] = Field(default=None, gt=0)
-    cuim: Optional[str] = Field(default=None, max_length=255)
-    cod_parafa: Optional[str] = Field(default=None, max_length=255)
-    titlu_universitar: Optional[str] = Field(default=None, max_length=255)
-
-
-class MyPaymentMethodCreate(BaseModel):
-    card_brand: Optional[str] = Field(default=None, max_length=50)
-    card_last4: str = Field(min_length=4, max_length=4)
-    exp_month: int = Field(ge=1, le=12)
-    exp_year: int = Field(ge=2024, le=2100)
-    is_default: bool = False
-
-
-def get_my_profile_payload(user_id: int, db: Session):
-    _ensure_registration_schema(db)
+@app.get("/api/me/profile")
+def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     user_model = get_user_model()
     user = db.query(user_model).filter(user_model.id == user_id).first()
     if user is None:
@@ -4418,7 +4783,6 @@ def get_my_profile_payload(user_id: int, db: Session):
             joinedload(models.UserProfile.occupation),
             joinedload(models.UserProfile.specialization),
             joinedload(models.UserProfile.professional_grade),
-            joinedload(models.UserProfile.institution),
         )
         .first()
     )
@@ -4437,21 +4801,12 @@ def get_my_profile_payload(user_id: int, db: Session):
         "total_emc_points": getattr(profile, "total_emc_points", 0) or 0,
         "email": user.email,
         "phone": profile.phone,
-        "photo_url": getattr(profile, "photo_url", None),
-        "avatar_url": getattr(profile, "photo_url", None),
-        "profile_photo_url": getattr(profile, "photo_url", None),
         "county_name": profile.city.county.name if getattr(profile.city, "county", None) else None,
         "city_name": profile.city.name if profile.city else None,
         "occupation_name": profile.occupation.name if profile.occupation else None,
         "specialization_name": profile.specialization.name if profile.specialization else None,
         "professional_grade_name": profile.professional_grade.name if profile.professional_grade else None,
-        "institution_name": profile.institution.name if profile.institution else None,
     }
-
-
-@app.get("/api/me/profile")
-def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
-    return get_my_profile_payload(user_id, db)
 
 
 @app.patch("/api/me/profile")
@@ -4534,7 +4889,7 @@ def update_my_profile(
     user.updated_at = now
     db.commit()
 
-    return get_my_profile_payload(user_id, db)
+    return get_my_profile(user_id, db)
 
 
 @app.post("/api/me/change-password")
@@ -5376,6 +5731,7 @@ def get_audit_logs(db: Session = Depends(get_db)):
 # ADMIN ENDPOINTS
 # -------------------------
 
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Dict, Optional, List
 from sqlalchemy import func
 
@@ -5505,17 +5861,6 @@ def validate_upload_file(file: UploadFile, allowed_content_types: set, allowed_e
     content_type = (file.content_type or "").lower()
     sanitized_name = sanitize_filename(file.filename or "upload")
     extension = Path(sanitized_name).suffix.lower()
-    inferred_image_types = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-    }
-
-    if content_type in {"", "application/octet-stream"}:
-        inferred = inferred_image_types.get(extension)
-        if inferred in allowed_content_types:
-            content_type = inferred
 
     if content_type not in allowed_content_types:
         allowed = ", ".join(sorted(allowed_content_types))
@@ -8444,6 +8789,62 @@ def get_author_or_404(db: Session, author_id: int):
     return author
 
 
+def author_name_match_values(author: models.Author) -> list[str]:
+    return sorted(
+        {
+            value
+            for value in {
+                normalize_author_name_key(author_display_name(author)),
+                normalize_author_name_key(author_display_name(author, include_title=True)),
+            }
+            if value
+        }
+    )
+
+
+def public_content_for_author_query(db: Session, author: models.Author):
+    name_values = author_name_match_values(author)
+    conditions = [models.PublicationAuthor.author_id == author.id]
+    if name_values:
+        conditions.append(func.lower(func.trim(models.ContentItem.author_name)).in_(name_values))
+    return (
+        visible_content_card_query(db)
+        .outerjoin(models.Publication, models.Publication.content_item_id == models.ContentItem.id)
+        .outerjoin(models.PublicationAuthor, models.PublicationAuthor.publication_id == models.Publication.id)
+        .filter(or_(*conditions))
+    )
+
+
+def serialize_author_profile(db: Session, author: models.Author, content_items: Optional[list] = None):
+    if content_items is None:
+        content_items = (
+            public_content_for_author_query(db, author)
+            .order_by(*public_content_ordering())
+            .limit(60)
+            .all()
+        )
+    data = serialize_author(author)
+    specialization_names = sorted(
+        {
+            item.specialization.name
+            for item in content_items
+            if item.specialization and item.specialization.name
+        }
+    )
+    category_names = sorted(
+        {
+            item.category.name
+            for item in content_items
+            if item.category and item.category.name
+        }
+    )
+    data["display_name"] = author_display_name(author, include_title=True)
+    data["specialization_names"] = specialization_names
+    data["category_names"] = category_names
+    data["content_count"] = len({item.id for item in content_items})
+    return data
+
+
 def event_partner_data(payload: BaseModel, exclude_unset: bool = False):
     data = pydantic_dump(payload, exclude_unset=exclude_unset)
     result = {
@@ -8488,15 +8889,50 @@ def get_authors(
         raise_safe_error(e, status_code=400)
 
 
+@app.get("/authors/{author_id}/content")
+def get_author_content(
+    author_id: int,
+    skip: int = 0,
+    limit: int = Query(default=30, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    try:
+        author = get_author_or_404(db, author_id)
+        items = (
+            public_content_for_author_query(db, author)
+            .order_by(*public_content_ordering())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        seen_ids = set()
+        result = []
+        for item in items:
+            if item.id in seen_ids:
+                continue
+            seen_ids.add(item.id)
+            result.append(serialize_content_card(item))
+        return result
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
 @app.get("/authors/{author_id}")
 def get_author(
     author_id: int,
-    authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    require_admin_authorization(authorization)
     try:
-        return serialize_author(get_author_or_404(db, author_id))
+        author = get_author_or_404(db, author_id)
+        content_items = (
+            public_content_for_author_query(db, author)
+            .order_by(*public_content_ordering())
+            .limit(60)
+            .all()
+        )
+        return serialize_author_profile(db, author, content_items)
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e

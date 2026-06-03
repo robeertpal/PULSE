@@ -5,13 +5,14 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../models/content_item.dart';
 import '../services/api_service.dart';
 import '../theme/pulse_theme.dart';
+import 'author_profile_screen.dart';
+import 'partner_profile_screen.dart';
 import '../widgets/ai_summary.dart';
 import '../widgets/content_card.dart';
 import '../widgets/content_type_badge.dart';
 import '../widgets/emc_badge.dart';
 import '../widgets/favorite_button.dart';
 import '../widgets/skeleton_loading.dart';
-import '../widgets/event_payment_modal.dart';
 
 class ContentDetailScreen extends StatefulWidget {
   final int contentItemId;
@@ -54,13 +55,16 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   List<ContentItem> _recommendations = [];
   DateTime? _openedAt;
   bool _didTrackView = false;
-
   bool _isEventRegistered = false;
   String? _eventRegistrationStatus;
   String? _eventTicketCode;
   bool _isRegisteringEvent = false;
   bool _isCourseEnrolled = false;
   bool _isEnrollingCourse = false;
+  bool _isFollowingAuthor = false;
+  bool _isAuthorFollowLoading = false;
+  Set<int> _followedPartnerIds = {};
+  Set<int> _partnerFollowLoadingIds = {};
 
   @override
   void initState() {
@@ -109,6 +113,31 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
       final savedIds = await savedIdsFuture;
 
       final item = ContentItem.fromJson(detail);
+      var isFollowingAuthor = false;
+      if (item.authorId != null) {
+        try {
+          isFollowingAuthor = await _apiService.getFollowStatus(
+            targetType: 'author',
+            targetId: item.authorId!,
+          );
+        } catch (e) {
+          debugPrint('Author follow status ignored: $e');
+        }
+      }
+      final followedPartnerIds = <int>{};
+      for (final partner in item.eventPartners) {
+        try {
+          final isFollowing = await _apiService.getFollowStatus(
+            targetType: 'partner',
+            targetId: partner.id,
+          );
+          if (isFollowing) {
+            followedPartnerIds.add(partner.id);
+          }
+        } catch (e) {
+          debugPrint('Partner follow status ignored: $e');
+        }
+      }
       final recommendations = await _loadRecommendationsFor(item);
       if (!_didTrackView) {
         _didTrackView = true;
@@ -145,13 +174,14 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           debugPrint('Error checking course enrollment: $e');
         }
       }
-
       if (!mounted) return;
       setState(() {
         _item = item;
         _isSaved = savedIds.contains(widget.contentItemId);
         _savedContentIds = savedIds;
         _recommendations = recommendations;
+        _isFollowingAuthor = isFollowingAuthor;
+        _followedPartnerIds = followedPartnerIds;
         _isLoading = false;
       });
     } catch (e) {
@@ -723,89 +753,25 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (item.contentType == 'event')
-                    if (_isEventRegistered)
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 24),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: PulseTheme.eventContent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _contentLabel(item).toUpperCase(),
+                        style: const TextStyle(
+                          color: PulseTheme.eventContent,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
                         ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: const Color(
-                              0xFF10B981,
-                            ).withValues(alpha: 0.2),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.check_circle_rounded,
-                                  color: Color(0xFF10B981),
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Ești înscris la acest eveniment',
-                                  style: TextStyle(
-                                    color: Color(0xFF10B981),
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (_eventTicketCode != null) ...[
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  'Cod bilet: $_eventTicketCode',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.9),
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: PulseTheme.eventContent.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          _contentLabel(item).toUpperCase(),
-                          style: const TextStyle(
-                            color: PulseTheme.eventContent,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      )
+                      ),
+                    )
                   else if (item.contentType == 'news')
                     _buildMainPageBadge(
                       _contentLabel(item),
@@ -1036,13 +1002,500 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              [?date, '${_readingMinutes(item)} min citire'].join(' • '),
+              [
+                ?date,
+                '${_readingMinutes(item)} min citire',
+              ].join(' • '),
               style: const TextStyle(
                 color: PulseTheme.textSecondary,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _toggleAuthorFollow(ContentItem item) async {
+    final authorId = item.authorId;
+    if (authorId == null || _isAuthorFollowLoading) return;
+    final wasFollowing = _isFollowingAuthor;
+    setState(() {
+      _isFollowingAuthor = !wasFollowing;
+      _isAuthorFollowLoading = true;
+    });
+
+    try {
+      if (wasFollowing) {
+        await _apiService.unfollowTarget(
+          targetType: 'author',
+          targetId: authorId,
+        );
+      } else {
+        await _apiService.followTarget(
+          targetType: 'author',
+          targetId: authorId,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wasFollowing
+                ? 'Nu mai urm\u0103re\u0219ti acest autor.'
+                : 'Urm\u0103re\u0219ti acest autor.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isFollowingAuthor = wasFollowing;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nu am putut actualiza follow-ul.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAuthorFollowLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _openAuthorProfile(ContentItem item) async {
+    final authorId = item.authorId;
+    if (authorId == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AuthorProfileScreen(
+          authorId: authorId,
+          initialName: item.authorName,
+        ),
+      ),
+    );
+    try {
+      final isFollowing = await _apiService.getFollowStatus(
+        targetType: 'author',
+        targetId: authorId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _isFollowingAuthor = isFollowing;
+      });
+    } catch (_) {
+      // The detail page can keep its current optimistic state.
+    }
+  }
+
+  Widget _buildAuthorFollowCard(ContentItem item) {
+    if (item.authorId == null) return const SizedBox.shrink();
+    final authorName = item.authorName?.trim().isNotEmpty == true
+        ? item.authorName!.trim()
+        : 'Autor PULSE';
+    final accent = _accentFor(item);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: PulseTheme.surfaceElevated.withValues(alpha: 0.86),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: PulseTheme.borderLight),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+              child: InkWell(
+                onTap: () => _openAuthorProfile(item),
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.14),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: accent.withValues(alpha: 0.22),
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.person_rounded,
+                          color: accent,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Autor',
+                              style: TextStyle(
+                                color: PulseTheme.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              authorName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: PulseTheme.textPrimary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: PulseTheme.textSecondary.withValues(alpha: 0.8),
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          OutlinedButton(
+            onPressed: _isAuthorFollowLoading
+                ? null
+                : () => _toggleAuthorFollow(item),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _isFollowingAuthor
+                  ? PulseTheme.textPrimary
+                  : accent,
+              side: BorderSide(
+                color: _isFollowingAuthor
+                    ? PulseTheme.borderLight
+                    : accent.withValues(alpha: 0.42),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            child: _isAuthorFollowLoading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    _isFollowingAuthor ? 'Following' : 'Follow',
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _togglePartnerFollow(EventPartner partner) async {
+    if (_partnerFollowLoadingIds.contains(partner.id)) return;
+    final wasFollowing = _followedPartnerIds.contains(partner.id);
+    setState(() {
+      if (wasFollowing) {
+        _followedPartnerIds.remove(partner.id);
+      } else {
+        _followedPartnerIds.add(partner.id);
+      }
+      _partnerFollowLoadingIds.add(partner.id);
+    });
+
+    try {
+      if (wasFollowing) {
+        await _apiService.unfollowTarget(
+          targetType: 'partner',
+          targetId: partner.id,
+        );
+      } else {
+        await _apiService.followTarget(
+          targetType: 'partner',
+          targetId: partner.id,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wasFollowing
+                ? 'Nu mai urmaresti aceasta organizatie.'
+                : 'Urmaresti aceasta organizatie.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        if (wasFollowing) {
+          _followedPartnerIds.add(partner.id);
+        } else {
+          _followedPartnerIds.remove(partner.id);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nu am putut actualiza follow-ul.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _partnerFollowLoadingIds.remove(partner.id);
+        });
+      }
+    }
+  }
+
+  Future<void> _openPartnerProfile(EventPartner partner) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => PartnerProfileScreen(
+          partnerId: partner.id,
+          initialName: partner.name,
+          initialLogoUrl: partner.logoUrl,
+          initialWebsiteUrl: partner.websiteUrl,
+        ),
+      ),
+    );
+    try {
+      final isFollowing = await _apiService.getFollowStatus(
+        targetType: 'partner',
+        targetId: partner.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (isFollowing) {
+          _followedPartnerIds.add(partner.id);
+        } else {
+          _followedPartnerIds.remove(partner.id);
+        }
+      });
+    } catch (_) {
+      // The detail page can keep its current optimistic state.
+    }
+  }
+
+  String _partnerInitials(String name) {
+    final parts = name
+        .split(RegExp(r'\s+'))
+        .where((part) => part.trim().isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return 'P';
+    return parts.map((part) => part[0].toUpperCase()).take(2).join();
+  }
+
+  Widget _buildPartnerLogo(EventPartner partner, Color accent) {
+    final logoUrl = partner.logoUrl?.trim();
+    Widget fallback() {
+      return Container(
+        color: accent.withValues(alpha: 0.12),
+        child: Center(
+          child: Text(
+            _partnerInitials(partner.name),
+            style: TextStyle(
+              color: accent,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(15),
+      child: logoUrl != null &&
+              (logoUrl.startsWith('http://') || logoUrl.startsWith('https://'))
+          ? Image.network(
+              logoUrl,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => fallback(),
+            )
+          : fallback(),
+    );
+  }
+
+  Widget _buildPartnerFollowRow(EventPartner partner, Color accent) {
+    final isFollowing = _followedPartnerIds.contains(partner.id);
+    final isLoading = _partnerFollowLoadingIds.contains(partner.id);
+    final website = partner.websiteUrl?.trim();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(18),
+              child: InkWell(
+                onTap: () => _openPartnerProfile(partner),
+                borderRadius: BorderRadius.circular(18),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.10),
+                          ),
+                        ),
+                        child: _buildPartnerLogo(partner, accent),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              partner.name.trim().isNotEmpty
+                                  ? partner.name.trim()
+                                  : 'Organizatie',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: PulseTheme.textPrimary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            if (website != null && website.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                website,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: PulseTheme.textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: PulseTheme.textSecondary.withValues(alpha: 0.75),
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          OutlinedButton(
+            onPressed: isLoading ? null : () => _togglePartnerFollow(partner),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: isFollowing ? PulseTheme.textPrimary : accent,
+              side: BorderSide(
+                color: isFollowing
+                    ? PulseTheme.borderLight
+                    : accent.withValues(alpha: 0.42),
+              ),
+              backgroundColor: isFollowing
+                  ? Colors.white.withValues(alpha: 0.09)
+                  : accent.withValues(alpha: 0.08),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            child: isLoading
+                ? const SizedBox(
+                    width: 15,
+                    height: 15,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    isFollowing ? 'Following' : 'Follow',
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPartnerFollowSection(ContentItem item, Color accent) {
+    if (item.eventPartners.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 12, 4),
+      decoration: BoxDecoration(
+        color: PulseTheme.surfaceElevated.withValues(alpha: 0.86),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: PulseTheme.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.business_rounded,
+                  color: accent,
+                  size: 17,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Organizatii partenere',
+                  style: TextStyle(
+                    color: PulseTheme.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...item.eventPartners.map(
+            (partner) => _buildPartnerFollowRow(partner, accent),
           ),
         ],
       ),
@@ -1702,7 +2155,6 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
       ),
     );
   }
-
   Widget _buildEventContent(ContentItem item) {
     final accent = _accentFor(item);
 
@@ -1757,6 +2209,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         ),
         if (item.eventPartners.isNotEmpty) ...[
           const SizedBox(height: 4),
+          _buildPartnerFollowSection(item, accent),
+          const SizedBox(height: 18),
           _EventPartnerCarousel(partners: item.eventPartners, accent: accent),
           const SizedBox(height: 24),
         ] else
@@ -1890,6 +2344,10 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (item.authorId != null) ...[
+                          _buildAuthorFollowCard(item),
+                          const SizedBox(height: 22),
+                        ],
                         if (item.contentType == 'event')
                           _buildEventContent(item)
                         else if (item.contentType == 'course')

@@ -8,6 +8,7 @@ class ContentItem {
   final String? heroImageUrl;
   final String? thumbnailUrl;
   final DateTime? publishedAt;
+  final int? authorId;
   final String? authorName;
   final bool isFeatured;
   final String? tag; // Virtual field for UI
@@ -54,6 +55,7 @@ class ContentItem {
     this.heroImageUrl,
     this.thumbnailUrl,
     this.publishedAt,
+    this.authorId,
     this.authorName,
     this.isFeatured = false,
     this.tag,
@@ -144,6 +146,13 @@ class ContentItem {
       return DateTime.tryParse(value.toString());
     }
 
+    int? parseInt(dynamic value) {
+      if (value == null) return null;
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value.toString());
+    }
+
     final rawPartners = json['partners'] ?? json['event']?['partners'];
     final partners = rawPartners is List
         ? rawPartners
@@ -178,6 +187,7 @@ class ContentItem {
       heroImageUrl: json['hero_image_url'],
       thumbnailUrl: json['thumbnail_url'],
       publishedAt: parseDate(json['published_at']),
+      authorId: parseInt(json['author_id'] ?? json['author']?['id']),
       authorName: json['author_name'],
       isFeatured: json['is_featured'] ?? false,
       tag: derivedTag,

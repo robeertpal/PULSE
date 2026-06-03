@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/ad_item.dart';
@@ -440,7 +441,7 @@ class ApiService {
       await _handleAuthFailure(response);
       if (response.statusCode != 200 && response.statusCode != 201) {
         throw Exception(
-          _responseErrorMessage(response, 'Schimbarea parolei a eșuat'),
+          _responseErrorMessage(response, 'Schimbarea parolei a esuat'),
         );
       }
     } catch (error) {
@@ -495,7 +496,7 @@ class ApiService {
 
       final decoded = json.decode(response.body);
       if (decoded is! Map<String, dynamic>) {
-        throw Exception('Răspuns actualizare profil neașteptat.');
+        throw Exception('Raspuns actualizare profil neasteptat.');
       }
       return decoded;
     } catch (e) {
@@ -529,14 +530,14 @@ class ApiService {
         throw Exception(
           _responseErrorMessage(
             response,
-            'Nu am putut încărca poza de profil.',
+            'Nu am putut incarca poza de profil.',
           ),
         );
       }
 
       final decoded = json.decode(response.body);
       if (decoded is! Map<String, dynamic>) {
-        throw Exception('Răspuns upload avatar neașteptat.');
+        throw Exception('Raspuns upload avatar neasteptat.');
       }
       return decoded;
     } catch (e) {
@@ -557,14 +558,14 @@ class ApiService {
         throw Exception(
           _responseErrorMessage(
             response,
-            'Nu am putut încărca activitatea EMC.',
+            'Nu am putut incarca activitatea EMC.',
           ),
         );
       }
 
       final decoded = json.decode(response.body);
       if (decoded is! List) {
-        throw Exception('Răspuns activitate EMC neașteptat.');
+        throw Exception('Raspuns activitate EMC neasteptat.');
       }
       return decoded.whereType<Map<String, dynamic>>().toList();
     } catch (e) {
@@ -691,7 +692,6 @@ class ApiService {
       rethrow;
     }
   }
-
   Future<List<Map<String, dynamic>>> getMyPayments() async {
     try {
       final headers = await _buildAuthHeaders();
@@ -702,13 +702,13 @@ class ApiService {
       await _handleAuthFailure(response);
       if (response.statusCode != 200) {
         throw Exception(
-          _responseErrorMessage(response, 'Nu am putut încărca tranzacțiile.'),
+          _responseErrorMessage(response, 'Nu am putut incarca tranzactiile.'),
         );
       }
 
       final decoded = json.decode(response.body);
       if (decoded is! List) {
-        throw Exception('Răspuns tranzacții neașteptat.');
+        throw Exception('Raspuns tranzactii neasteptat.');
       }
       return decoded.whereType<Map<String, dynamic>>().toList();
     } catch (e) {
@@ -729,14 +729,14 @@ class ApiService {
         throw Exception(
           _responseErrorMessage(
             response,
-            'Nu am putut încărca metodele de plată.',
+            'Nu am putut incarca metodele de plata.',
           ),
         );
       }
 
       final decoded = json.decode(response.body);
       if (decoded is! List) {
-        throw Exception('Răspuns metode de plată neașteptat.');
+        throw Exception('Raspuns metode de plata neasteptat.');
       }
       return decoded.whereType<Map<String, dynamic>>().toList();
     } catch (e) {
@@ -777,7 +777,7 @@ class ApiService {
 
       final decoded = json.decode(response.body);
       if (decoded is! Map<String, dynamic>) {
-        throw Exception('Răspuns adăugare card neașteptat.');
+        throw Exception('Raspuns adaugare card neasteptat.');
       }
       return decoded;
     } catch (e) {
@@ -799,7 +799,7 @@ class ApiService {
       await _handleAuthFailure(response);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(
-          _responseErrorMessage(response, 'Nu am putut șterge cardul.'),
+          _responseErrorMessage(response, 'Nu am putut sterge cardul.'),
         );
       }
     } catch (e) {
@@ -827,7 +827,7 @@ class ApiService {
 
       final decoded = json.decode(response.body);
       if (decoded is! Map<String, dynamic>) {
-        throw Exception('Răspuns card implicit neașteptat.');
+        throw Exception('Raspuns card implicit neasteptat.');
       }
       return decoded;
     } catch (e) {
@@ -1045,6 +1045,35 @@ class ApiService {
     );
   }
 
+  Future<Map<String, dynamic>> getPublicationDetails(int publicationId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/publications/$publicationId'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 404) {
+        throw Exception('Publication not found');
+      }
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut incarca detaliile publicatiei.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Unexpected publication detail response format');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching publication details: $e');
+      rethrow;
+    }
+  }
+
   Future<List<PublicationIssue>> getPublicationIssues(int publicationId) async {
     try {
       final response = await http
@@ -1216,7 +1245,7 @@ class ApiService {
             headers: {...headers, 'Content-Type': 'application/json'},
             body: jsonEncode({
               'action_type': actionType,
-              'content_item_id': ?contentItemId,
+              if (contentItemId != null) 'content_item_id': contentItemId,
               'metadata': metadata ?? <String, dynamic>{},
             }),
           )
@@ -1230,6 +1259,246 @@ class ApiService {
       }
     } catch (e) {
       debugPrint('Activity tracking ignored: $e');
+    }
+  }
+
+  Future<bool> getFollowStatus({
+    required String targetType,
+    required int targetId,
+  }) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final uri = Uri.parse('$_baseUrl/follows/status').replace(
+        queryParameters: {
+          'target_type': targetType,
+          'target_id': targetId.toString(),
+        },
+      );
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut verifica follow-ul.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns follow neasteptat.');
+      }
+      return decoded['is_following'] == true;
+    } catch (e) {
+      debugPrint('Error fetching follow status: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> followTarget({
+    required String targetType,
+    required int targetId,
+  }) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/follows'),
+            headers: {...headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'target_type': targetType,
+              'target_id': targetId,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut adauga follow.'),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error following target: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> unfollowTarget({
+    required String targetType,
+    required int targetId,
+  }) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final uri = Uri.parse('$_baseUrl/follows').replace(
+        queryParameters: {
+          'target_type': targetType,
+          'target_id': targetId.toString(),
+        },
+      );
+      final response = await http
+          .delete(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut elimina follow.'),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error unfollowing target: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getFollows({String? targetType}) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final uri = Uri.parse('$_baseUrl/follows').replace(
+        queryParameters: {
+          if (targetType != null && targetType.isNotEmpty)
+            'target_type': targetType,
+        },
+      );
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut incarca follow-urile.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Raspuns follows neasteptat.');
+      }
+      return decoded.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      debugPrint('Error fetching follows: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> getAuthorProfile(int authorId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/authors/$authorId'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 404) {
+        throw Exception('Autorul nu a fost gasit.');
+      }
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut incarca autorul.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns autor neasteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching author profile: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<ContentItem>> getAuthorContent(
+    int authorId, {
+    int limit = 30,
+  }) async {
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/authors/$authorId/content',
+      ).replace(queryParameters: {'limit': limit.toString()});
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut incarca materialele autorului.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Raspuns continut autor neasteptat.');
+      }
+      return decoded
+          .whereType<Map<String, dynamic>>()
+          .map((json) => ContentItem.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching author content: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> getPartnerProfile(int partnerId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/partners/$partnerId'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 404) {
+        throw Exception('Partenerul nu a fost gasit.');
+      }
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut incarca partenerul.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns partener neasteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching partner profile: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<ContentItem>> getPartnerContent(
+    int partnerId, {
+    int limit = 30,
+  }) async {
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/partners/$partnerId/content',
+      ).replace(queryParameters: {'limit': limit.toString()});
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut incarca materialele partenerului.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Raspuns continut partener neasteptat.');
+      }
+      return decoded
+          .whereType<Map<String, dynamic>>()
+          .map((json) => ContentItem.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching partner content: $e');
+      rethrow;
     }
   }
 
@@ -1514,20 +1783,20 @@ class ApiService {
           .get(Uri.parse(url), headers: headers)
           .timeout(const Duration(seconds: 15));
     } catch (error) {
-      throw _friendlyNetworkException(error, 'încărcarea biletelor', url: url);
+      throw _friendlyNetworkException(error, 'incarcarea biletelor', url: url);
     }
 
     await _handleAuthFailure(response);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
-        _responseErrorMessage(response, 'Eroare la încărcarea biletelor.'),
+        _responseErrorMessage(response, 'Eroare la incarcarea biletelor.'),
       );
     }
 
     final decoded = json.decode(response.body);
     if (decoded is! List) {
-      throw Exception('Răspuns neașteptat pentru bilete.');
+      throw Exception('Raspuns neasteptat pentru bilete.');
     }
     return decoded.whereType<Map<String, dynamic>>().toList();
   }
