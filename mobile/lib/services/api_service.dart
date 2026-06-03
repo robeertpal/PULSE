@@ -1237,6 +1237,65 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> getAuthorProfile(int authorId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/authors/$authorId'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 404) {
+        throw Exception('Autorul nu a fost gasit.');
+      }
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut incarca autorul.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns autor neasteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching author profile: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<ContentItem>> getAuthorContent(
+    int authorId, {
+    int limit = 30,
+  }) async {
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/authors/$authorId/content',
+      ).replace(queryParameters: {'limit': limit.toString()});
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut incarca materialele autorului.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Raspuns continut autor neasteptat.');
+      }
+      return decoded
+          .whereType<Map<String, dynamic>>()
+          .map((json) => ContentItem.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching author content: $e');
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> getContentItemDetail(int contentItemId) async {
     try {
       final response = await http
