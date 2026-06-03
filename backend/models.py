@@ -601,6 +601,35 @@ class Follow(Base):
     )
 
 
+class ContentSubmission(Base):
+    __tablename__ = "content_submissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    submitter_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    content_type = Column(String(50), nullable=False, index=True)
+    category_id = Column(Integer, ForeignKey("content_categories.id"))
+    specialization_id = Column(Integer, ForeignKey("specializations.id"))
+    summary = Column(Text)
+    body = Column(Text, nullable=False)
+    image_url = Column(Text)
+    source_url = Column(Text)
+    status = Column(String(50), nullable=False, default="draft", index=True)
+    reviewer_user_id = Column(Integer, ForeignKey("users.id"))
+    review_notes = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    submitted_at = Column(DateTime(timezone=True))
+    reviewed_at = Column(DateTime(timezone=True))
+    published_content_item_id = Column(Integer, ForeignKey("content_items.id"))
+
+    submitter = relationship("User", foreign_keys=[submitter_user_id])
+    reviewer = relationship("User", foreign_keys=[reviewer_user_id])
+    category = relationship("ContentCategory")
+    specialization = relationship("Specialization")
+    published_content_item = relationship("ContentItem")
+
+
 class UserCourse(Base):
     __tablename__ = "user_courses"
 

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Submissions - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .submission-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+            gap: 24px;
+            align-items: start;
+        }
+        .submission-detail {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+            position: sticky;
+            top: 24px;
+        }
+        .detail-row {
+            margin-bottom: 14px;
+        }
+        .detail-label {
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .detail-value {
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+        .submission-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 18px;
+        }
+        .btn-secondary {
+            background: #F1F5F9;
+            color: var(--text-primary);
+        }
+        .btn-warning {
+            background: #F59E0B;
+            color: #fff;
+        }
+        .btn-danger {
+            background: #EF4444;
+            color: #fff;
+        }
+        .btn-success {
+            background: #10B981;
+            color: #fff;
+        }
+        @media (max-width: 1100px) {
+            .submission-layout {
+                grid-template-columns: 1fr;
+            }
+            .submission-detail {
+                position: static;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="header-actions">
+                <div>
+                    <input type="text" id="search-input" placeholder="Cauta dupa titlu sau autor..." style="padding:10px; border-radius:8px; border:1px solid #ccc; width: 260px;">
+                    <select id="status-filter" style="padding:10px; border-radius:8px; border:1px solid #ccc; margin-left:10px;">
+                        <option value="">Toate statusurile</option>
+                        <option value="draft">Draft</option>
+                        <option value="submitted">Trimis</option>
+                        <option value="under_review">In review</option>
+                        <option value="needs_changes">Necesita modificari</option>
+                        <option value="approved">Aprobat</option>
+                        <option value="published">Publicat</option>
+                        <option value="rejected">Respins</option>
+                    </select>
+                </div>
+                <button class="btn btn-secondary" id="refresh-btn">Reincarca</button>
+            </div>
+
+            <div id="error-msg" class="alert error"></div>
+            <div id="success-msg" class="alert success"></div>
+
+            <div class="submission-layout">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Titlu</th>
+                            <th>Autor</th>
+                            <th>Tip</th>
+                            <th>Status</th>
+                            <th>Trimis la</th>
+                            <th>Actiuni</th>
+                        </tr>
+                    </thead>
+                    <tbody id="submissions-table-body">
+                        <tr><td colspan="6">Se incarca...</td></tr>
+                    </tbody>
+                </table>
+
+                <aside class="submission-detail" id="submission-detail">
+                    <p style="color: var(--text-secondary); margin: 0;">Selecteaza o contributie pentru detalii.</p>
+                </aside>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/submissions.js"></script>
+</body>
+</html>

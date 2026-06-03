@@ -32,6 +32,7 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
 from pypdf import PdfReader
 from sqlalchemy import bindparam, func, or_, text
 from sqlalchemy.exc import IntegrityError
@@ -41,6 +42,9 @@ from database import get_db
 import models
 from schemas import (
     AdminLogin,
+    ContentSubmissionCreate,
+    ContentSubmissionReviewPayload,
+    ContentSubmissionUpdate,
     EmailVerificationResend,
     EmailVerificationVerify,
     FollowTargetPayload,
@@ -3138,6 +3142,424 @@ def get_follow_status(
         "target_id": target_id,
         "is_following": is_following,
     }
+
+
+CONTENT_SUBMISSION_STATUSES = {
+    "draft",
+    "submitted",
+    "under_review",
+    "needs_changes",
+    "approved",
+    "published",
+    "rejected",
+    "archived",
+}
+USER_EDITABLE_SUBMISSION_STATUSES = {"draft", "needs_changes", "rejected"}
+ADMIN_REVIEWABLE_SUBMISSION_STATUSES = {"submitted", "under_review", "approved"}
+
+
+def normalize_submission_status(status: str) -> str:
+    normalized = (status or "").strip().lower()
+    if normalized not in CONTENT_SUBMISSION_STATUSES:
+        allowed = ", ".join(sorted(CONTENT_SUBMISSION_STATUSES))
+        raise HTTPException(status_code=400, detail=f"Status invalid. Valori acceptate: {allowed}")
+    return normalized
+
+
+def validate_submission_references(
+    db: Session,
+    category_id: Optional[int],
+    specialization_id: Optional[int],
+):
+    if category_id is not None:
+        category = db.query(models.ContentCategory.id).filter(models.ContentCategory.id == category_id).first()
+        if category is None:
+            raise HTTPException(status_code=422, detail="Categoria nu exista.")
+    if specialization_id is not None:
+        specialization = db.query(models.Specialization.id).filter(models.Specialization.id == specialization_id).first()
+        if specialization is None:
+            raise HTTPException(status_code=422, detail="Specializarea nu exista.")
+
+
+def clean_submission_payload(payload: BaseModel, exclude_unset: bool = False) -> dict:
+    data = pydantic_dump(payload, exclude_unset=exclude_unset)
+    allowed = {
+        "title",
+        "content_type",
+        "category_id",
+        "specialization_id",
+        "summary",
+        "body",
+        "image_url",
+        "source_url",
+    }
+    return {key: data[key] for key in allowed if key in data}
+
+
+def get_submission_or_404(db: Session, submission_id: int) -> models.ContentSubmission:
+    submission = (
+        db.query(models.ContentSubmission)
+        .options(
+            joinedload(models.ContentSubmission.category),
+            joinedload(models.ContentSubmission.specialization),
+            joinedload(models.ContentSubmission.submitter),
+            joinedload(models.ContentSubmission.published_content_item),
+        )
+        .filter(models.ContentSubmission.id == submission_id)
+        .first()
+    )
+    if submission is None:
+        raise HTTPException(status_code=404, detail="Submission-ul nu a fost gasit.")
+    return submission
+
+
+def get_own_submission_or_404(
+    db: Session,
+    submission_id: int,
+    user_id: int,
+) -> models.ContentSubmission:
+    submission = get_submission_or_404(db, submission_id)
+    if submission.submitter_user_id != user_id:
+        raise HTTPException(status_code=404, detail="Submission-ul nu a fost gasit.")
+    return submission
+
+
+def submitter_display_name(db: Session, user_id: int) -> Optional[str]:
+    profile = db.query(models.UserProfile).filter(models.UserProfile.user_id == user_id).first()
+    if profile:
+        name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
+        if name:
+            return name
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    return user.email if user else None
+
+
+def serialize_content_submission(db: Session, submission: models.ContentSubmission) -> dict:
+    data = {
+        "id": submission.id,
+        "submitter_user_id": submission.submitter_user_id,
+        "submitter_name": submitter_display_name(db, submission.submitter_user_id),
+        "title": submission.title,
+        "content_type": submission.content_type,
+        "category_id": submission.category_id,
+        "category_name": submission.category.name if submission.category else None,
+        "specialization_id": submission.specialization_id,
+        "specialization_name": submission.specialization.name if submission.specialization else None,
+        "summary": submission.summary,
+        "body": submission.body,
+        "image_url": submission.image_url,
+        "source_url": submission.source_url,
+        "status": submission.status,
+        "reviewer_user_id": submission.reviewer_user_id,
+        "review_notes": submission.review_notes,
+        "created_at": serialize_value(submission.created_at),
+        "updated_at": serialize_value(submission.updated_at),
+        "submitted_at": serialize_value(submission.submitted_at),
+        "reviewed_at": serialize_value(submission.reviewed_at),
+        "published_content_item_id": submission.published_content_item_id,
+    }
+    if submission.published_content_item:
+        data["published_content_item"] = serialize_content_option(submission.published_content_item)
+    return data
+
+
+def assert_submission_ready_for_review(submission: models.ContentSubmission):
+    if not submission.title or not submission.title.strip():
+        raise HTTPException(status_code=422, detail="Titlul este obligatoriu.")
+    if not submission.body or not submission.body.strip():
+        raise HTTPException(status_code=422, detail="Continutul este obligatoriu.")
+    content_type = (submission.content_type or "").strip().lower()
+    if content_type not in {"article", "news", "course", "event"}:
+        raise HTTPException(status_code=422, detail="Tipul de continut nu este valid.")
+
+
+def slug_base(value: str) -> str:
+    normalized = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().lower()).strip("-")
+    return normalized or "content"
+
+
+def unique_submission_content_slug(db: Session, submission: models.ContentSubmission) -> str:
+    base = slug_base(submission.title)
+    candidate = base
+    suffix = 1
+    while (
+        db.query(models.ContentItem.id)
+        .filter(models.ContentItem.slug == candidate)
+        .first()
+        is not None
+    ):
+        suffix += 1
+        candidate = f"{base}-{submission.id}-{suffix}"
+    return candidate
+
+
+def publish_submission_to_content_item(
+    db: Session,
+    submission: models.ContentSubmission,
+) -> models.ContentItem:
+    if submission.published_content_item_id:
+        return get_content_item_or_404(db, submission.published_content_item_id)
+
+    assert_submission_ready_for_review(submission)
+    validate_submission_references(db, submission.category_id, submission.specialization_id)
+    now = datetime.utcnow()
+    db_item = models.ContentItem(
+        title=submission.title.strip(),
+        slug=unique_submission_content_slug(db, submission),
+        content_type=enum_value(models.ContentItemType, submission.content_type, "content_type"),
+        status=models.ContentStatus.published,
+        short_description=submission.summary,
+        body=submission.body,
+        category_id=submission.category_id,
+        specialization_id=submission.specialization_id,
+        hero_image_url=submission.image_url,
+        thumbnail_url=submission.image_url,
+        author_name=submitter_display_name(db, submission.submitter_user_id),
+        source_url=submission.source_url,
+        is_featured=False,
+        is_active=True,
+        created_by_user_id=submission.submitter_user_id,
+        published_by_user_id=submission.reviewer_user_id,
+        published_at=now,
+    )
+    db.add(db_item)
+    db.flush()
+    submission.published_content_item_id = db_item.id
+    submission.status = "published"
+    submission.reviewed_at = now
+    return db_item
+
+
+@app.post("/content-submissions")
+def create_content_submission(
+    payload: ContentSubmissionCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    require_rate_limit(request, "content_submissions_write", "WRITE_RATE_LIMIT_PER_MINUTE", 60)
+    data = clean_submission_payload(payload)
+    validate_submission_references(db, data.get("category_id"), data.get("specialization_id"))
+    submission = models.ContentSubmission(
+        submitter_user_id=user_id,
+        status="draft",
+        **data,
+    )
+    try:
+        db.add(submission)
+        db.commit()
+        db.refresh(submission)
+        return serialize_content_submission(db, get_submission_or_404(db, submission.id))
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/content-submissions/my")
+def get_my_content_submissions(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    submissions = (
+        db.query(models.ContentSubmission)
+        .options(
+            joinedload(models.ContentSubmission.category),
+            joinedload(models.ContentSubmission.specialization),
+            joinedload(models.ContentSubmission.published_content_item),
+        )
+        .filter(models.ContentSubmission.submitter_user_id == user_id)
+        .order_by(models.ContentSubmission.updated_at.desc().nullslast(), models.ContentSubmission.created_at.desc())
+        .all()
+    )
+    return [serialize_content_submission(db, submission) for submission in submissions]
+
+
+@app.get("/content-submissions/{submission_id}")
+def get_content_submission(
+    submission_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    submission = get_own_submission_or_404(db, submission_id, user_id)
+    return serialize_content_submission(db, submission)
+
+
+@app.put("/content-submissions/{submission_id}")
+def update_content_submission(
+    submission_id: int,
+    payload: ContentSubmissionUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    require_rate_limit(request, "content_submissions_write", "WRITE_RATE_LIMIT_PER_MINUTE", 60)
+    submission = get_own_submission_or_404(db, submission_id, user_id)
+    if submission.status not in USER_EDITABLE_SUBMISSION_STATUSES:
+        raise HTTPException(status_code=400, detail="Submission-ul nu mai poate fi editat in acest status.")
+    data = clean_submission_payload(payload, exclude_unset=True)
+    validate_submission_references(
+        db,
+        data.get("category_id", submission.category_id),
+        data.get("specialization_id", submission.specialization_id),
+    )
+    for key, value in data.items():
+        setattr(submission, key, value)
+    submission.updated_at = datetime.utcnow()
+    try:
+        db.commit()
+        db.refresh(submission)
+        return serialize_content_submission(db, get_submission_or_404(db, submission.id))
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.post("/content-submissions/{submission_id}/submit")
+def submit_content_submission(
+    submission_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    require_rate_limit(request, "content_submissions_write", "WRITE_RATE_LIMIT_PER_MINUTE", 60)
+    submission = get_own_submission_or_404(db, submission_id, user_id)
+    if submission.status not in USER_EDITABLE_SUBMISSION_STATUSES:
+        raise HTTPException(status_code=400, detail="Submission-ul a fost deja trimis pentru review.")
+    assert_submission_ready_for_review(submission)
+    submission.status = "submitted"
+    submission.submitted_at = datetime.utcnow()
+    submission.updated_at = datetime.utcnow()
+    try:
+        db.commit()
+        db.refresh(submission)
+        return serialize_content_submission(db, get_submission_or_404(db, submission.id))
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/admin/content-submissions")
+def admin_get_content_submissions(
+    status: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    query = (
+        db.query(models.ContentSubmission)
+        .options(
+            joinedload(models.ContentSubmission.category),
+            joinedload(models.ContentSubmission.specialization),
+            joinedload(models.ContentSubmission.published_content_item),
+        )
+    )
+    if status:
+        query = query.filter(models.ContentSubmission.status == normalize_submission_status(status))
+    submissions = query.order_by(
+        models.ContentSubmission.submitted_at.desc().nullslast(),
+        models.ContentSubmission.updated_at.desc().nullslast(),
+        models.ContentSubmission.created_at.desc(),
+    ).all()
+    return [serialize_content_submission(db, submission) for submission in submissions]
+
+
+@app.get("/admin/content-submissions/{submission_id}")
+def admin_get_content_submission(submission_id: int, db: Session = Depends(get_db)):
+    submission = get_submission_or_404(db, submission_id)
+    return serialize_content_submission(db, submission)
+
+
+def admin_mark_submission(
+    db: Session,
+    submission_id: int,
+    status: str,
+    review_notes: Optional[str],
+):
+    submission = get_submission_or_404(db, submission_id)
+    if status in {"approved", "rejected", "needs_changes"} and submission.status not in ADMIN_REVIEWABLE_SUBMISSION_STATUSES:
+        raise HTTPException(status_code=400, detail="Submission-ul nu este in review.")
+    submission.status = status
+    submission.review_notes = review_notes
+    submission.reviewed_at = datetime.utcnow()
+    submission.updated_at = datetime.utcnow()
+    return submission
+
+
+@app.post("/admin/content-submissions/{submission_id}/approve")
+def admin_approve_content_submission(
+    submission_id: int,
+    payload: ContentSubmissionReviewPayload = ContentSubmissionReviewPayload(),
+    db: Session = Depends(get_db),
+):
+    try:
+        submission = admin_mark_submission(db, submission_id, "approved", payload.review_notes)
+        db.commit()
+        db.refresh(submission)
+        return serialize_content_submission(db, get_submission_or_404(db, submission.id))
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.post("/admin/content-submissions/{submission_id}/reject")
+def admin_reject_content_submission(
+    submission_id: int,
+    payload: ContentSubmissionReviewPayload = ContentSubmissionReviewPayload(),
+    db: Session = Depends(get_db),
+):
+    try:
+        submission = admin_mark_submission(db, submission_id, "rejected", payload.review_notes)
+        db.commit()
+        db.refresh(submission)
+        return serialize_content_submission(db, get_submission_or_404(db, submission.id))
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.post("/admin/content-submissions/{submission_id}/needs-changes")
+def admin_needs_changes_content_submission(
+    submission_id: int,
+    payload: ContentSubmissionReviewPayload = ContentSubmissionReviewPayload(),
+    db: Session = Depends(get_db),
+):
+    try:
+        submission = admin_mark_submission(db, submission_id, "needs_changes", payload.review_notes)
+        db.commit()
+        db.refresh(submission)
+        return serialize_content_submission(db, get_submission_or_404(db, submission.id))
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.post("/admin/content-submissions/{submission_id}/publish")
+def admin_publish_content_submission(submission_id: int, db: Session = Depends(get_db)):
+    try:
+        submission = get_submission_or_404(db, submission_id)
+        if submission.status == "published" and submission.published_content_item_id:
+            return serialize_content_submission(db, submission)
+        if submission.status != "approved":
+            raise HTTPException(status_code=400, detail="Submission-ul trebuie aprobat inainte de publicare.")
+        publish_submission_to_content_item(db, submission)
+        db.commit()
+        db.refresh(submission)
+        return serialize_content_submission(db, get_submission_or_404(db, submission.id))
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
 
 
 @app.post("/user-activity")

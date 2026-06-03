@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/ad_item.dart';
 import '../models/content_item.dart';
+import '../models/content_submission.dart';
 import '../models/filter_option.dart';
 import '../models/publication_issue.dart';
 import 'auth_storage.dart';
@@ -501,6 +502,159 @@ class ApiService {
       return decoded;
     } catch (e) {
       debugPrint('Error updating profile: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<ContentSubmission>> getMyContentSubmissions() async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(Uri.parse('$baseUrl/content-submissions/my'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut incarca contributiile.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Raspuns contributii neasteptat.');
+      }
+      return decoded
+          .whereType<Map<String, dynamic>>()
+          .map((json) => ContentSubmission.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching content submissions: $e');
+      rethrow;
+    }
+  }
+
+  Future<ContentSubmission> getContentSubmission(int submissionId) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/content-submissions/$submissionId'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut incarca contributia.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns contributie neasteptat.');
+      }
+      return ContentSubmission.fromJson(decoded);
+    } catch (e) {
+      debugPrint('Error fetching content submission: $e');
+      rethrow;
+    }
+  }
+
+  Future<ContentSubmission> createContentSubmission(
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/content-submissions'),
+            headers: {...headers, 'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut salva contributia.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns creare contributie neasteptat.');
+      }
+      return ContentSubmission.fromJson(decoded);
+    } catch (e) {
+      debugPrint('Error creating content submission: $e');
+      rethrow;
+    }
+  }
+
+  Future<ContentSubmission> updateContentSubmission(
+    int submissionId,
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .put(
+            Uri.parse('$baseUrl/content-submissions/$submissionId'),
+            headers: {...headers, 'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut actualiza contributia.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns actualizare contributie neasteptat.');
+      }
+      return ContentSubmission.fromJson(decoded);
+    } catch (e) {
+      debugPrint('Error updating content submission: $e');
+      rethrow;
+    }
+  }
+
+  Future<ContentSubmission> submitContentSubmission(int submissionId) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/content-submissions/$submissionId/submit'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut trimite contributia pentru review.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns trimitere contributie neasteptat.');
+      }
+      return ContentSubmission.fromJson(decoded);
+    } catch (e) {
+      debugPrint('Error submitting content submission: $e');
       rethrow;
     }
   }
