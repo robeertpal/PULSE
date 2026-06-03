@@ -38,6 +38,7 @@ class ContentCard extends StatefulWidget {
   final bool isSaved;
   final ValueChanged<int>? onSaveToggle;
   final VoidCallback? onDetailClosed;
+  final String? infoText;
   final double? cardWidth;
   final EdgeInsetsGeometry margin;
   final bool darkMode;
@@ -74,6 +75,7 @@ class ContentCard extends StatefulWidget {
     this.isSaved = false,
     this.onSaveToggle,
     this.onDetailClosed,
+    this.infoText,
     this.cardWidth = 240,
     this.margin = const EdgeInsets.only(right: 16),
     this.darkMode = false,
@@ -88,6 +90,7 @@ class ContentCard extends StatefulWidget {
     bool isSaved = false,
     ValueChanged<int>? onSaveToggle,
     VoidCallback? onDetailClosed,
+    String? infoText,
     double? cardWidth = 240,
     EdgeInsetsGeometry margin = const EdgeInsets.only(right: 16),
     bool darkMode = false,
@@ -197,6 +200,7 @@ class ContentCard extends StatefulWidget {
       isSaved: isSaved,
       onSaveToggle: onSaveToggle,
       onDetailClosed: onDetailClosed,
+      infoText: infoText ?? _infoTextForContentType(model.contentType),
       cardWidth: cardWidth,
       margin: margin,
       darkMode: darkMode,
@@ -326,6 +330,122 @@ class _ContentCardState extends State<ContentCard>
     );
   }
 
+  Widget _buildInfoButton() {
+    final text = widget.infoText?.trim();
+    if (text == null || text.isEmpty) return const SizedBox.shrink();
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _showInfoSheet(text),
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: widget.darkMode
+              ? const Color(0xFF090A10).withValues(alpha: 0.72)
+              : Colors.white.withValues(alpha: 0.92),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: widget.darkMode
+                ? PulseTheme.primaryLight.withValues(alpha: 0.28)
+                : widget.categoryColor.withValues(alpha: 0.22),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: widget.darkMode ? 0.28 : 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+              spreadRadius: -6,
+            ),
+          ],
+        ),
+        child: Icon(
+          Icons.info_outline_rounded,
+          size: 16,
+          color: widget.darkMode ? Colors.white : widget.categoryColor,
+        ),
+      ),
+    );
+  }
+
+  void _showInfoSheet(String text) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: false,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+              decoration: BoxDecoration(
+                color: const Color(0xFF15131B).withValues(alpha: 0.96),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: PulseTheme.primaryLight.withValues(alpha: 0.18),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: PulseTheme.primary.withValues(alpha: 0.18),
+                    blurRadius: 26,
+                    offset: const Offset(0, 14),
+                    spreadRadius: -16,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          gradient: PulseTheme.primaryGradient,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.info_outline_rounded,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'De ce apare acest material',
+                          style: TextStyle(
+                            color: PulseTheme.textPrimary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    text,
+                    style: const TextStyle(
+                      color: PulseTheme.textSecondary,
+                      fontSize: 13,
+                      height: 1.4,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildCardBody() {
     final cardColor = widget.darkMode
         ? const Color(0xFF17131B).withValues(alpha: 0.78)
@@ -422,6 +542,7 @@ class _ContentCardState extends State<ContentCard>
                         child: EmcBadge(points: widget.emcPoints!),
                       ),
                     Positioned(left: 10, top: 10, child: _buildSaveButton()),
+                    Positioned(right: 10, bottom: 10, child: _buildInfoButton()),
                   ],
                 ),
               ),
@@ -641,6 +762,22 @@ String _typeLabelForContentCard(String type) {
       return 'Articol';
     default:
       return type;
+  }
+}
+
+String _infoTextForContentType(String type) {
+  switch (type) {
+    case 'course':
+      return 'Material afi\u0219at pentru explorarea cursurilor disponibile \u0219i a con\u021binutului educa\u021bional relevant.';
+    case 'event':
+      return 'Material afi\u0219at pentru a descoperi evenimente medicale publicate \u00een platform\u0103.';
+    case 'publication':
+      return 'Revist\u0103 afi\u0219at\u0103 pentru acces rapid la publica\u021bii \u0219i edi\u021bii medicale disponibile.';
+    case 'news':
+    case 'article':
+      return 'Material afi\u0219at pentru a descoperi nout\u0103\u021bi \u0219i articole medicale publicate.';
+    default:
+      return 'Material afi\u0219at pentru a explora con\u021binut medical relevant \u00een PULSE.';
   }
 }
 

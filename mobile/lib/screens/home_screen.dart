@@ -73,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   String? _errorMessage;
   String? _forYouErrorMessage;
   String _doctorName = 'Medic';
+  String? _doctorAvatarUrl;
   int _unreadNotificationsCount = 0;
 
   static const int _sectionCount = 10;
@@ -270,6 +271,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     try {
       final profileData = await _apiService.getMyProfile();
       final freshName = profileData['display_name'] as String?;
+      final avatarUrl = _extractProfileImageUrl(profileData);
       if (freshName != null && freshName.trim().isNotEmpty) {
         await _authStorage.saveUserName(freshName.trim());
       }
@@ -278,11 +280,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           if (freshName != null && freshName.trim().isNotEmpty) {
             _doctorName = freshName.trim();
           }
+          _doctorAvatarUrl = avatarUrl;
         });
       }
     } catch (e) {
       debugPrint('Eroare la obținerea numelui medicului din API: $e');
     }
+  }
+
+  String? _extractProfileImageUrl(Map<String, dynamic> data) {
+    final keys = [
+      'avatar_url',
+      'photo_url',
+      'profile_image_url',
+      'profile_photo_url',
+      'image_url',
+      'picture',
+    ];
+
+    String? readFrom(Map<String, dynamic> source) {
+      for (final key in keys) {
+        final value = source[key]?.toString().trim();
+        if (value != null &&
+            value.isNotEmpty &&
+            (value.startsWith('http://') || value.startsWith('https://'))) {
+          return value;
+        }
+      }
+      return null;
+    }
+
+    final direct = readFrom(data);
+    if (direct != null) return direct;
+
+    final profile = data['profile'];
+    if (profile is Map<String, dynamic>) return readFrom(profile);
+    return null;
   }
 
   List<int> get _categoryFilterIds => _selectedCategoryIds.toList()..sort();
@@ -516,7 +549,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _verticalContentCard(ContentItem item) {
+  Widget _verticalContentCard(ContentItem item, {String? infoText}) {
     return SizedBox(
       width: double.infinity,
       height: 260,
@@ -528,6 +561,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         cardWidth: double.infinity,
         margin: EdgeInsets.zero,
         darkMode: true,
+        infoText: infoText,
       ),
     );
   }
@@ -1188,6 +1222,60 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildHeaderAvatar() {
+    final avatarUrl = _doctorAvatarUrl?.trim();
+
+    return GestureDetector(
+      onTap: _openProfile,
+      child: Container(
+        width: 36,
+        height: 36,
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          gradient: PulseTheme.avatarRingGradient,
+          boxShadow: [
+            BoxShadow(
+              color: PulseTheme.primary.withValues(alpha: 0.28),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+              spreadRadius: -10,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: avatarUrl != null && avatarUrl.isNotEmpty
+              ? Image.network(
+                  avatarUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return _buildHeaderAvatarFallback();
+                  },
+                )
+              : _buildHeaderAvatarFallback(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderAvatarFallback() {
+    return Container(
+      color: _darkCanvas,
+      child: const Center(
+        child: Text(
+          'P',
+          style: TextStyle(
+            color: _darkText,
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildStickyHomeHeader() {
     return ClipRRect(
       borderRadius: const BorderRadius.only(
@@ -1224,43 +1312,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 padding: const EdgeInsets.fromLTRB(14, 7, 14, 2),
                 child: Row(
                   children: [
-                    GestureDetector(
-                      onTap: _openProfile,
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          gradient: PulseTheme.avatarRingGradient,
-                          boxShadow: [
-                            BoxShadow(
-                              color: PulseTheme.primary.withValues(alpha: 0.28),
-                              blurRadius: 18,
-                              offset: const Offset(0, 8),
-                              spreadRadius: -10,
-                            ),
-                          ],
-                        ),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: _darkCanvas,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'P',
-                              style: TextStyle(
-                                color: _darkText,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                    _buildHeaderAvatar(),
                     const Spacer(),
                     _buildHeaderIconButton(
                       iconAsset: 'assets/icons/bell.svg',
@@ -1695,7 +1747,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _verticalContentCard(item),
+        _verticalContentCard(
+          item,
+          infoText: reason?.trim().isNotEmpty == true
+              ? reason!.trim()
+              : 'Recomandat pe baza intereselor \u0219i activit\u0103\u021bii recente.',
+        ),
         if (reason != null && reason.trim().isNotEmpty) ...[
           Transform.translate(
             offset: const Offset(0, -6),
