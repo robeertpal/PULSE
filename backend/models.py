@@ -725,12 +725,34 @@ class UserSubscription(Base):
     created_at = Column(DateTime(timezone=True))
 
 
+class UserPaymentMethod(Base):
+    __tablename__ = "user_payment_methods"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    provider = Column(String(100))
+    provider_customer_id = Column(String(255))
+    provider_payment_method_id = Column(String(255), unique=True)
+    card_brand = Column(String(50))
+    card_last4 = Column(String(4))
+    exp_month = Column(Integer)
+    exp_year = Column(Integer)
+    is_default = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True))
+    updated_at = Column(DateTime(timezone=True))
+    deleted_at = Column(DateTime(timezone=True))
+
+    user = relationship("User", backref="payment_methods")
+
+
 class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     subscription_id = Column(Integer, ForeignKey("user_subscriptions.id"))
+    payment_method_id = Column(Integer, ForeignKey("user_payment_methods.id"))
+    content_item_id = Column(Integer, ForeignKey("content_items.id"))
     amount = Column(Numeric(10, 2), nullable=False)
     currency = Column(String(10), nullable=False, default="RON")
     provider = Column(String(100))
@@ -738,6 +760,9 @@ class Payment(Base):
     status = Column(Enum(PaymentStatus, name="payment_status"), nullable=False)
     paid_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True))
+
+    payment_method = relationship("UserPaymentMethod")
+    content_item = relationship("ContentItem")
 
 
 class AuditLog(Base):

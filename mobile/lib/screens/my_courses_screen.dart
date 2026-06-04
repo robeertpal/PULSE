@@ -3,9 +3,9 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../services/api_service.dart';
 import '../theme/pulse_theme.dart';
+import '../widgets/profile_ui_helpers.dart';
 import '../widgets/skeleton_loading.dart';
 import 'content_detail_screen.dart';
-import 'profile_screen.dart';
 
 class MyCoursesScreen extends StatefulWidget {
   const MyCoursesScreen({super.key});

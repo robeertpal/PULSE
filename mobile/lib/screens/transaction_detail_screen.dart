@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../widgets/profile_ui_helpers.dart';
 import 'content_detail_screen.dart';
-import 'profile_screen.dart';
 import 'ticket_detail_screen.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
