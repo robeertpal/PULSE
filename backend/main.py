@@ -5243,7 +5243,18 @@ class MyProfileUpdate(BaseModel):
     photo_url: str | None = None
     profile_image_url: str | None = None
     bio: str | None = None
+
+
+class MyPaymentMethodCreate(BaseModel):
+    card_brand: str | None = None
+    card_last4: str
+    exp_month: int | None = None
+    exp_year: int | None = None
+    holder_name: str | None = None
+    billing_email: str | None = None
+    is_default: bool | None = False
     
+
 class UserChangePassword(BaseModel):
     current_password: str
     new_password: str
