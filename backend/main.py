@@ -24,6 +24,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
+from pydantic import BaseModel, ConfigDict, Field
 
 import httpx
 from dotenv import load_dotenv
@@ -5731,7 +5732,7 @@ def get_audit_logs(db: Session = Depends(get_db)):
 # ADMIN ENDPOINTS
 # -------------------------
 
-from pydantic import BaseModel, ConfigDict, Field
+
 from typing import Any, Dict, Optional, List
 from sqlalchemy import func
 

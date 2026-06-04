@@ -13,6 +13,7 @@ import '../widgets/content_type_badge.dart';
 import '../widgets/emc_badge.dart';
 import '../widgets/favorite_button.dart';
 import '../widgets/skeleton_loading.dart';
+import '../widgets/event_payment_modal.dart';
 
 class ContentDetailScreen extends StatefulWidget {
   final int contentItemId;
