@@ -1927,7 +1927,7 @@ def serialize_author(author: models.Author):
     }
 
 
-FOLLOW_TARGET_TYPES = {"author", "publication", "partner"}
+FOLLOW_TARGET_TYPES = {"author", "publication", "partner", "category", "specialization"}
 
 
 def normalize_follow_target_type(value: str) -> str:
@@ -1981,6 +1981,16 @@ def validate_follow_target_or_404(db: Session, target_type: str, target_id: int)
     target_type = normalize_follow_target_type(target_type)
     if target_type == "publication":
         return get_public_publication_or_404(db, target_id)
+    if target_type == "category":
+        category = db.query(models.ContentCategory).filter(models.ContentCategory.id == target_id).first()
+        if category is None:
+            raise HTTPException(status_code=404, detail="Categoria nu a fost gasita.")
+        return category
+    if target_type == "specialization":
+        specialization = db.query(models.Specialization).filter(models.Specialization.id == target_id).first()
+        if specialization is None:
+            raise HTTPException(status_code=404, detail="Specializarea nu a fost gasita.")
+        return specialization
     if target_type == "partner":
         partner = db.query(models.EventPartner).filter(models.EventPartner.id == target_id).first()
         if partner is None:
@@ -2017,6 +2027,18 @@ def serialize_follow_target(db: Session, follow: models.Follow) -> dict:
             if partner:
                 data["target_name"] = partner.name
                 data["partner"] = serialize_event_partner(partner)
+        elif follow.target_type == "category":
+            category = db.query(models.ContentCategory).filter(models.ContentCategory.id == follow.target_id).first()
+            if category:
+                data["target_name"] = category.name
+                data["category_name"] = category.name
+                data["category"] = serialize_model(category)
+        elif follow.target_type == "specialization":
+            specialization = db.query(models.Specialization).filter(models.Specialization.id == follow.target_id).first()
+            if specialization:
+                data["target_name"] = specialization.name
+                data["specialization_name"] = specialization.name
+                data["specialization"] = serialize_model(specialization)
     except Exception:
         logger.exception("Failed to serialize follow target")
     return data
@@ -2762,6 +2784,8 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
     followed_author_ids: set[int] = set()
     followed_publication_ids: set[int] = set()
     followed_partner_ids: set[int] = set()
+    followed_category_ids: set[int] = set()
+    followed_specialization_ids: set[int] = set()
     followed_author_names: set[str] = set()
     if _safe_table_exists(db, "follows"):
         follow_rows = (
@@ -2783,6 +2807,16 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
             follow.target_id
             for follow in follow_rows
             if follow.target_type == "partner"
+        }
+        followed_category_ids = {
+            follow.target_id
+            for follow in follow_rows
+            if follow.target_type == "category"
+        }
+        followed_specialization_ids = {
+            follow.target_id
+            for follow in follow_rows
+            if follow.target_type == "specialization"
         }
         if followed_author_ids:
             authors = (
@@ -2817,6 +2851,8 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
         "followed_author_ids": followed_author_ids,
         "followed_publication_ids": followed_publication_ids,
         "followed_partner_ids": followed_partner_ids,
+        "followed_category_ids": followed_category_ids,
+        "followed_specialization_ids": followed_specialization_ids,
         "followed_author_names": followed_author_names,
         "has_activity": bool(
             recent_logs
@@ -2825,6 +2861,8 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
             or followed_author_ids
             or followed_publication_ids
             or followed_partner_ids
+            or followed_category_ids
+            or followed_specialization_ids
         ),
     }
 
@@ -2855,8 +2893,14 @@ def _score_for_you_item(
 
     if item.category_id:
         score += min(16.0, context["category_preferences"].get(item.category_id, 0.0) * 2.4)
+        if item.category_id in context.get("followed_category_ids", set()):
+            score += 20.0
+            reason_parts.insert(0, "urmaresti aceasta categorie")
     if item.specialization_id:
         score += min(18.0, context["specialization_preferences"].get(item.specialization_id, 0.0) * 2.8)
+        if item.specialization_id in context.get("followed_specialization_ids", set()):
+            score += 22.0
+            reason_parts.insert(0, "urmaresti aceasta specializare")
     if content_type:
         type_score = min(12.0, context["content_type_preferences"].get(content_type, 0.0) * 2.0)
         score += type_score
@@ -2993,6 +3037,8 @@ def _try_generate_for_you_ai_reasons(context: dict, recommendations: list[dict])
         "specialization": context.get("profile_specialization_name"),
         "occupation": context.get("occupation_name"),
         "interests": context.get("user_interest_names", [])[:6],
+        "followed_category_ids": sorted(context.get("followed_category_ids", set()))[:8],
+        "followed_specialization_ids": sorted(context.get("followed_specialization_ids", set()))[:8],
         "preferred_content_types": sorted(
             context["content_type_preferences"].items(),
             key=lambda item: item[1],
@@ -6100,6 +6146,36 @@ def _content_publication_target(db: Session, item: models.ContentItem) -> Option
     }
 
 
+def _content_category_target(db: Session, item: models.ContentItem) -> Optional[dict]:
+    if not item.category_id:
+        return None
+    category = getattr(item, "category", None)
+    if category is None:
+        category = db.query(models.ContentCategory).filter(models.ContentCategory.id == item.category_id).first()
+    if category is None:
+        return None
+    return {
+        "target_type": "category",
+        "target_id": category.id,
+        "target_name": category.name,
+    }
+
+
+def _content_specialization_target(db: Session, item: models.ContentItem) -> Optional[dict]:
+    if not item.specialization_id:
+        return None
+    specialization = getattr(item, "specialization", None)
+    if specialization is None:
+        specialization = db.query(models.Specialization).filter(models.Specialization.id == item.specialization_id).first()
+    if specialization is None:
+        return None
+    return {
+        "target_type": "specialization",
+        "target_id": specialization.id,
+        "target_name": specialization.name,
+    }
+
+
 def _content_author_target(db: Session, item: models.ContentItem) -> Optional[dict]:
     author = find_author_for_content_item(db, item)
     if author is None:
@@ -6160,6 +6236,14 @@ def _content_partner_targets(db: Session, item: models.ContentItem) -> list[dict
 
 def follow_notification_targets_for_content(db: Session, item: models.ContentItem) -> list[dict]:
     targets = []
+    category_target = _content_category_target(db, item)
+    if category_target:
+        targets.append(category_target)
+
+    specialization_target = _content_specialization_target(db, item)
+    if specialization_target:
+        targets.append(specialization_target)
+
     author_target = _content_author_target(db, item)
     if author_target:
         targets.append(author_target)
@@ -6208,7 +6292,7 @@ def create_follow_content_notification_if_needed(db: Session, item: models.Conte
 
     target_names = [target["target_name"] for target in targets if target.get("target_name")]
     reason = ", ".join(target_names[:3]) if target_names else "un profil urmarit"
-    title = "Noutate de la un profil urmarit"
+    title = "Noutate pentru ce urmaresti"
     description = f"A aparut continut nou asociat cu {reason}: {item.title}"
     image_url = item.thumbnail_url or item.hero_image_url
 
@@ -6219,12 +6303,13 @@ def create_follow_content_notification_if_needed(db: Session, item: models.Conte
             FROM notifications n
             JOIN content_notifications cn ON cn.notification_id = n.id
             WHERE n.notification_type = 'content'
-              AND n.title = :title
+              AND n.status = 'sent'
               AND cn.content_item_id = :content_item_id
+            ORDER BY n.id ASC
             LIMIT 1
             """
         ),
-        {"title": title, "content_item_id": item.id},
+        {"content_item_id": item.id},
     ).scalar()
 
     notification_id = existing_notification_id
