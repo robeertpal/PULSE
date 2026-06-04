@@ -4809,6 +4809,18 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
         "professional_grade_name": profile.professional_grade.name if profile.professional_grade else None,
     }
 
+class MyProfileUpdate(BaseModel):
+    full_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    specialty: str | None = None
+    specialization: str | None = None
+    city: str | None = None
+    country: str | None = None
+    avatar_url: str | None = None
+    photo_url: str | None = None
+    profile_image_url: str | None = None
+    bio: str | None = None
 
 @app.patch("/api/me/profile")
 def update_my_profile(
