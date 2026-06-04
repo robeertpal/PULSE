@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../widgets/profile_ui_helpers.dart';
+import 'profile_screen.dart';
 
 class TicketDetailScreen extends StatelessWidget {
   final Map<String, dynamic> ticket;
