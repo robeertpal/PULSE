@@ -30,7 +30,6 @@ const UI = {
                 <ul class="nav-links">
                     <li><a href="dashboard.html" class="${activePage === 'dashboard' ? 'active' : ''}">Dashboard</a></li>
                     <li><a href="content.html" class="${activePage === 'content' ? 'active' : ''}">Tot Conținutul</a></li>
-                    <li><a href="submissions.html" class="${activePage === 'submissions' ? 'active' : ''}">Submissions</a></li>
                     <li><a href="articles.html" class="${activePage === 'articles' ? 'active' : ''}">Articole</a></li>
                     <li><a href="news.html" class="${activePage === 'news' ? 'active' : ''}">Știri</a></li>
                     <li><a href="courses.html" class="${activePage === 'courses' ? 'active' : ''}">Cursuri</a></li>

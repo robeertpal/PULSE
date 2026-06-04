@@ -72,24 +72,20 @@ class PublicationIssuesScreen extends StatefulWidget {
 }
 
 class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
-  static const double _heroHeight = 330;
+  static const double _heroHeight = 292;
   final ApiService _apiService = ApiService();
   List<PublicationIssue> _issues = [];
-  Map<String, dynamic>? _publicationDetails;
   bool _isLoading = true;
   String? _errorMessage;
   int? _selectedYear;
   bool _isSaved = false;
   bool _isSaving = false;
-  bool _isFollowingPublication = false;
-  bool _isPublicationFollowLoading = false;
   List<ContentItem> _morePublications = [];
 
   @override
   void initState() {
     super.initState();
     _trackPublicationOpen();
-    _loadPublicationFollowStatus();
     _loadIssues();
   }
 
@@ -108,72 +104,6 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
     );
   }
 
-  Future<void> _loadPublicationFollowStatus() async {
-    try {
-      final isFollowing = await _apiService.getFollowStatus(
-        targetType: 'publication',
-        targetId: widget.publicationId,
-      );
-      if (!mounted) return;
-      setState(() {
-        _isFollowingPublication = isFollowing;
-      });
-    } catch (e) {
-      debugPrint('Publication follow status ignored: $e');
-    }
-  }
-
-  Future<void> _togglePublicationFollow() async {
-    if (_isPublicationFollowLoading) return;
-    final wasFollowing = _isFollowingPublication;
-    setState(() {
-      _isFollowingPublication = !wasFollowing;
-      _isPublicationFollowLoading = true;
-    });
-
-    try {
-      if (wasFollowing) {
-        await _apiService.unfollowTarget(
-          targetType: 'publication',
-          targetId: widget.publicationId,
-        );
-      } else {
-        await _apiService.followTarget(
-          targetType: 'publication',
-          targetId: widget.publicationId,
-        );
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            wasFollowing
-                ? 'Nu mai urm\u0103re\u0219ti publica\u021bia.'
-                : 'Urm\u0103re\u0219ti publica\u021bia.',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isFollowingPublication = wasFollowing;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nu am putut actualiza follow-ul.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isPublicationFollowLoading = false;
-        });
-      }
-    }
-  }
-
   Future<void> _loadIssues() async {
     setState(() {
       _isLoading = true;
@@ -184,22 +114,12 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
       final issuesFuture = _apiService.getPublicationIssues(
         widget.publicationId,
       );
-      final detailsFuture = _apiService.getPublicationDetails(
-        widget.publicationId,
-      );
       final publicationsFuture = _apiService.getPublications(limit: 8);
       final issues = await issuesFuture;
       final publications = await publicationsFuture;
-      Map<String, dynamic>? publicationDetails;
-      try {
-        publicationDetails = await detailsFuture;
-      } catch (e) {
-        debugPrint('Publication details ignored: $e');
-      }
       if (!mounted) return;
       setState(() {
         _issues = _sortIssues(issues);
-        _publicationDetails = publicationDetails;
         _morePublications = publications
             .where(
               (publication) =>
@@ -252,8 +172,8 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
     return issues.where((issue) => issue.id != latest.id).toList();
   }
 
-  String? _clean(dynamic value) {
-    final trimmed = value?.toString().trim();
+  String? _clean(String? value) {
+    final trimmed = value?.trim();
     if (trimmed == null || trimmed.isEmpty) return null;
     return trimmed;
   }
@@ -286,19 +206,6 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
     return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
-  DateTime? _parseDate(dynamic value) {
-    if (value == null) return null;
-    return DateTime.tryParse(value.toString());
-  }
-
-  DateTime? get _publicationPublishedAt =>
-      _parseDate(_publicationDetails?['content_published_at']) ??
-      widget.contentPublishedAt;
-
-  bool get _hasPdfIssues =>
-      _publicationDetails?['has_pdf_issues'] == true ||
-      _issues.any((issue) => issue.pdfUrl?.trim().isNotEmpty == true);
-
   String get _issueCountLabel {
     if (_issues.isEmpty) return 'Arhivă în pregătire';
     if (_issues.length == 1) return '1 număr disponibil';
@@ -306,70 +213,47 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
   }
 
   String get _publicationName {
-    return _clean(_publicationDetails?['name']) ??
-        _clean(_latestIssue?.publicationName) ??
+    return _clean(_latestIssue?.publicationName) ??
         _clean(widget.publicationName) ??
         _clean(widget.contentTitle) ??
         'Publicație';
   }
 
   String? get _publicationLogoUrl {
-    return _clean(_publicationDetails?['logo_url']) ??
-        _clean(widget.publicationLogoUrl) ??
+    return _clean(widget.publicationLogoUrl) ??
         _clean(_latestIssue?.publicationLogoUrl);
   }
 
-  String? get _publicationHeroImageUrl {
-    return _clean(_publicationDetails?['content_hero_image_url']) ??
-        _clean(widget.contentHeroImageUrl) ??
-        _clean(_publicationDetails?['content_thumbnail_url']) ??
-        _clean(widget.contentThumbnailUrl) ??
-        _publicationLogoUrl;
-  }
-
   String? get _publicationDescription {
-    return _clean(_publicationDetails?['description']) ??
-        _clean(widget.publicationDescription) ??
+    return _clean(widget.publicationDescription) ??
         _clean(_latestIssue?.publicationDescription) ??
-        _clean(_publicationDetails?['content_short_description']) ??
         _clean(widget.contentShortDescription) ??
-        _plainText(_clean(_publicationDetails?['content_body'])) ??
         _plainText(widget.contentBody);
   }
 
   String? get _emcCreditsText {
-    return _clean(_publicationDetails?['emc_credits_text']) ??
-        _clean(widget.emcCreditsText) ??
+    return _clean(widget.emcCreditsText) ??
         _clean(_latestIssue?.publicationEmcCreditsText);
   }
 
   String? get _creditationText {
-    return _clean(_publicationDetails?['creditation_text']) ??
-        _clean(widget.creditationText) ??
+    return _clean(widget.creditationText) ??
         _clean(_latestIssue?.publicationCreditationText);
   }
 
   String? get _indexingText {
-    return _clean(_publicationDetails?['indexing_text']) ??
-        _clean(widget.indexingText) ??
+    return _clean(widget.indexingText) ??
         _clean(_latestIssue?.publicationIndexingText);
   }
 
   String? get _subscriptionUrl {
-    return _clean(_publicationDetails?['subscription_url']) ??
-        _clean(widget.subscriptionUrl) ??
+    return _clean(widget.subscriptionUrl) ??
         _clean(_latestIssue?.publicationSubscriptionUrl);
   }
 
   List<PublicationAuthor> get _publicationAuthors {
-    final rawAuthors = _publicationDetails?['authors'];
-    final authors = rawAuthors is List
-        ? rawAuthors
-              .whereType<Map<String, dynamic>>()
-              .map(PublicationAuthor.fromJson)
-              .toList()
-        : [...widget.authors];
-    return authors..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+    return [...widget.authors]
+      ..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
   }
 
   Future<void> _openUrl(String url, String errorMessage) async {
@@ -571,43 +455,6 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
     );
   }
 
-  Widget _buildPublicationFollowButton() {
-    return OutlinedButton.icon(
-      onPressed: _isPublicationFollowLoading ? null : _togglePublicationFollow,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: _isFollowingPublication
-            ? Colors.white
-            : PulseTheme.magazineContent,
-        side: BorderSide(
-          color: _isFollowingPublication
-              ? Colors.white.withValues(alpha: 0.24)
-              : PulseTheme.magazineContent.withValues(alpha: 0.44),
-        ),
-        backgroundColor: _isFollowingPublication
-            ? Colors.white.withValues(alpha: 0.14)
-            : Colors.black.withValues(alpha: 0.20),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-      ),
-      icon: _isPublicationFollowLoading
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(
-              _isFollowingPublication
-                  ? Icons.check_circle_rounded
-                  : Icons.add_circle_outline_rounded,
-              size: 18,
-            ),
-      label: Text(
-        _isFollowingPublication ? 'Following' : 'Follow',
-        style: const TextStyle(fontWeight: FontWeight.w900),
-      ),
-    );
-  }
-
   Widget _buildHero() {
     final topInset = MediaQuery.of(context).padding.top;
     final subscriptionUrl = _subscriptionUrl;
@@ -625,7 +472,7 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            _heroBackground(_publicationHeroImageUrl),
+            _heroBackground(widget.contentHeroImageUrl),
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -724,29 +571,15 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                       _HeroLogo(logoUrl: _publicationLogoUrl),
                     ],
                   ),
-                  if (_publicationDescription != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _publicationDescription!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.78),
-                        fontSize: 13,
-                        height: 1.35,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
                   const SizedBox(height: 16),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      if (_publicationPublishedAt != null)
+                      if (widget.contentPublishedAt != null)
                         _PremiumPill(
                           label:
-                              'Publicat ${_formatDate(_publicationPublishedAt)!}',
+                              'Publicat ${_formatDate(widget.contentPublishedAt)!}',
                           svgAsset: _calendarIconAsset,
                           color: PulseTheme.magazineContent,
                         ),
@@ -755,12 +588,6 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                         svgAsset: _bookPagesIconAsset,
                         color: PulseTheme.magazineContent,
                       ),
-                      if (_hasPdfIssues)
-                        _PremiumPill(
-                          label: 'PDF disponibil',
-                          svgAsset: _globeIconAsset,
-                          color: PulseTheme.magazineContent,
-                        ),
                       if (_creditationText != null)
                         _PremiumPill(
                           label: _creditationText!,
@@ -774,11 +601,6 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                           color: PulseTheme.magazineContent,
                         ),
                     ],
-                  ),
-                  const SizedBox(height: 14),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _buildPublicationFollowButton(),
                   ),
                   if (subscriptionUrl != null) ...[
                     const SizedBox(height: 18),
@@ -2822,11 +2644,7 @@ class _PremiumPill extends StatelessWidget {
   final String? svgAsset;
   final Color color;
 
-  const _PremiumPill({
-    required this.label,
-    this.svgAsset,
-    required this.color,
-  });
+  const _PremiumPill({required this.label, this.svgAsset, required this.color});
 
   @override
   Widget build(BuildContext context) {
