@@ -3481,6 +3481,7 @@ def publish_submission_to_content_item(
     submission.published_content_item_id = db_item.id
     submission.status = "published"
     submission.reviewed_at = now
+    notify_followers_for_published_content(db, db_item)
     return db_item
 
 
@@ -6058,6 +6059,228 @@ def _table_exists(db: Session, table_name: str) -> bool:
     return bool(db.execute(text("SELECT to_regclass(:table_name)"), {"table_name": table_name}).scalar())
 
 
+def is_public_content_item(item: models.ContentItem) -> bool:
+    return (
+        serialize_value(getattr(item, "status", None)) == "published"
+        and bool(getattr(item, "is_active", False))
+        and getattr(item, "deleted_at", None) is None
+    )
+
+
+def _content_notification_category_id(db: Session, content_type: str) -> Optional[int]:
+    row = db.execute(
+        text(
+            """
+            SELECT id
+            FROM notification_categories
+            WHERE notification_type = 'content'
+              AND code = :code
+            LIMIT 1
+            """
+        ),
+        {"code": content_type},
+    ).first()
+    return row._mapping["id"] if row is not None else None
+
+
+def _content_publication_target(db: Session, item: models.ContentItem) -> Optional[dict]:
+    publication = getattr(item, "publication", None)
+    if publication is None:
+        publication = (
+            db.query(models.Publication)
+            .filter(models.Publication.content_item_id == item.id)
+            .first()
+        )
+    if publication is None:
+        return None
+    return {
+        "target_type": "publication",
+        "target_id": publication.id,
+        "target_name": publication.name,
+    }
+
+
+def _content_author_target(db: Session, item: models.ContentItem) -> Optional[dict]:
+    author = find_author_for_content_item(db, item)
+    if author is None:
+        publication = getattr(item, "publication", None)
+        if publication is None:
+            publication = (
+                db.query(models.Publication)
+                .options(joinedload(models.Publication.author_links).joinedload(models.PublicationAuthor.author))
+                .filter(models.Publication.content_item_id == item.id)
+                .first()
+            )
+        if publication is not None and getattr(publication, "author_links", None):
+            sorted_links = sorted(
+                [link for link in publication.author_links if link.author],
+                key=lambda link: (
+                    link.display_order if link.display_order is not None else 1,
+                    link.author.last_name.lower() if link.author and link.author.last_name else "",
+                    link.author.first_name.lower() if link.author and link.author.first_name else "",
+                ),
+            )
+            if sorted_links:
+                author = sorted_links[0].author
+    if author is None:
+        return None
+    return {
+        "target_type": "author",
+        "target_id": author.id,
+        "target_name": author_display_name(author, include_title=True),
+    }
+
+
+def _content_partner_targets(db: Session, item: models.ContentItem) -> list[dict]:
+    event = getattr(item, "event", None)
+    if event is None:
+        event = db.query(models.Event).filter(models.Event.content_item_id == item.id).first()
+    if event is None:
+        return []
+
+    links = (
+        db.query(models.EventPartnerLink)
+        .options(joinedload(models.EventPartnerLink.partner))
+        .filter(models.EventPartnerLink.event_id == event.id)
+        .all()
+    )
+    targets = []
+    for link in links:
+        if link.partner is None:
+            continue
+        targets.append(
+            {
+                "target_type": "partner",
+                "target_id": link.partner_id,
+                "target_name": link.partner.name,
+            }
+        )
+    return targets
+
+
+def follow_notification_targets_for_content(db: Session, item: models.ContentItem) -> list[dict]:
+    targets = []
+    author_target = _content_author_target(db, item)
+    if author_target:
+        targets.append(author_target)
+
+    if serialize_value(item.content_type) == "publication":
+        publication_target = _content_publication_target(db, item)
+        if publication_target:
+            targets.append(publication_target)
+
+    if serialize_value(item.content_type) == "event":
+        targets.extend(_content_partner_targets(db, item))
+
+    deduped = {}
+    for target in targets:
+        deduped[(target["target_type"], target["target_id"])] = target
+    return list(deduped.values())
+
+
+def create_follow_content_notification_if_needed(db: Session, item: models.ContentItem) -> int:
+    if not is_public_content_item(item):
+        return 0
+
+    targets = follow_notification_targets_for_content(db, item)
+    if not targets:
+        return 0
+
+    follow_filters = [
+        (models.Follow.target_type == target["target_type"]) & (models.Follow.target_id == target["target_id"])
+        for target in targets
+    ]
+    follower_rows = (
+        db.query(models.Follow.user_id)
+        .filter(or_(*follow_filters))
+        .distinct()
+        .all()
+    )
+    follower_ids = sorted({row.user_id for row in follower_rows})
+    if not follower_ids:
+        return 0
+
+    content_type = serialize_value(item.content_type)
+    category_id = _content_notification_category_id(db, content_type)
+    if category_id is None:
+        logger.warning("No content notification category for follow notification content_type=%s", content_type)
+        return 0
+
+    target_names = [target["target_name"] for target in targets if target.get("target_name")]
+    reason = ", ".join(target_names[:3]) if target_names else "un profil urmarit"
+    title = "Noutate de la un profil urmarit"
+    description = f"A aparut continut nou asociat cu {reason}: {item.title}"
+    image_url = item.thumbnail_url or item.hero_image_url
+
+    existing_notification_id = db.execute(
+        text(
+            """
+            SELECT n.id
+            FROM notifications n
+            JOIN content_notifications cn ON cn.notification_id = n.id
+            WHERE n.notification_type = 'content'
+              AND n.title = :title
+              AND cn.content_item_id = :content_item_id
+            LIMIT 1
+            """
+        ),
+        {"title": title, "content_item_id": item.id},
+    ).scalar()
+
+    notification_id = existing_notification_id
+    if notification_id is None:
+        notification_id = db.execute(
+            text(
+                """
+                INSERT INTO notifications (notification_type, category_id, status, title, description)
+                VALUES ('content', :category_id, 'sent', :title, :description)
+                RETURNING id
+                """
+            ),
+            {
+                "category_id": category_id,
+                "title": title,
+                "description": description,
+            },
+        ).scalar_one()
+        db.execute(
+            text(
+                """
+                INSERT INTO content_notifications (notification_id, image_url, content_item_id)
+                VALUES (:notification_id, :image_url, :content_item_id)
+                """
+            ),
+            {
+                "notification_id": notification_id,
+                "image_url": image_url,
+                "content_item_id": item.id,
+            },
+        )
+
+    result = db.execute(
+        text(
+            """
+            INSERT INTO user_notifications (user_id, notification_id, delivered_at)
+            SELECT id, :notification_id, CURRENT_TIMESTAMP
+            FROM users
+            WHERE id IN :user_ids
+            ON CONFLICT (user_id, notification_id) DO NOTHING
+            """
+        ).bindparams(bindparam("user_ids", expanding=True)),
+        {"notification_id": notification_id, "user_ids": follower_ids},
+    )
+    return result.rowcount or 0
+
+
+def notify_followers_for_published_content(db: Session, item: models.ContentItem) -> int:
+    try:
+        db.flush()
+        return create_follow_content_notification_if_needed(db, item)
+    except Exception:
+        logger.exception("Follow notification generation failed for content_item_id=%s", getattr(item, "id", None))
+        return 0
+
+
 def _admin_notification_base_query(where_sql: str = ""):
     return text(
         f"""
@@ -7306,6 +7529,7 @@ def admin_create_content_item(item: ContentItemCreate, db: Session = Depends(get
         interest_ids = save_content_item_interests(db, db_item.id, item.interest_ids)
         if item.notify_interested_users:
             create_interested_users_content_notification(db, db_item, interest_ids)
+        notify_followers_for_published_content(db, db_item)
         db.commit()
         db.refresh(db_item)
         return apply_content_interests_to_payload(db, serialize_content_item(db_item), db_item.id)
@@ -7337,6 +7561,7 @@ def admin_get_content_item(id: int, db: Session = Depends(get_db)):
 def admin_update_content_item(id: int, item: ContentItemUpdate, db: Session = Depends(get_db)):
     try:
         db_item = get_content_item_or_404(db, id)
+        was_public = is_public_content_item(db_item)
         update_data = normalize_content_item_data(content_item_data(item, exclude_unset=True))
         log_admin_action("PUT", f"/admin/content-items/{id}", id, pydantic_dump(item, exclude_unset=True), update_data)
 
@@ -7346,6 +7571,8 @@ def admin_update_content_item(id: int, item: ContentItemUpdate, db: Session = De
         interest_ids = save_content_item_interests(db, db_item.id, item.interest_ids)
         if item.notify_interested_users:
             create_interested_users_content_notification(db, db_item, interest_ids)
+        if not was_public and is_public_content_item(db_item):
+            notify_followers_for_published_content(db, db_item)
         db.commit()
         db.refresh(db_item)
         return apply_content_interests_to_payload(db, serialize_content_item(db_item), db_item.id)
@@ -9095,6 +9322,7 @@ def admin_create_event(item: EventAdminPayload, db: Session = Depends(get_db)):
         db.add(db_event)
         db.flush()
         save_event_partner_links(db, db_event.id, item.partners)
+        notify_followers_for_published_content(db, db_item)
         db.commit()
         db.refresh(db_item)
         return apply_content_interests_to_payload(db, serialize_admin_specialized_content_item(db_item, "event"), db_item.id)
@@ -9110,6 +9338,7 @@ def admin_update_event(content_item_id: int, item: EventAdminPayload, db: Sessio
     try:
         db_item = get_content_item_or_404(db, content_item_id)
         ensure_content_type(db_item, "event")
+        was_public = is_public_content_item(db_item)
         log_admin_action(
             "PUT",
             f"/admin/events/{content_item_id}",
@@ -9120,6 +9349,8 @@ def admin_update_event(content_item_id: int, item: EventAdminPayload, db: Sessio
         db_event = get_admin_event_by_content_item_or_404(db, content_item_id)
         update_event_details(db_event, item.event, require_dates=False)
         save_event_partner_links(db, db_event.id, item.partners)
+        if not was_public and is_public_content_item(db_item):
+            notify_followers_for_published_content(db, db_item)
         db.commit()
         db.refresh(db_item)
         return apply_content_interests_to_payload(db, serialize_admin_specialized_content_item(db_item, "event"), db_item.id)
@@ -9163,6 +9394,7 @@ def admin_create_course(item: CourseAdminPayload, db: Session = Depends(get_db))
         db_course = models.Course(content_item_id=db_item.id)
         update_course_details(db_course, item.course)
         db.add(db_course)
+        notify_followers_for_published_content(db, db_item)
         db.commit()
         db.refresh(db_item)
         return apply_content_interests_to_payload(db, serialize_content_item(db_item), db_item.id)
@@ -9178,6 +9410,7 @@ def admin_update_course(content_item_id: int, item: CourseAdminPayload, db: Sess
     try:
         db_item = get_content_item_or_404(db, content_item_id)
         ensure_content_type(db_item, "course")
+        was_public = is_public_content_item(db_item)
         log_admin_action(
             "PUT",
             f"/admin/courses/{content_item_id}",
@@ -9189,6 +9422,8 @@ def admin_update_course(content_item_id: int, item: CourseAdminPayload, db: Sess
         if not db_course:
             raise HTTPException(status_code=404, detail="Course details not found for this content item")
         update_course_details(db_course, item.course)
+        if not was_public and is_public_content_item(db_item):
+            notify_followers_for_published_content(db, db_item)
         db.commit()
         db.refresh(db_item)
         return apply_content_interests_to_payload(db, serialize_content_item(db_item), db_item.id)
@@ -9282,6 +9517,7 @@ def admin_create_publication(item: PublicationAdminPayload, db: Session = Depend
         db.add(db_publication)
         db.flush()
         save_publication_author_links(db, db_publication.id, item.authors)
+        notify_followers_for_published_content(db, db_item)
         db.commit()
         db.refresh(db_item)
         return apply_content_interests_to_payload(db, serialize_admin_specialized_content_item(db_item, "publication"), db_item.id)
@@ -9342,6 +9578,7 @@ def admin_update_publication(content_item_id: int, item: PublicationAdminPayload
     try:
         db_item = get_content_item_or_404(db, content_item_id)
         ensure_content_type(db_item, "publication")
+        was_public = is_public_content_item(db_item)
         log_admin_action(
             "PUT",
             f"/admin/publications/{content_item_id}",
@@ -9352,6 +9589,8 @@ def admin_update_publication(content_item_id: int, item: PublicationAdminPayload
         db_publication = get_admin_publication_by_content_item_or_404(db, content_item_id)
         update_publication_details(db_publication, item.publication, db_item.title)
         save_publication_author_links(db, db_publication.id, item.authors)
+        if not was_public and is_public_content_item(db_item):
+            notify_followers_for_published_content(db, db_item)
         db.commit()
         db.refresh(db_item)
         return apply_content_interests_to_payload(db, serialize_admin_specialized_content_item(db_item, "publication"), db_item.id)
