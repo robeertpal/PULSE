@@ -2672,15 +2672,37 @@ def _freshness_score(item: models.ContentItem) -> float:
     if published_at.tzinfo is not None:
         published_at = published_at.astimezone(timezone.utc).replace(tzinfo=None)
     days = max(0, (datetime.utcnow() - published_at).days)
-    if days <= 7:
-        return 12.0
-    if days <= 30:
-        return 8.0
-    if days <= 90:
-        return 5.0
+    if days <= 3:
+        return 13.0
+    if days <= 14:
+        return 10.0
+    if days <= 45:
+        return 7.0
+    if days <= 120:
+        return 4.0
     if days <= 365:
-        return 2.0
+        return 1.5
     return 0.0
+
+
+def _activity_decay_multiplier(created_at: Optional[datetime]) -> float:
+    if not created_at:
+        return 0.45
+    observed_at = created_at
+    if observed_at.tzinfo is not None:
+        observed_at = observed_at.astimezone(timezone.utc).replace(tzinfo=None)
+    days = max(0, (datetime.utcnow() - observed_at).days)
+    if days <= 3:
+        return 1.0
+    if days <= 14:
+        return 0.82
+    if days <= 45:
+        return 0.58
+    if days <= 90:
+        return 0.36
+    if days <= 180:
+        return 0.2
+    return 0.1
 
 
 def _build_for_you_context(db: Session, user_id: int) -> dict:
@@ -2723,6 +2745,15 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
     author_preferences: dict[str, float] = defaultdict(float)
     seen_content_ids: set[int] = set()
     negative_content_ids: set[int] = set()
+    more_like_content_ids: set[int] = set()
+    more_like_category_ids: set[int] = set()
+    more_like_specialization_ids: set[int] = set()
+    more_like_content_types: set[str] = set()
+    more_like_author_names: set[str] = set()
+    not_interested_category_ids: set[int] = set()
+    not_interested_specialization_ids: set[int] = set()
+    not_interested_content_types: set[str] = set()
+    not_interested_author_names: set[str] = set()
 
     activity_weights = {
         "content_view": 1.0,
@@ -2752,6 +2783,7 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
                 weight += max(0.0, min(completion_ratio, 1.0)) * 2.0
             if time_spent is not None and time_spent >= 60:
                 weight += 1.0
+        weight *= _activity_decay_multiplier(log.created_at)
         if log.action_type == "content_unsave" and log.content_item_id is not None:
             negative_content_ids.add(log.content_item_id)
             continue
@@ -2765,7 +2797,34 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
             else _activity_metadata_int(metadata, "specialization_id")
         )
         content_type = _content_type_value(content_item) if content_item else str(metadata.get("content_type") or "")
-        author_name = (content_item.author_name if content_item else metadata.get("author_name")) or ""
+        author_name = str((content_item.author_name if content_item else metadata.get("author_name")) or "").strip()
+        author_key = author_name.lower()
+
+        if log.action_type == "content_unsave" and log.content_item_id is not None:
+            negative_content_ids.add(log.content_item_id)
+            continue
+        if log.action_type == "content_not_interested":
+            if log.content_item_id is not None:
+                negative_content_ids.add(log.content_item_id)
+            if category_id:
+                not_interested_category_ids.add(int(category_id))
+            if specialization_id:
+                not_interested_specialization_ids.add(int(specialization_id))
+            if content_type:
+                not_interested_content_types.add(content_type)
+            if author_key:
+                not_interested_author_names.add(author_key)
+        if log.action_type == "content_more_like_this":
+            if log.content_item_id is not None:
+                more_like_content_ids.add(log.content_item_id)
+            if category_id:
+                more_like_category_ids.add(int(category_id))
+            if specialization_id:
+                more_like_specialization_ids.add(int(specialization_id))
+            if content_type:
+                more_like_content_types.add(content_type)
+            if author_key:
+                more_like_author_names.add(author_key)
 
         if category_id:
             category_preferences[int(category_id)] += weight
@@ -2773,8 +2832,8 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
             specialization_preferences[int(specialization_id)] += weight
         if content_type:
             content_type_preferences[content_type] += weight
-        if author_name:
-            author_preferences[str(author_name).strip().lower()] += weight
+        if author_key:
+            author_preferences[author_key] += weight
         if log.content_item_id is not None and log.action_type in {
             "content_view",
             "content_dwell",
@@ -2790,6 +2849,23 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
         .filter(models.SavedContent.user_id == user_id)
         .all()
     }
+    if saved_content_ids:
+        saved_items = (
+            visible_content_card_query(db)
+            .filter(models.ContentItem.id.in_(saved_content_ids))
+            .all()
+        )
+        for saved_item in saved_items:
+            if saved_item.category_id:
+                category_preferences[int(saved_item.category_id)] += 2.0
+            if saved_item.specialization_id:
+                specialization_preferences[int(saved_item.specialization_id)] += 2.2
+            saved_type = _content_type_value(saved_item)
+            if saved_type:
+                content_type_preferences[saved_type] += 1.4
+            saved_author_key = str(saved_item.author_name or "").strip().lower()
+            if saved_author_key:
+                author_preferences[saved_author_key] += 1.2
 
     followed_author_ids: set[int] = set()
     followed_publication_ids: set[int] = set()
@@ -2857,6 +2933,15 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
         "author_preferences": author_preferences,
         "seen_content_ids": seen_content_ids,
         "negative_content_ids": negative_content_ids,
+        "more_like_content_ids": more_like_content_ids,
+        "more_like_category_ids": more_like_category_ids,
+        "more_like_specialization_ids": more_like_specialization_ids,
+        "more_like_content_types": more_like_content_types,
+        "more_like_author_names": more_like_author_names,
+        "not_interested_category_ids": not_interested_category_ids,
+        "not_interested_specialization_ids": not_interested_specialization_ids,
+        "not_interested_content_types": not_interested_content_types,
+        "not_interested_author_names": not_interested_author_names,
         "saved_content_ids": saved_content_ids,
         "followed_author_ids": followed_author_ids,
         "followed_publication_ids": followed_publication_ids,
@@ -2887,6 +2972,10 @@ def _score_for_you_item(
     reason_parts = []
     content_type = _content_type_value(item)
 
+    if item.id in context.get("more_like_content_ids", set()):
+        score += 10.0
+        reason_parts.insert(0, "ai cerut mai multe ca acesta")
+
     if item.is_featured:
         score += 8.0
         reason_parts.append("este evidențiat editorial")
@@ -2902,27 +2991,58 @@ def _score_for_you_item(
         reason_parts.append("se potrivește intereselor selectate")
 
     if item.category_id:
-        score += min(16.0, context["category_preferences"].get(item.category_id, 0.0) * 2.4)
+        category_signal = context["category_preferences"].get(item.category_id, 0.0) * 2.2
+        score += max(-18.0, min(18.0, category_signal))
+        if item.category_id in context.get("more_like_category_ids", set()):
+            score += 8.0
+            if "ai cerut mai multe ca acesta" not in reason_parts:
+                reason_parts.insert(0, "ai cerut mai multe ca acesta")
+        if item.category_id in context.get("not_interested_category_ids", set()):
+            score -= 7.0
         if item.category_id in context.get("followed_category_ids", set()):
             score += 20.0
-            reason_parts.insert(0, "urmaresti aceasta categorie")
+            if "urmaresti aceasta categorie" not in reason_parts:
+                reason_parts.insert(0, "urmaresti aceasta categorie")
     if item.specialization_id:
-        score += min(18.0, context["specialization_preferences"].get(item.specialization_id, 0.0) * 2.8)
+        specialization_signal = context["specialization_preferences"].get(item.specialization_id, 0.0) * 2.6
+        score += max(-20.0, min(20.0, specialization_signal))
+        if item.specialization_id in context.get("more_like_specialization_ids", set()):
+            score += 9.0
+            if "ai cerut mai multe ca acesta" not in reason_parts:
+                reason_parts.insert(0, "ai cerut mai multe ca acesta")
+        if item.specialization_id in context.get("not_interested_specialization_ids", set()):
+            score -= 8.0
         if item.specialization_id in context.get("followed_specialization_ids", set()):
             score += 22.0
-            reason_parts.insert(0, "urmaresti aceasta specializare")
+            if "urmaresti aceasta specializare" not in reason_parts:
+                reason_parts.insert(0, "urmaresti aceasta specializare")
     if content_type:
-        type_score = min(12.0, context["content_type_preferences"].get(content_type, 0.0) * 2.0)
+        type_score = max(-10.0, min(12.0, context["content_type_preferences"].get(content_type, 0.0) * 1.8))
         score += type_score
+        if content_type in context.get("more_like_content_types", set()):
+            score += 4.0
+            if "ai cerut mai multe ca acesta" not in reason_parts:
+                reason_parts.insert(0, "ai cerut mai multe ca acesta")
+        if content_type in context.get("not_interested_content_types", set()):
+            score -= 5.0
         if type_score >= 4:
             reason_parts.append("este similar cu activitatea ta recentă")
     if item.author_name:
-        score += min(6.0, context["author_preferences"].get(item.author_name.strip().lower(), 0.0) * 1.2)
+        author_key = item.author_name.strip().lower()
+        author_score = max(-5.0, min(8.0, context["author_preferences"].get(author_key, 0.0) * 1.2))
+        score += author_score
+        if author_key in context.get("more_like_author_names", set()):
+            score += 4.0
+            if "ai cerut mai multe ca acesta" not in reason_parts:
+                reason_parts.insert(0, "ai cerut mai multe ca acesta")
+        if author_key in context.get("not_interested_author_names", set()):
+            score -= 5.0
 
     publication_id = item.publication.id if item.publication else None
     if publication_id and publication_id in context.get("followed_publication_ids", set()):
         score += 24.0
-        reason_parts.insert(0, "urmaresti aceasta publicatie")
+        if "urmaresti aceasta publicatie" not in reason_parts:
+            reason_parts.insert(0, "urmaresti aceasta publicatie")
 
     item_author_ids = set()
     if item.publication and getattr(item.publication, "author_links", None):
@@ -2937,7 +3057,8 @@ def _score_for_you_item(
         follows_author = author_name_key in context.get("followed_author_names", set())
     if follows_author:
         score += 18.0
-        reason_parts.insert(0, "urmaresti acest autor")
+        if "urmaresti acest autor" not in reason_parts:
+            reason_parts.insert(0, "urmaresti acest autor")
 
     item_partner_ids = set()
     if item.event and getattr(item.event, "partner_links", None):
@@ -2948,12 +3069,13 @@ def _score_for_you_item(
         }
     if item_partner_ids.intersection(context.get("followed_partner_ids", set())):
         score += 18.0
-        reason_parts.insert(0, "urmaresti aceasta organizatie")
+        if "urmaresti aceasta organizatie" not in reason_parts:
+            reason_parts.insert(0, "urmaresti aceasta organizatie")
 
     popularity_score = min(16.0, popularity_scores.get(item.id, 0.0))
     score += popularity_score
     if popularity_score >= 6:
-        reason_parts.append("este apreciat de comunitate")
+        reason_parts.append("este popular in aria ta de interes")
 
     freshness_score = _freshness_score(item)
     score += freshness_score
@@ -2961,12 +3083,12 @@ def _score_for_you_item(
         reason_parts.append("este conținut recent")
 
     if item.id in context["saved_content_ids"]:
-        score += 4.0
+        score += 8.0
         reason_parts.append("este deja în zona ta de interes")
     if item.id in context["seen_content_ids"]:
         score -= 18.0
     if item.id in context["negative_content_ids"]:
-        score -= 24.0
+        score -= 38.0
 
     if not context["has_activity"]:
         reason_parts.append("este recomandat ca punct bun de pornire")
@@ -2982,22 +3104,43 @@ def _diversify_for_you_items(scored_items: list[dict], limit: int) -> list[dict]
     remaining = sorted(scored_items, key=lambda item: item["score"], reverse=True)
     selected = []
     type_counts: dict[str, int] = defaultdict(int)
+    category_counts: dict[int, int] = defaultdict(int)
+    specialization_counts: dict[int, int] = defaultdict(int)
 
     while remaining and len(selected) < limit:
         best_index = 0
         best_adjusted_score = None
         for index, candidate in enumerate(remaining):
+            item = candidate["item"]
             content_type = candidate["content_type"]
-            diversity_penalty = type_counts[content_type] * 6.0
+            category_id = item.category_id
+            specialization_id = item.specialization_id
+            diversity_penalty = type_counts[content_type] * 5.5
+            if category_id:
+                diversity_penalty += category_counts[int(category_id)] * 4.0
+            if specialization_id:
+                diversity_penalty += specialization_counts[int(specialization_id)] * 3.5
             adjusted_score = candidate["score"] - diversity_penalty
             if best_adjusted_score is None or adjusted_score > best_adjusted_score:
                 best_adjusted_score = adjusted_score
                 best_index = index
 
         candidate = remaining.pop(best_index)
-        candidate["score"] = max(0.0, candidate["score"] - type_counts[candidate["content_type"]] * 2.0)
+        item = candidate["item"]
+        category_id = item.category_id
+        specialization_id = item.specialization_id
+        final_penalty = type_counts[candidate["content_type"]] * 1.8
+        if category_id:
+            final_penalty += category_counts[int(category_id)] * 1.4
+        if specialization_id:
+            final_penalty += specialization_counts[int(specialization_id)] * 1.2
+        candidate["score"] = max(0.0, candidate["score"] - final_penalty)
         selected.append(candidate)
         type_counts[candidate["content_type"]] += 1
+        if category_id:
+            category_counts[int(category_id)] += 1
+        if specialization_id:
+            specialization_counts[int(specialization_id)] += 1
 
     return selected
 
