@@ -2784,6 +2784,11 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
             if time_spent is not None and time_spent >= 60:
                 weight += 1.0
         weight *= _activity_decay_multiplier(log.created_at)
+        if log.action_type == "content_unsave" and log.content_item_id is not None:
+            negative_content_ids.add(log.content_item_id)
+            continue
+        if log.action_type == "content_not_interested" and log.content_item_id is not None:
+            negative_content_ids.add(log.content_item_id)
 
         category_id = content_item.category_id if content_item else _activity_metadata_int(metadata, "category_id")
         specialization_id = (
