@@ -28,6 +28,12 @@ const typeLabels = {
     event: 'Eveniment',
 };
 
+const riskLabels = {
+    low: 'Risc scazut',
+    medium: 'Risc mediu',
+    high: 'Risc ridicat',
+};
+
 function escapeHtml(value) {
     return String(value ?? '')
         .replaceAll('&', '&amp;')
@@ -120,6 +126,57 @@ function detailRow(label, value) {
     `;
 }
 
+function moderationList(items) {
+    if (!Array.isArray(items) || items.length === 0) {
+        return '<p style="margin: 4px 0 12px;">-</p>';
+    }
+    return `<ul class="ai-moderation-list">${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`;
+}
+
+function renderAiModeration(item) {
+    const moderation = item.ai_moderation || {};
+    const hasResult = moderation.checked_at || moderation.recommendation || moderation.summary ||
+        (Array.isArray(moderation.flags) && moderation.flags.length > 0);
+
+    if (!hasResult) {
+        return `
+            <section class="ai-moderation-card">
+                <h3>AI pre-check editorial</h3>
+                <p style="margin:0; color: var(--text-secondary);">Nu exista inca un pre-check AI pentru aceasta contributie.</p>
+            </section>
+        `;
+    }
+
+    const risk = moderation.risk_level || 'none';
+    const riskHtml = moderation.risk_level
+        ? `<span class="ai-risk ${escapeHtml(risk)}">${escapeHtml(riskLabels[risk] || risk)}</span>`
+        : '<span class="ai-risk medium">Indisponibil</span>';
+
+    return `
+        <section class="ai-moderation-card">
+            <h3>AI pre-check editorial</h3>
+            ${riskHtml}
+            ${detailRow('Rezumat AI', moderation.summary)}
+            <div class="detail-row">
+                <div class="detail-label">Flags</div>
+                <div class="detail-value">${moderationList(moderation.flags)}</div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Categorii sugerate</div>
+                <div class="detail-value">${moderationList(moderation.suggested_categories)}</div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Specializari sugerate</div>
+                <div class="detail-value">${moderationList(moderation.suggested_specializations)}</div>
+            </div>
+            ${detailRow('Recomandare AI', moderation.recommendation)}
+            <div class="ai-moderation-meta">
+                Model: ${escapeHtml(moderation.model || '-')} - Verificat la: ${escapeHtml(formatDate(moderation.checked_at))}
+            </div>
+        </section>
+    `;
+}
+
 function renderDetail(item) {
     const detail = document.getElementById('submission-detail');
     const canReview = ['submitted', 'under_review', 'approved'].includes(item.status);
@@ -135,6 +192,7 @@ function renderDetail(item) {
         ${detailRow('Continut', item.body)}
         ${detailRow('Imagine', item.image_url)}
         ${detailRow('Sursa', item.source_url)}
+        ${renderAiModeration(item)}
         ${detailRow('Note review', item.review_notes)}
         ${item.published_content_item_id ? detailRow('Content item publicat', item.published_content_item_id) : ''}
         <div class="submission-actions">
