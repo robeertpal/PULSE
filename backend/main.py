@@ -2444,6 +2444,8 @@ ALLOWED_USER_ACTIVITY_ACTIONS = {
     "content_dwell",
     "content_save",
     "content_unsave",
+    "content_not_interested",
+    "content_more_like_this",
     "publication_open",
     "publication_issue_open",
     "publication_pdf_open",
@@ -2458,6 +2460,8 @@ CONTENT_ITEM_ACTIVITY_ACTIONS = {
     "content_dwell",
     "content_save",
     "content_unsave",
+    "content_not_interested",
+    "content_more_like_this",
     "course_open",
     "course_enrollment_click",
     "event_open",
@@ -2623,6 +2627,8 @@ def _content_popularity_scores(db: Session, content_item_ids: list[int]) -> dict
         "content_view": 1.0,
         "content_dwell": 1.4,
         "content_save": 4.0,
+        "content_not_interested": -2.0,
+        "content_more_like_this": 2.0,
         "publication_open": 1.2,
         "course_open": 1.8,
         "event_open": 1.8,
@@ -2723,6 +2729,8 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
         "content_dwell": 1.6,
         "content_save": 5.0,
         "content_unsave": -4.0,
+        "content_not_interested": -5.0,
+        "content_more_like_this": 5.5,
         "publication_open": 1.4,
         "publication_issue_open": 1.1,
         "publication_pdf_open": 2.6,
@@ -2747,6 +2755,8 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
         if log.action_type == "content_unsave" and log.content_item_id is not None:
             negative_content_ids.add(log.content_item_id)
             continue
+        if log.action_type == "content_not_interested" and log.content_item_id is not None:
+            negative_content_ids.add(log.content_item_id)
 
         category_id = content_item.category_id if content_item else _activity_metadata_int(metadata, "category_id")
         specialization_id = (
