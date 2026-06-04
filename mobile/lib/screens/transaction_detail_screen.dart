@@ -1,22 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:qr_flutter/qr_flutter.dart';
-import 'profile_screen.dart'; // Pentru ProfileGradientHeading si ProfileBackButton
 
-class TransactionDetailScreen extends StatelessWidget {
+import 'content_detail_screen.dart';
+import 'profile_screen.dart';
+import 'ticket_detail_screen.dart';
+
+class TransactionDetailScreen extends StatefulWidget {
   final Map<String, dynamic> transaction;
 
   const TransactionDetailScreen({super.key, required this.transaction});
 
+  @override
+  State<TransactionDetailScreen> createState() =>
+      _TransactionDetailScreenState();
+}
+
+class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   static const Color _surface = Color(0xFF101010);
-  static const Color _surfaceSoft = Color(0xFF181818);
   static const Color _pink = Color(0xFFFF4FA3);
   static const Color _textDim = Colors.white70;
 
-  String _formatDate(String? isoDate) {
-    if (isoDate == null) return 'N/A';
+  bool _summaryExpanded = false;
+  bool _technicalExpanded = false;
+
+  Map<String, dynamic> get transaction => widget.transaction;
+
+  String _formatDate(Object? isoDate) {
+    if (isoDate == null) return 'Indisponibil';
+    final value = isoDate.toString();
     try {
-      final dt = DateTime.parse(isoDate).toLocal();
+      final dt = DateTime.parse(value).toLocal();
       final months = [
         'Ian',
         'Feb',
@@ -38,59 +51,41 @@ class TransactionDetailScreen extends StatelessWidget {
       final minute = dt.minute.toString().padLeft(2, '0');
       return '$day $month $year, $hour:$minute';
     } catch (_) {
-      return isoDate;
+      return value;
     }
   }
 
-  Widget _buildStatusBadge(String? status) {
-    Color bgColor;
-    Color textColor;
-    String label;
+  String _formatAmountValue(Object? amount) {
+    if (amount is num) return amount.toStringAsFixed(2);
+    final parsed = num.tryParse(amount?.toString() ?? '');
+    if (parsed != null) return parsed.toStringAsFixed(2);
+    return (amount ?? '0.00').toString();
+  }
 
-    switch (status?.toLowerCase()) {
-      case 'paid':
-      case 'success':
-        bgColor = const Color(0xFF10B981).withValues(alpha: 0.15);
-        textColor = const Color(0xFF10B981);
-        label = 'Plătit';
-        break;
-      case 'pending':
-        bgColor = const Color(0xFFF59E0B).withValues(alpha: 0.15);
-        textColor = const Color(0xFFF59E0B);
-        label = 'În procesare';
-        break;
-      case 'failed':
-        bgColor = const Color(0xFFEF4444).withValues(alpha: 0.15);
-        textColor = const Color(0xFFEF4444);
-        label = 'Eșuat';
-        break;
-      case 'refunded':
-        bgColor = const Color(0xFF6366F1).withValues(alpha: 0.15);
-        textColor = const Color(0xFF6366F1);
-        label = 'Returnat';
-        break;
+  int? _readInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  String _contentTypeLabel(String? type) {
+    switch (type) {
+      case 'event':
+        return 'Eveniment';
+      case 'course':
+        return 'Curs';
+      case 'publication':
+        return 'Revistă';
+      case 'article':
+        return 'Articol';
+      case 'news':
+        return 'Știre';
+      case 'subscription':
+        return 'Abonament';
       default:
-        bgColor = Colors.white.withValues(alpha: 0.1);
-        textColor = Colors.white70;
-        label = status ?? 'Necunoscut';
+        return 'Conținut';
     }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: textColor,
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.2,
-        ),
-      ),
-    );
   }
 
   String _getIconForContentType(String? type) {
@@ -115,6 +110,30 @@ class TransactionDetailScreen extends StatelessWidget {
       return '$brand •••• $last4';
     }
     return 'Metodă de plată indisponibilă';
+  }
+
+  void _openContentDetail(int contentItemId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ContentDetailScreen(contentItemId: contentItemId),
+      ),
+    );
+  }
+
+  void _openTicketDetail() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => TicketDetailScreen(
+          ticket: {
+            'event_id': transaction['event_id'],
+            'content_item_id': transaction['content_item_id'],
+            'event_title': transaction['content_title'],
+            'ticket_code': transaction['ticket_code'],
+            'registration_status': transaction['registration_status'],
+          },
+        ),
+      ),
+    );
   }
 
   Widget _buildDetailRow(String label, String value, {Widget? trailing}) {
@@ -162,33 +181,195 @@ class TransactionDetailScreen extends StatelessWidget {
     );
   }
 
+  Widget _divider() {
+    return Divider(color: Colors.white.withValues(alpha: 0.06), height: 1);
+  }
+
+  Widget _buildActionButton({
+    required String label,
+    required VoidCallback? onPressed,
+    required bool orangeOnly,
+  }) {
+    final enabled = onPressed != null;
+    final foregroundColor = enabled
+        ? Colors.white
+        : Colors.white.withValues(alpha: 0.38);
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: enabled
+              ? LinearGradient(
+                  colors: orangeOnly
+                      ? const [Color(0xFFFF8A3D), Color(0xFFFFB15C)]
+                      : const [Color(0xFFFF2D72), Color(0xFFFF8A3D)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                )
+              : null,
+          color: enabled ? null : Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: enabled
+              ? [
+                  BoxShadow(
+                    color:
+                        (orangeOnly
+                                ? const Color(0xFFFF8A3D)
+                                : const Color(0xFFFF2D72))
+                            .withValues(alpha: 0.22),
+                    blurRadius: 18,
+                    offset: const Offset(0, 10),
+                    spreadRadius: -12,
+                  ),
+                ]
+              : null,
+        ),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: foregroundColor,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAmountText(String amount, String currency) {
+    return RichText(
+      textAlign: TextAlign.center,
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: amount,
+            style: const TextStyle(
+              color: _pink,
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -1,
+            ),
+          ),
+          TextSpan(
+            text: ' $currency',
+            style: const TextStyle(
+              color: _pink,
+              fontSize: 28,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCollapsibleCard({
+    required String title,
+    required bool expanded,
+    required VoidCallback onToggle,
+    required List<Widget> children,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              onTap: onToggle,
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: expanded ? 0.25 : 0,
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      child: const Icon(
+                        Icons.chevron_right_rounded,
+                        color: _textDim,
+                        size: 24,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: expanded
+                ? Column(children: [const SizedBox(height: 16), ...children])
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = transaction['content_title'] as String? ?? 'Tranzacție PULSE';
     final type = transaction['content_type'] as String?;
-    final amount = transaction['amount'] ?? 0.0;
-    final currency = transaction['currency'] ?? 'RON';
-    final status = transaction['status'] as String?;
+    final amount = transaction['amount'];
+    final currency = transaction['currency'] as String? ?? 'RON';
     final cardBrand = transaction['card_brand'] as String?;
     final cardLast4 = transaction['card_last4'] as String?;
-    final provider = transaction['provider'] as String? ?? 'N/A';
+    final provider = transaction['provider'] as String? ?? 'Indisponibil';
     final providerTxId =
-        transaction['provider_transaction_id'] as String? ?? 'N/A';
+        transaction['provider_transaction_id'] as String? ?? 'Indisponibil';
     final paidAt = transaction['paid_at'] ?? transaction['created_at'];
     final createdAt = transaction['created_at'];
-    final contentItemId = transaction['content_item_id'];
+    final contentItemId = _readInt(transaction['content_item_id']);
     final subscriptionId = transaction['subscription_id'];
-    final registrationStatus = transaction['registration_status'] as String?;
     final ticketCode = transaction['ticket_code'] as String?;
-
+    final hasTicket = type == 'event' && ticketCode?.trim().isNotEmpty == true;
     final iconPath = _getIconForContentType(type);
+    final amountValue = _formatAmountValue(amount);
+    final amountLabel = '$amountValue $currency';
 
     return Scaffold(
       backgroundColor: const Color(0xFF050505),
       body: SafeArea(
         child: Column(
           children: [
-            // Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
@@ -201,14 +382,12 @@ class TransactionDetailScreen extends StatelessWidget {
                 ],
               ),
             ),
-
             Expanded(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
-                    // Main Card
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(24),
@@ -221,223 +400,108 @@ class TransactionDetailScreen extends StatelessWidget {
                       ),
                       child: Column(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: _surfaceSoft,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.04),
-                              ),
-                            ),
-                            child: SvgPicture.asset(
-                              iconPath,
-                              width: 32,
-                              height: 32,
-                              colorFilter: const ColorFilter.mode(
-                                _pink,
-                                BlendMode.srcIn,
-                              ),
+                          SvgPicture.asset(
+                            iconPath,
+                            width: 34,
+                            height: 34,
+                            colorFilter: const ColorFilter.mode(
+                              _pink,
+                              BlendMode.srcIn,
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            title,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.5,
+                          const SizedBox(height: 18),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Text(
+                              title,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.5,
+                                height: 1.22,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 8),
-                          Text(
-                            '$amount $currency',
-                            style: const TextStyle(
-                              color: _pink,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -1,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildStatusBadge(status),
+                          _buildAmountText(amountValue, currency),
                         ],
                       ),
                     ),
-
-                    if (ticketCode != null && type == 'event') ...[
-                      const SizedBox(height: 24),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: _surface,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.06),
+                    const SizedBox(height: 24),
+                    _buildCollapsibleCard(
+                      title: 'Sumar',
+                      expanded: _summaryExpanded,
+                      onToggle: () =>
+                          setState(() => _summaryExpanded = !_summaryExpanded),
+                      children: [
+                        _buildDetailRow('Data plății', _formatDate(paidAt)),
+                        _divider(),
+                        _buildDetailRow(
+                          'Metodă plată',
+                          _formatPaymentMethod(cardBrand, cardLast4),
+                        ),
+                        _divider(),
+                        _buildDetailRow('Suma', amountLabel),
+                        _divider(),
+                        _buildDetailRow(
+                          'Tip conținut',
+                          _contentTypeLabel(type),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _buildCollapsibleCard(
+                      title: 'Detalii tehnice',
+                      expanded: _technicalExpanded,
+                      onToggle: () => setState(
+                        () => _technicalExpanded = !_technicalExpanded,
+                      ),
+                      children: [
+                        _buildDetailRow('Procesator', provider),
+                        _divider(),
+                        _buildDetailRow('ID tranzacție', providerTxId),
+                        _divider(),
+                        _buildDetailRow(
+                          'Data tranzacției',
+                          _formatDate(createdAt),
+                        ),
+                        if (subscriptionId != null) ...[
+                          _divider(),
+                          _buildDetailRow(
+                            'ID abonament',
+                            subscriptionId.toString(),
                           ),
-                        ),
-                        child: Column(
-                          children: [
-                            const Text(
-                              'Bilet eveniment',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
+                        ],
+                      ],
+                    ),
+                    if (contentItemId != null || hasTicket) ...[
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          if (hasTicket)
+                            Expanded(
+                              child: _buildActionButton(
+                                label: 'Vezi bilet',
+                                onPressed: _openTicketDetail,
+                                orangeOnly: false,
                               ),
                             ),
-                            const SizedBox(height: 24),
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: QrImageView(
-                                data: ticketCode,
-                                version: QrVersions.auto,
-                                size: 200.0,
-                                backgroundColor: Colors.white,
+                          if (hasTicket && contentItemId != null)
+                            const SizedBox(width: 10),
+                          if (contentItemId != null)
+                            Expanded(
+                              child: _buildActionButton(
+                                label: 'Vezi detalii',
+                                onPressed: () =>
+                                    _openContentDetail(contentItemId),
+                                orangeOnly: true,
                               ),
                             ),
-                            const SizedBox(height: 24),
-                            Text(
-                              'Cod bilet: $ticketCode',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Status participare: ${registrationStatus ?? "necunoscut"}',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.6),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
+                        ],
                       ),
                     ],
-
-                    const SizedBox(height: 24),
-
-                    // Details Card
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: _surface,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.06),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Sumar',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildDetailRow('Data plății', _formatDate(paidAt)),
-                          Divider(
-                            color: Colors.white.withValues(alpha: 0.06),
-                            height: 1,
-                          ),
-                          _buildDetailRow(
-                            'Metodă plată',
-                            _formatPaymentMethod(cardBrand, cardLast4),
-                          ),
-                          Divider(
-                            color: Colors.white.withValues(alpha: 0.06),
-                            height: 1,
-                          ),
-                          _buildDetailRow('Suma', '$amount $currency'),
-                          Divider(
-                            color: Colors.white.withValues(alpha: 0.06),
-                            height: 1,
-                          ),
-                          _buildDetailRow(
-                            'Tip conținut',
-                            type?.toUpperCase() ?? 'N/A',
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Technical Details Card
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: _surface,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.06),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Detalii tehnice',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildDetailRow('Procesator', provider),
-                          Divider(
-                            color: Colors.white.withValues(alpha: 0.06),
-                            height: 1,
-                          ),
-                          _buildDetailRow('ID Tranzacție', providerTxId),
-                          Divider(
-                            color: Colors.white.withValues(alpha: 0.06),
-                            height: 1,
-                          ),
-                          _buildDetailRow(
-                            'Data creării',
-                            _formatDate(createdAt),
-                          ),
-                          if (contentItemId != null) ...[
-                            Divider(
-                              color: Colors.white.withValues(alpha: 0.06),
-                              height: 1,
-                            ),
-                            _buildDetailRow(
-                              'ID Conținut',
-                              contentItemId.toString(),
-                            ),
-                          ],
-                          if (subscriptionId != null) ...[
-                            Divider(
-                              color: Colors.white.withValues(alpha: 0.06),
-                              height: 1,
-                            ),
-                            _buildDetailRow(
-                              'ID Abonament',
-                              subscriptionId.toString(),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
                     const SizedBox(height: 40),
                   ],
                 ),

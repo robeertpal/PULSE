@@ -16,7 +16,6 @@ class TicketsScreen extends StatefulWidget {
 class _TicketsScreenState extends State<TicketsScreen> {
   static const Color _black = Color(0xFF050505);
   static const Color _surface = Color(0xFF101010);
-  static const Color _surfaceSoft = Color(0xFF181818);
   static const Color _orange = Color(0xFFF97316);
 
   final ApiService _apiService = ApiService();
@@ -79,57 +78,41 @@ class _TicketsScreenState extends State<TicketsScreen> {
     }
   }
 
-  Widget _buildStatusBadge(String? status) {
-    Color bgColor;
-    Color textColor;
-    String label;
-
-    switch (status?.toLowerCase()) {
-      case 'confirmed':
-      case 'paid':
-        bgColor = const Color(0xFF10B981).withValues(alpha: 0.15);
-        textColor = const Color(0xFF10B981);
-        label = 'Confirmat';
-        break;
-      case 'registered':
-        bgColor = const Color(0xFF3B82F6).withValues(alpha: 0.15);
-        textColor = const Color(0xFF3B82F6);
-        label = 'Înscris';
-        break;
-      case 'cancelled':
-        bgColor = const Color(0xFFEF4444).withValues(alpha: 0.15);
-        textColor = const Color(0xFFEF4444);
-        label = 'Anulat';
-        break;
-      default:
-        bgColor = Colors.white.withValues(alpha: 0.1);
-        textColor = Colors.white70;
-        label = status ?? 'Necunoscut';
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: textColor,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.2,
-        ),
+  void _openTicketDetail(Map<String, dynamic> ticket) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TicketDetailScreen(ticket: ticket),
       ),
     );
+  }
+
+  String _getIconForContentType(String? type) {
+    switch (type) {
+      case 'event':
+        return 'assets/icons/events.svg';
+      case 'course':
+        return 'assets/icons/graduation.svg';
+      case 'publication':
+        return 'assets/icons/books.svg';
+      case 'news':
+        return 'assets/icons/newspaper.svg';
+      case 'article':
+        return 'assets/icons/book.pages.svg';
+      default:
+        return 'assets/icons/wallet.svg';
+    }
   }
 
   Widget _buildTicketCard(Map<String, dynamic> ticket) {
     final title = ticket['event_title'] as String? ?? 'Eveniment PULSE';
     final dateStr = ticket['start_date'] as String?;
-    final status = ticket['registration_status'] as String?;
     final ticketCode = ticket['ticket_code'] as String?;
+    final type =
+        ticket['content_type'] as String? ??
+        ticket['content_item_type'] as String? ??
+        'event';
+    final iconPath = _getIconForContentType(type);
 
     final venueName = ticket['venue_name'] as String?;
     final cityName = ticket['city_name'] as String?;
@@ -147,14 +130,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
     }
 
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => TicketDetailScreen(ticket: ticket),
-          ),
-        );
-      },
+      onTap: () => _openTicketDetail(ticket),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         decoration: BoxDecoration(
@@ -168,137 +144,170 @@ class _TicketsScreenState extends State<TicketsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: Center(
+                      child: SvgPicture.asset(
+                        iconPath,
+                        width: 24,
+                        height: 24,
+                        colorFilter: const ColorFilter.mode(
+                          _orange,
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Row(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: _surfaceSoft,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.04),
-                            ),
-                          ),
-                          child: SvgPicture.asset(
-                            'assets/icons/events.svg',
-                            width: 20,
-                            height: 20,
-                            colorFilter: const ColorFilter.mode(
-                              _orange,
-                              BlendMode.srcIn,
-                            ),
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.3,
+                            height: 1.2,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title,
-                                maxLines: 2,
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            SvgPicture.asset(
+                              'assets/icons/calendar.svg',
+                              width: 14,
+                              height: 14,
+                              colorFilter: ColorFilter.mode(
+                                Colors.white.withValues(alpha: 0.5),
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _formatDate(dateStr),
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            SvgPicture.asset(
+                              'assets/icons/location.svg',
+                              width: 14,
+                              height: 14,
+                              colorFilter: ColorFilter.mode(
+                                Colors.white.withValues(alpha: 0.5),
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                location,
+                                maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.3,
-                                  height: 1.2,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.calendar_today_outlined,
-                                    size: 14,
-                                    color: Colors.white.withValues(alpha: 0.5),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    _formatDate(dateStr),
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.5,
-                                      ),
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.location_on_outlined,
-                                    size: 14,
-                                    color: Colors.white.withValues(alpha: 0.5),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      location,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.5,
-                                        ),
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 12),
-                  _buildStatusBadge(status),
+                  Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(14),
+                    child: Ink(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                      ),
+                      child: InkWell(
+                        onTap: () => _openTicketDetail(ticket),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Center(
+                          child: SvgPicture.asset(
+                            'assets/icons/arrow.right.svg',
+                            width: 16,
+                            height: 16,
+                            colorFilter: ColorFilter.mode(
+                              Colors.white.withValues(alpha: 0.76),
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
               if (ticketCode != null) ...[
                 const SizedBox(height: 16),
                 Container(
+                  width: double.infinity,
                   padding: const EdgeInsets.symmetric(
-                    vertical: 8,
-                    horizontal: 12,
+                    horizontal: 14,
+                    vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.03),
-                    borderRadius: BorderRadius.circular(10),
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFFFF4FA3).withValues(alpha: 0.14),
+                        _orange.withValues(alpha: 0.08),
+                      ],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.05),
+                      color: const Color(0xFFFF4FA3).withValues(alpha: 0.12),
                     ),
                   ),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Cod bilet',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.4),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                      SvgPicture.asset(
+                        'assets/icons/ticket.svg',
+                        width: 16,
+                        height: 16,
+                        colorFilter: ColorFilter.mode(
+                          Colors.white.withValues(alpha: 0.72),
+                          BlendMode.srcIn,
                         ),
                       ),
-                      Text(
-                        ticketCode,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Cod bilet: $ticketCode',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.78),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],

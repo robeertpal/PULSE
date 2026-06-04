@@ -728,6 +728,124 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> checkEventRegistration(int eventId) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/api/events/$eventId/registration-status'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Eroare verificare status înscriere: ${response.statusCode}',
+        );
+      }
+      return json.decode(response.body) as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('Error checking event registration: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> registerForEvent(int eventId) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/events/$eventId/register'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      final decoded = json.decode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200) {
+        throw Exception(decoded['detail'] ?? 'Eroare la înscriere');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error registering for event: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> payAndRegisterForEvent(
+    int eventId,
+    int paymentMethodId,
+  ) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/events/$eventId/pay-and-register'),
+            headers: {...headers, 'Content-Type': 'application/json'},
+            body: json.encode({'payment_method_id': paymentMethodId}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      final decoded = json.decode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200) {
+        throw Exception(decoded['detail'] ?? 'Eroare la procesarea plății');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error paying for event: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> checkCourseEnrollment(int courseId) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/api/courses/$courseId/enrollment-status'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Eroare la verificarea înscrierii la curs.',
+          ),
+        );
+      }
+      return json.decode(response.body) as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('Error checking course enrollment: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> enrollInCourse(int courseId) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/courses/$courseId/enroll'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      final decoded = json.decode(response.body) as Map<String, dynamic>;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(decoded['detail'] ?? 'Eroare la înscrierea la curs.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error enrolling in course: $e');
+      rethrow;
+    }
+  }
   Future<List<Map<String, dynamic>>> getMyPayments() async {
     try {
       final headers = await _buildAuthHeaders();
@@ -1833,6 +1951,33 @@ class ApiService {
     final decoded = json.decode(response.body);
     if (decoded is! List) {
       throw Exception('Raspuns neasteptat pentru bilete.');
+    }
+    return decoded.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getMyCourses() async {
+    final url = '$baseUrl/api/me/courses';
+    final headers = await _buildAuthHeaders();
+    late final http.Response response;
+    try {
+      response = await http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(const Duration(seconds: 15));
+    } catch (error) {
+      throw _friendlyNetworkException(error, 'încărcarea cursurilor', url: url);
+    }
+
+    await _handleAuthFailure(response);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        _responseErrorMessage(response, 'Eroare la încărcarea cursurilor.'),
+      );
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! List) {
+      throw Exception('Răspuns neașteptat pentru cursuri.');
     }
     return decoded.whereType<Map<String, dynamic>>().toList();
   }

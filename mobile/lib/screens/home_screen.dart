@@ -1146,7 +1146,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       barrierDismissible: true,
       barrierLabel: 'Inchide meniul',
       barrierColor: Colors.black.withValues(alpha: 0.18),
-      transitionDuration: const Duration(milliseconds: 180),
+      transitionDuration: const Duration(milliseconds: 240),
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
         void closeAndRun(VoidCallback callback) {
           Navigator.of(dialogContext).pop();
@@ -1181,7 +1181,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           onTap: () => closeAndRun(_openProfile),
                         ),
                         _buildCompactMenuItem(
-                          icon: Icons.favorite_border_rounded,
+                          iconAsset: 'assets/icons/heart.svg',
                           label: 'Salvate',
                           onTap: () => closeAndRun(_openSavedContent),
                         ),
@@ -1210,8 +1210,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           color: Colors.white.withValues(alpha: 0.08),
                         ),
                         _buildCompactMenuItem(
-                          icon: Icons.logout_rounded,
-                          label: 'Ie\u0219ire',
+                          iconAsset:
+                              'assets/icons/rectangle.portrait.and.arrow.forward.svg',
+                          label: 'Logout',
                           danger: true,
                           onTap: () => closeAndRun(_logout),
                         ),
@@ -1227,15 +1228,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curved = CurvedAnimation(
           parent: animation,
-          curve: Curves.easeOutCubic,
-          reverseCurve: Curves.easeInCubic,
+          curve: Curves.easeOutQuart,
+          reverseCurve: Curves.easeInQuad,
         );
         return FadeTransition(
           opacity: curved,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
-            alignment: Alignment.topRight,
-            child: child,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, -0.015),
+              end: Offset.zero,
+            ).animate(curved),
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.985, end: 1).animate(curved),
+              alignment: Alignment.topRight,
+              child: child,
+            ),
           ),
         );
       },
@@ -1256,20 +1263,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           child: Row(
             children: [
-              if (iconAsset != null)
-                SvgPicture.asset(
-                  iconAsset,
-                  width: 18,
-                  height: 18,
-                  colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-                )
-              else
-                Icon(icon, color: color, size: 18),
-              const SizedBox(width: 10),
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: Center(
+                  child: iconAsset != null
+                      ? SvgPicture.asset(
+                          iconAsset,
+                          width: 18,
+                          height: 18,
+                          colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                        )
+                      : Icon(icon, color: color, size: 18),
+                ),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   label,

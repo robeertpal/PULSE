@@ -42,57 +42,10 @@ class TicketDetailScreen extends StatelessWidget {
     }
   }
 
-  Widget _buildStatusBadge(String? status) {
-    Color bgColor;
-    Color textColor;
-    String label;
-
-    switch (status?.toLowerCase()) {
-      case 'confirmed':
-      case 'paid':
-        bgColor = const Color(0xFF10B981).withValues(alpha: 0.15);
-        textColor = const Color(0xFF10B981);
-        label = 'Confirmat';
-        break;
-      case 'registered':
-        bgColor = const Color(0xFF3B82F6).withValues(alpha: 0.15);
-        textColor = const Color(0xFF3B82F6);
-        label = 'Înscris';
-        break;
-      case 'cancelled':
-        bgColor = const Color(0xFFEF4444).withValues(alpha: 0.15);
-        textColor = const Color(0xFFEF4444);
-        label = 'Anulat';
-        break;
-      default:
-        bgColor = Colors.white.withValues(alpha: 0.1);
-        textColor = Colors.white70;
-        label = status ?? 'Necunoscut';
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: textColor,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.2,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final title = ticket['event_title'] as String? ?? 'Eveniment PULSE';
     final dateStr = ticket['start_date'] as String?;
-    final status = ticket['registration_status'] as String?;
     final ticketCode = ticket['ticket_code'] as String?;
 
     final venueName = ticket['venue_name'] as String?;
@@ -149,20 +102,13 @@ class TicketDetailScreen extends StatelessWidget {
                             padding: const EdgeInsets.all(24),
                             child: Column(
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: _orange.withValues(alpha: 0.1),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: SvgPicture.asset(
-                                    'assets/icons/events.svg',
-                                    width: 32,
-                                    height: 32,
-                                    colorFilter: const ColorFilter.mode(
-                                      _orange,
-                                      BlendMode.srcIn,
-                                    ),
+                                SvgPicture.asset(
+                                  'assets/icons/events.svg',
+                                  width: 34,
+                                  height: 34,
+                                  colorFilter: const ColorFilter.mode(
+                                    _orange,
+                                    BlendMode.srcIn,
                                   ),
                                 ),
                                 const SizedBox(height: 20),
@@ -177,8 +123,6 @@ class TicketDetailScreen extends StatelessWidget {
                                     letterSpacing: -0.5,
                                   ),
                                 ),
-                                const SizedBox(height: 16),
-                                _buildStatusBadge(status),
                               ],
                             ),
                           ),
@@ -193,13 +137,13 @@ class TicketDetailScreen extends StatelessWidget {
                             child: Column(
                               children: [
                                 _buildInfoRow(
-                                  Icons.calendar_today_outlined,
+                                  'assets/icons/calendar.svg',
                                   'Dată și oră',
                                   _formatDate(dateStr),
                                 ),
                                 const SizedBox(height: 16),
                                 _buildInfoRow(
-                                  Icons.location_on_outlined,
+                                  'assets/icons/location.svg',
                                   'Locație',
                                   location,
                                 ),
@@ -271,11 +215,19 @@ class TicketDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
+  Widget _buildInfoRow(String iconAsset, String label, String value) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Icon(icon, size: 20, color: Colors.white.withValues(alpha: 0.3)),
+        SvgPicture.asset(
+          iconAsset,
+          width: 20,
+          height: 20,
+          colorFilter: ColorFilter.mode(
+            Colors.white.withValues(alpha: 0.38),
+            BlendMode.srcIn,
+          ),
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(

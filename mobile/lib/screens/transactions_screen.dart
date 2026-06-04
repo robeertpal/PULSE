@@ -52,6 +52,15 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     }
   }
 
+  void _openTransactionDetail(Map<String, dynamic> transaction) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TransactionDetailScreen(transaction: transaction),
+      ),
+    );
+  }
+
   String _formatDate(String? isoDate) {
     if (isoDate == null) return 'N/A';
     try {
@@ -81,53 +90,35 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     }
   }
 
-  Widget _buildStatusBadge(String? status) {
-    Color bgColor;
-    Color textColor;
-    String label;
+  String _formatAmountValue(dynamic amount) {
+    if (amount is num) return amount.toStringAsFixed(2);
 
-    switch (status?.toLowerCase()) {
-      case 'paid':
-      case 'success':
-        bgColor = const Color(0xFF10B981).withValues(alpha: 0.15);
-        textColor = const Color(0xFF10B981);
-        label = 'Plătit';
-        break;
-      case 'pending':
-        bgColor = const Color(0xFFF59E0B).withValues(alpha: 0.15);
-        textColor = const Color(0xFFF59E0B);
-        label = 'În procesare';
-        break;
-      case 'failed':
-        bgColor = const Color(0xFFEF4444).withValues(alpha: 0.15);
-        textColor = const Color(0xFFEF4444);
-        label = 'Eșuat';
-        break;
-      case 'refunded':
-        bgColor = const Color(0xFF6366F1).withValues(alpha: 0.15);
-        textColor = const Color(0xFF6366F1);
-        label = 'Returnat';
-        break;
-      default:
-        bgColor = Colors.white.withValues(alpha: 0.1);
-        textColor = Colors.white70;
-        label = status ?? 'Necunoscut';
-    }
+    final parsed = num.tryParse(amount?.toString() ?? '');
+    if (parsed != null) return parsed.toStringAsFixed(2);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: textColor,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.2,
+    return amount?.toString() ?? '0.00';
+  }
+
+  Widget _buildAmountText(dynamic amount, dynamic currency) {
+    return RichText(
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.right,
+      text: TextSpan(
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.3,
+          height: 1.15,
         ),
+        children: [
+          TextSpan(text: '-${_formatAmountValue(amount)} '),
+          TextSpan(
+            text: currency?.toString() ?? 'RON',
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ],
       ),
     );
   }
@@ -135,7 +126,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   Widget _buildTransactionCard(Map<String, dynamic> tx) {
     final amount = tx['amount'] ?? 0.0;
     final currency = tx['currency'] ?? 'RON';
-    final status = tx['status'] as String?;
     final dateStr = tx['paid_at'] ?? tx['created_at'];
     final cardBrand = tx['card_brand'] as String?;
     final cardLast4 = tx['card_last4'] as String?;
@@ -164,14 +154,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     }
 
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => TransactionDetailScreen(transaction: tx),
-          ),
-        );
-      },
+      onTap: () => _openTransactionDetail(tx),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         decoration: BoxDecoration(
@@ -184,149 +167,167 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: _surfaceSoft,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.04),
-                            ),
-                          ),
-                          child: SvgPicture.asset(
-                            iconPath,
-                            width: 20,
-                            height: 20,
-                            colorFilter: const ColorFilter.mode(
-                              _pink,
-                              BlendMode.srcIn,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.3,
+                              SizedBox(
+                                width: 40,
+                                height: 40,
+                                child: Center(
+                                  child: SvgPicture.asset(
+                                    iconPath,
+                                    width: 24,
+                                    height: 24,
+                                    colorFilter: const ColorFilter.mode(
+                                      _pink,
+                                      BlendMode.srcIn,
+                                    ),
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _formatDate(dateStr),
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.5),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      title,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: -0.3,
+                                        height: 1.18,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _formatDate(dateStr),
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.5,
+                                        ),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '-$amount $currency',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.3,
-                        ),
+                        ],
                       ),
-                      const SizedBox(height: 6),
-                      _buildStatusBadge(status),
-                    ],
-                  ),
-                ],
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 98,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(14),
+                            child: Ink(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                ),
+                              ),
+                              child: InkWell(
+                                onTap: () => _openTransactionDetail(tx),
+                                borderRadius: BorderRadius.circular(14),
+                                child: Center(
+                                  child: SvgPicture.asset(
+                                    'assets/icons/arrow.right.svg',
+                                    width: 16,
+                                    height: 16,
+                                    colorFilter: ColorFilter.mode(
+                                      Colors.white.withValues(alpha: 0.76),
+                                      BlendMode.srcIn,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: _buildAmountText(amount, currency),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              if (cardBrand != null && cardLast4 != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      _pink.withValues(alpha: 0.14),
+                      const Color(0xFFFF8A3D).withValues(alpha: 0.08),
+                    ],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
                   ),
-                  decoration: BoxDecoration(
-                    color: _surfaceSoft,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.03),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.credit_card_rounded,
-                        color: Colors.white.withValues(alpha: 0.6),
-                        size: 16,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _pink.withValues(alpha: 0.12)),
+                ),
+                child: Row(
+                  children: [
+                    SvgPicture.asset(
+                      'assets/icons/creditcard.svg',
+                      width: 16,
+                      height: 16,
+                      colorFilter: ColorFilter.mode(
+                        Colors.white.withValues(alpha: 0.72),
+                        BlendMode.srcIn,
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '$cardBrand ending in $cardLast4',
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        cardBrand != null && cardLast4 != null
+                            ? '$cardBrand •••• $cardLast4'
+                            : 'Metodă de plată indisponibilă',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
+                          color: Colors.white.withValues(
+                            alpha: cardBrand != null && cardLast4 != null
+                                ? 0.78
+                                : 0.52,
+                          ),
                           fontSize: 14,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ] else ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _surfaceSoft,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.03),
                     ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.credit_card_off_rounded,
-                        color: Colors.white.withValues(alpha: 0.4),
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Metodă de plată indisponibilă',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.5),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ],
           ),
         ),
@@ -498,6 +499,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         elevation: 0,
         toolbarHeight: 76,
         leadingWidth: 72,
+        titleSpacing: 0,
+        centerTitle: false,
         leading: Padding(
           padding: const EdgeInsets.only(left: 18),
           child: ProfileBackButton(
