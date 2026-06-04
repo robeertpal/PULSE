@@ -102,6 +102,73 @@ class UserActivityCreate(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
+class FollowTargetPayload(BaseModel):
+    target_type: str = Field(min_length=1, max_length=50)
+    target_id: int = Field(gt=0)
+
+
+CONTENT_SUBMISSION_TYPES = {"article", "news", "course", "event"}
+
+
+class ContentSubmissionBase(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    content_type: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    category_id: Optional[int] = Field(default=None, gt=0)
+    specialization_id: Optional[int] = Field(default=None, gt=0)
+    summary: Optional[str] = Field(default=None, max_length=2000)
+    body: Optional[str] = Field(default=None, min_length=1)
+    image_url: Optional[str] = Field(default=None, max_length=2000)
+    source_url: Optional[str] = Field(default=None, max_length=2000)
+
+    @field_validator("title", "content_type", "summary", "body", "image_url", "source_url", mode="before")
+    @classmethod
+    def strip_submission_text(cls, value):
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("content_type")
+    @classmethod
+    def validate_submission_type(cls, value):
+        if value is None:
+            return value
+        normalized = value.strip().lower()
+        if normalized not in CONTENT_SUBMISSION_TYPES:
+            allowed = ", ".join(sorted(CONTENT_SUBMISSION_TYPES))
+            raise ValueError(f"content_type invalid. Valori acceptate: {allowed}")
+        return normalized
+
+    @field_validator("image_url", "source_url")
+    @classmethod
+    def validate_submission_url(cls, value):
+        if value is None or value == "":
+            return None
+        if not (value.startswith("http://") or value.startswith("https://")):
+            raise ValueError("URL-ul trebuie sa inceapa cu http:// sau https://")
+        return value
+
+
+class ContentSubmissionCreate(ContentSubmissionBase):
+    title: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(min_length=1, max_length=50)
+    body: str = Field(min_length=1)
+
+
+class ContentSubmissionUpdate(ContentSubmissionBase):
+    pass
+
+
+class ContentSubmissionReviewPayload(BaseModel):
+    review_notes: Optional[str] = Field(default=None, max_length=4000)
+
+    @field_validator("review_notes", mode="before")
+    @classmethod
+    def strip_review_notes(cls, value):
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+
 class EmailVerificationVerify(BaseModel):
     email: EmailStr
     otp_code: str = Field(min_length=6, max_length=6)
@@ -175,9 +242,3 @@ class PasswordResetConfirm(BaseModel):
 class AdminLogin(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
-
-
-class UserChangePassword(BaseModel):
-    current_password: str = Field(min_length=1, max_length=128)
-    new_password: str = Field(min_length=8, max_length=128)
-
