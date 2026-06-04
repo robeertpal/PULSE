@@ -5243,6 +5243,10 @@ class MyProfileUpdate(BaseModel):
     photo_url: str | None = None
     profile_image_url: str | None = None
     bio: str | None = None
+    
+class UserChangePassword(BaseModel):
+    current_password: str
+    new_password: str
 
 @app.patch("/api/me/profile")
 def update_my_profile(
