@@ -11,6 +11,7 @@ import '../services/api_service.dart';
 import '../services/auth_storage.dart';
 import 'login_screen.dart';
 import 'content_detail_screen.dart';
+import 'content_submissions_screen.dart';
 import 'notifications_screen.dart';
 import 'publication_issues_screen.dart';
 import 'profile_screen.dart';
@@ -564,6 +565,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const ProfileScreen()),
+    );
+  }
+
+  Future<void> _openContentSubmissions() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ContentSubmissionsScreen()),
     );
   }
 
@@ -2766,6 +2774,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Scaffold(
       backgroundColor: _darkCanvas,
       extendBody: true,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      floatingActionButton: _buildPostariMeleButton(),
       bottomNavigationBar: _buildGlassBottomNav(),
       body: Container(
         decoration: const BoxDecoration(
@@ -2831,6 +2841,55 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Glassmorphism Bottom Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  Widget _buildPostariMeleButton() {
+    return Tooltip(
+      message: 'Postările mele',
+      child: Semantics(
+        label: 'Postările mele',
+        button: true,
+        child: Container(
+          width: 62,
+          height: 62,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: PulseTheme.primaryGradient,
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.28),
+              width: 1.4,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _neonPurple.withValues(alpha: 0.34),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+                spreadRadius: -4,
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.38),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
+                spreadRadius: -10,
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: _openContentSubmissions,
+              child: const Icon(
+                Icons.add_rounded,
+                color: Colors.white,
+                size: 34,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildGlassBottomNav() {
     return SafeArea(
