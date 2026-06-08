@@ -718,7 +718,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
     switch (item.type) {
       case NotificationType.emc:
-        iconColor = const Color(0xFF8B5CF6);
+        iconColor = const Color(0xFFEF4444);
         iconPath = 'assets/icons/EMC.svg';
         break;
       case NotificationType.course:
@@ -1065,9 +1065,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                       vertical: 8,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: PulseTheme.primary.withValues(
-                                        alpha: 0.1,
-                                      ),
+                                      color: iconColor.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Row(
@@ -1077,8 +1075,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                           isContentNotification
                                               ? 'Află mai multe'
                                               : 'Vezi profilul',
-                                          style: const TextStyle(
-                                            color: PulseTheme.primary,
+                                          style: TextStyle(
+                                            color: iconColor,
                                             fontWeight: FontWeight.w700,
                                             fontSize: 13,
                                           ),
@@ -1088,8 +1086,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                           'assets/icons/arrow.right.svg',
                                           width: 14,
                                           height: 14,
-                                          colorFilter: const ColorFilter.mode(
-                                            PulseTheme.primary,
+                                          colorFilter: ColorFilter.mode(
+                                            iconColor,
                                             BlendMode.srcIn,
                                           ),
                                         ),

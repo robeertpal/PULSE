@@ -74,12 +74,16 @@ class MyCourseDetailScreen extends StatelessWidget {
   }
 
   int _calculatePeriodProgress(Object? startDate, Object? endDate) {
+    final raw = course['progress_percent'];
+    final rawProgress = raw is num
+        ? raw.toInt()
+        : int.tryParse(raw?.toString() ?? '');
+    if (rawProgress != null && rawProgress >= 100) return 100;
+
     final start = _parseCourseDate(startDate);
     final end = _parseCourseDate(endDate);
     if (start == null || end == null) {
-      final raw = course['progress_percent'];
-      if (raw is num) return raw.toInt().clamp(0, 100).toInt();
-      return (int.tryParse(raw?.toString() ?? '') ?? 0).clamp(0, 100).toInt();
+      return (rawProgress ?? 0).clamp(0, 100).toInt();
     }
 
     final now = DateTime.now();
@@ -113,6 +117,70 @@ class MyCourseDetailScreen extends StatelessWidget {
       default:
         return _readText(value) ?? 'Status indisponibil';
     }
+  }
+
+  bool _readBool(Object? value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      return normalized == 'true' || normalized == '1' || normalized == 'yes';
+    }
+    return false;
+  }
+
+  Widget? _buildEmcStatusMessage({
+    required int progress,
+    required Object? emcCredits,
+  }) {
+    final awarded = _readBool(course['emc_awarded']);
+    final awardedPoints =
+        _readInt(course['emc_awarded_points']) ?? _readInt(emcCredits);
+    final configuredPoints = _readInt(emcCredits);
+
+    if (awarded && awardedPoints != null) {
+      return _buildPremiumMessage(
+        'Felicitări! $awardedPoints puncte EMC au fost adăugate în contul tău.',
+      );
+    }
+
+    if (progress >= 100 && configuredPoints != null && configuredPoints > 0) {
+      return _buildPremiumMessage(
+        'Curs finalizat. Punctele EMC vor fi disponibile în contul tău în curând.',
+      );
+    }
+
+    return null;
+  }
+
+  Widget _buildPremiumMessage(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _courseColor.withValues(alpha: 0.34)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _assetIcon(_emcIcon, size: 22, color: _courseColor),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _openPublicCourse(BuildContext context, int contentItemId) {
@@ -352,12 +420,16 @@ class MyCourseDetailScreen extends StatelessWidget {
     final emcCredits = course['emc_credits'];
     final validFrom = course['valid_from'];
     final validUntil = course['valid_until'];
-    final status = _statusLabel(course['status']);
     final contentItemId = _readInt(course['content_item_id']);
     final imageUrl =
         _readText(course['hero_image_url']) ??
         _readText(course['thumbnail_url']);
     final progress = _calculatePeriodProgress(validFrom, validUntil);
+    final status = progress >= 100 ? 'Complet' : _statusLabel(course['status']);
+    final emcStatusMessage = _buildEmcStatusMessage(
+      progress: progress,
+      emcCredits: emcCredits,
+    );
 
     return Scaffold(
       backgroundColor: _black,
@@ -453,6 +525,10 @@ class MyCourseDetailScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
+            if (emcStatusMessage != null) ...[
+              emcStatusMessage,
+              const SizedBox(height: 18),
+            ],
             _buildProgress(progress),
             const SizedBox(height: 18),
             _buildCourseInfoCard(

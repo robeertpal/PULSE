@@ -21,6 +21,7 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
   static const String _courseIcon = 'assets/icons/graduation.svg';
   static const String _calendarIcon = 'assets/icons/calendar.svg';
   static const String _emcIcon = 'assets/icons/EMC.svg';
+  static const String _completeIcon = 'assets/icons/onlycheckmark.svg';
 
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
@@ -178,6 +179,56 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
     );
   }
 
+  Widget _buildStatus(String text, {required bool isComplete}) {
+    final color = isComplete
+        ? _courseColor
+        : Colors.white.withValues(alpha: 0.5);
+
+    if (!isComplete) {
+      return Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: color,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color.withValues(alpha: 0.16),
+            border: Border.all(color: color.withValues(alpha: 0.34)),
+          ),
+          child: Center(
+            child: _assetIcon(_completeIcon, size: 8, color: color),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildProgressBar(int progress) {
     final clamped = progress.clamp(0, 100);
     return Column(
@@ -220,10 +271,11 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
 
   Widget _buildCourseCard(Map<String, dynamic> course) {
     final title = course['course_title'] as String? ?? 'Curs PULSE';
-    final status = _statusLabel(course['status']);
     final emcCredits = course['emc_credits'];
     final period = _formatPeriod(course['valid_from'], course['valid_until']);
     final progress = _calculatePeriodProgress(course);
+    final isComplete = progress >= 100;
+    final status = isComplete ? 'Complet' : _statusLabel(course['status']);
 
     return GestureDetector(
       onTap: () => _openCourse(course),
@@ -271,16 +323,7 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          status,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                        _buildStatus(status, isComplete: isComplete),
                         if (emcCredits != null) ...[
                           const SizedBox(height: 6),
                           _buildMetaRow(_emcIcon, '$emcCredits credite EMC'),
