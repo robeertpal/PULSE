@@ -71,6 +71,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   bool _isEnrollingCourse = false;
   bool _isFollowingAuthor = false;
   bool _isAuthorFollowLoading = false;
+  bool _isFollowingContributor = false;
+  bool _isContributorFollowLoading = false;
   bool _isFollowingCategory = false;
   bool _isCategoryFollowLoading = false;
   bool _isFollowingSpecialization = false;
@@ -127,6 +129,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
 
       final item = ContentItem.fromJson(detail);
       var isFollowingAuthor = false;
+      var isFollowingContributor = false;
       var isFollowingCategory = false;
       var isFollowingSpecialization = false;
       if (item.authorId != null) {
@@ -137,6 +140,16 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           );
         } catch (e) {
           debugPrint('Author follow status ignored: $e');
+        }
+      }
+      if (item.contributorUserId != null) {
+        try {
+          isFollowingContributor = await _apiService.getFollowStatus(
+            targetType: 'contributor',
+            targetId: item.contributorUserId!,
+          );
+        } catch (e) {
+          debugPrint('Contributor follow status ignored: $e');
         }
       }
       if (item.categoryId != null) {
@@ -216,6 +229,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         _savedContentIds = savedIds;
         _recommendations = recommendations;
         _isFollowingAuthor = isFollowingAuthor;
+        _isFollowingContributor = isFollowingContributor;
         _isFollowingCategory = isFollowingCategory;
         _isFollowingSpecialization = isFollowingSpecialization;
         _followedPartnerIds = followedPartnerIds;
@@ -1311,10 +1325,24 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         builder: (context) => PublicAuthorProfileScreen(
           authorId: authorId,
           contributorUserId: contributorUserId,
-          initialName: item.authorName,
+          initialName: item.contributorName ?? item.authorName,
         ),
       ),
     );
+    if (contributorUserId != null) {
+      try {
+        final isFollowing = await _apiService.getFollowStatus(
+          targetType: 'contributor',
+          targetId: contributorUserId,
+        );
+        if (!mounted) return;
+        setState(() {
+          _isFollowingContributor = isFollowing;
+        });
+      } catch (_) {
+        // The detail page can keep its current optimistic state.
+      }
+    }
     if (authorId == null) return;
     try {
       final isFollowing = await _apiService.getFollowStatus(
@@ -1330,12 +1358,133 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     }
   }
 
+  String? _contributorDisplayName(ContentItem item) {
+    final name = item.contributorName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    final authorName = item.authorName?.trim();
+    if (authorName != null && authorName.isNotEmpty) return authorName;
+    return null;
+  }
+
+  Future<void> _toggleContributorFollow(ContentItem item) async {
+    final contributorUserId = item.contributorUserId;
+    if (contributorUserId == null || _isContributorFollowLoading) return;
+    final wasFollowing = _isFollowingContributor;
+    final contributorName = _contributorDisplayName(item);
+    setState(() {
+      _isFollowingContributor = !wasFollowing;
+      _isContributorFollowLoading = true;
+    });
+
+    try {
+      if (wasFollowing) {
+        await _apiService.unfollowTarget(
+          targetType: 'contributor',
+          targetId: contributorUserId,
+        );
+      } else {
+        await _apiService.followTarget(
+          targetType: 'contributor',
+          targetId: contributorUserId,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wasFollowing
+                ? 'Nu mai urm\u0103re\u0219ti ${contributorName ?? 'contributorul'}.'
+                : 'Urm\u0103re\u0219ti ${contributorName ?? 'contributorul'}.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isFollowingContributor = wasFollowing;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nu am putut actualiza contributorul urm\u0103rit.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isContributorFollowLoading = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildContributorFollowSection(ContentItem item) {
+    if (item.contributorUserId == null) return const SizedBox.shrink();
+    final contributorName = _contributorDisplayName(item);
+    final followLabel = _isFollowingContributor
+        ? contributorName == null
+              ? 'Urm\u0103re\u0219ti contributorul'
+              : 'Urm\u0103re\u0219ti $contributorName'
+        : contributorName == null
+        ? 'Urm\u0103re\u0219te contributorul'
+        : 'Urm\u0103re\u0219te $contributorName';
+    final accent = _accentFor(item);
+    final metadata = [
+      if (item.contributorIsVerified) 'Contributor verificat',
+      if (item.contributorSpecializationName?.trim().isNotEmpty == true)
+        item.contributorSpecializationName!.trim(),
+      if (item.contributorInstitutionName?.trim().isNotEmpty == true)
+        item.contributorInstitutionName!.trim(),
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: PulseTheme.surfaceElevated.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: PulseTheme.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildTaxonomyFollowChip(
+            icon: Icons.person_add_alt_1_rounded,
+            label: followLabel,
+            value: null,
+            isFollowing: _isFollowingContributor,
+            isLoading: _isContributorFollowLoading,
+            accent: accent,
+            onTap: () => _toggleContributorFollow(item),
+          ),
+          if (metadata.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              metadata.join(' \u2022 '),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: PulseTheme.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildAuthorFollowCard(ContentItem item) {
     if (item.authorId == null && item.contributorUserId == null) {
       return const SizedBox.shrink();
     }
-    final authorName = item.authorName?.trim().isNotEmpty == true
-        ? item.authorName!.trim()
+    final displayedName = item.authorId == null
+        ? _contributorDisplayName(item)
+        : item.authorName;
+    final authorName = displayedName?.trim().isNotEmpty == true
+        ? displayedName!.trim()
         : 'Contributor PULSE';
     final accent = _accentFor(item);
     final canFollowAuthor = item.authorId != null;
@@ -1382,9 +1531,9 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Autor',
-                              style: TextStyle(
+                            Text(
+                              item.authorId == null ? 'Contributor' : 'Autor',
+                              style: const TextStyle(
                                 color: PulseTheme.textSecondary,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
@@ -2834,6 +2983,10 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                         if (item.authorId != null ||
                             item.contributorUserId != null) ...[
                           _buildAuthorFollowCard(item),
+                          const SizedBox(height: 22),
+                        ],
+                        if (item.contributorUserId != null) ...[
+                          _buildContributorFollowSection(item),
                           const SizedBox(height: 22),
                         ],
                         if (item.categoryId != null ||

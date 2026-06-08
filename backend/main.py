@@ -621,131 +621,17 @@ def get_optional_current_user_id(
     return user.id
 
 
-def _public_availability_now() -> datetime:
-    return datetime.utcnow()
-
-
-def apply_public_opportunity_window_filter(query, now: Optional[datetime] = None):
-    comparable_now = now or _public_availability_now()
-    return query.filter(
-        or_(
-            models.ContentItem.content_type != models.ContentItemType.event,
-            models.ContentItem.event.has(
-                or_(
-                    models.Event.start_date.is_(None),
-                    models.Event.start_date >= comparable_now,
-                )
-            ),
-        )
-    ).filter(
-        or_(
-            models.ContentItem.content_type != models.ContentItemType.course,
-            models.ContentItem.course.has(
-                or_(
-                    models.Course.valid_from.is_(None),
-                    models.Course.valid_from >= comparable_now,
-                )
-            ),
-        )
-    )
-
-
-def _datetime_is_past(value: Optional[datetime], now: Optional[datetime] = None) -> bool:
-    if value is None:
-        return False
-    comparable_value = value
-    if comparable_value.tzinfo is not None:
-        comparable_value = comparable_value.astimezone(timezone.utc).replace(tzinfo=None)
-    return comparable_value < (now or _public_availability_now())
-
-
-def is_expired_public_opportunity(item: models.ContentItem, now: Optional[datetime] = None) -> bool:
-    content_type = serialize_value(item.content_type)
-    if content_type == "event" and item.event:
-        return _datetime_is_past(item.event.start_date, now)
-    if content_type == "course" and item.course:
-        return _datetime_is_past(item.course.valid_from, now)
-    return False
-
-
-def user_has_existing_opportunity_access(db: Session, item: models.ContentItem, user_id: Optional[int]) -> bool:
-    if user_id is None:
-        return False
-
-    content_type = serialize_value(item.content_type)
-    if content_type == "event" and item.event:
-        active_registration = (
-            db.query(models.UserEventRegistration.id)
-            .filter(
-                models.UserEventRegistration.user_id == user_id,
-                models.UserEventRegistration.event_id == item.event.id,
-                models.UserEventRegistration.status.notin_(
-                    [
-                        models.RegistrationStatus.cancelled,
-                        models.RegistrationStatus.no_show,
-                    ]
-                ),
-            )
-            .first()
-        )
-        if active_registration is not None:
-            return True
-
-        paid_payment = (
-            db.query(models.Payment.id)
-            .filter(
-                models.Payment.user_id == user_id,
-                models.Payment.content_item_id == item.id,
-                models.Payment.status == models.PaymentStatus.paid,
-            )
-            .first()
-        )
-        return paid_payment is not None
-
-    if content_type == "course" and item.course:
-        enrollment = (
-            db.query(models.UserCourse.id)
-            .filter(
-                models.UserCourse.user_id == user_id,
-                models.UserCourse.course_id == item.course.id,
-                models.UserCourse.status != models.UserCourseStatus.cancelled,
-            )
-            .first()
-        )
-        return enrollment is not None
-
-    return False
-
-
-def ensure_public_opportunity_access(
-    db: Session,
-    item: models.ContentItem,
-    user_id: Optional[int] = None,
-) -> None:
-    if not is_expired_public_opportunity(item):
-        return
-    if user_has_existing_opportunity_access(db, item, user_id):
-        return
-    raise HTTPException(
-        status_code=403,
-        detail="Această oportunitate nu mai este disponibilă public.",
-    )
-
-
-def visible_content_query(db: Session, include_expired_opportunities: bool = False):
-    query = (
+def visible_content_query(db: Session):
+    return (
         db.query(models.ContentItem)
         .filter(models.ContentItem.is_active == True)
         .filter(models.ContentItem.deleted_at.is_(None))
         .filter(models.ContentItem.status == models.ContentStatus.published)
     )
-    if not include_expired_opportunities:
-        query = apply_public_opportunity_window_filter(query)
-    return query
 
 
-def visible_content_card_query(db: Session, include_expired_opportunities: bool = False):
-    return visible_content_query(db, include_expired_opportunities).options(
+def visible_content_card_query(db: Session):
+    return visible_content_query(db).options(
         joinedload(models.ContentItem.category),
         joinedload(models.ContentItem.specialization),
         joinedload(models.ContentItem.event).joinedload(models.Event.city),
@@ -1659,19 +1545,14 @@ def _ensure_registration_schema(db: Session) -> None:
     db.commit()
 
 
-def get_public_content_item_or_404(
-    db: Session,
-    content_item_id: int,
-    user_id: Optional[int] = None,
-):
+def get_public_content_item_or_404(db: Session, content_item_id: int):
     item = (
-        visible_content_card_query(db, include_expired_opportunities=True)
+        visible_content_card_query(db)
         .filter(models.ContentItem.id == content_item_id)
         .first()
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Content item not found")
-    ensure_public_opportunity_access(db, item, user_id)
     return item
 
 
@@ -2015,6 +1896,13 @@ def serialize_content_card(item):
         "source_url": item.source_url,
         "author_name": item.author_name,
     }
+    db = object_session(item)
+    if db is not None:
+        contributor_profile = public_contributor_profile_for_content_item(db, item)
+        if contributor_profile:
+            contributor_data = serialize_public_contributor_profile(db, contributor_profile, [item])
+            data.update(contributor_public_summary(contributor_profile))
+            data["public_contributor"] = contributor_data
 
     if item.event:
         partners = serialize_event_partner_links(item.event.partner_links)
@@ -2091,7 +1979,6 @@ def serialize_event_partner(partner: models.EventPartner):
         "name": partner.name,
         "logo_url": partner.logo_url,
         "website_url": partner.website_url,
-        "description": getattr(partner, "description", None),
         "created_at": serialize_value(partner.created_at),
         "updated_at": serialize_value(partner.updated_at),
     }
@@ -2139,7 +2026,7 @@ def serialize_author(author: models.Author):
     }
 
 
-FOLLOW_TARGET_TYPES = {"author", "publication", "partner", "category", "specialization"}
+FOLLOW_TARGET_TYPES = {"author", "publication", "partner", "category", "specialization", "contributor"}
 
 
 def normalize_follow_target_type(value: str) -> str:
@@ -2206,16 +2093,33 @@ def _profile_name_match_key(profile: models.UserProfile) -> str:
     return normalize_author_name_key(_profile_public_display_name(profile))
 
 
+def contributor_public_summary(profile: models.UserProfile) -> dict:
+    specialization_name = profile.specialization.name if profile.specialization else None
+    institution_name = profile.institution.name if profile.institution else None
+    is_verified = bool(profile.is_verified_contributor)
+    return {
+        "contributor_user_id": profile.user_id,
+        "contributor_name": _profile_public_display_name(profile),
+        "contributor_is_verified": is_verified,
+        "contributor_specialization_name": specialization_name,
+        "contributor_institution_name": institution_name,
+        "is_verified_contributor": is_verified,
+        "specialization_name": specialization_name,
+        "institution_name": institution_name,
+    }
+
+
 def public_contributor_profile_for_content_item(
     db: Session,
     item: models.ContentItem,
 ) -> Optional[models.UserProfile]:
+    contributor_user_id = getattr(item, "contributor_user_id", None)
     submission = (
         db.query(models.ContentSubmission)
         .filter(models.ContentSubmission.published_content_item_id == item.id)
         .first()
     )
-    user_id = submission.submitter_user_id if submission else item.created_by_user_id
+    user_id = contributor_user_id or (submission.submitter_user_id if submission else item.created_by_user_id)
     if not user_id:
         return None
 
@@ -2223,7 +2127,7 @@ def public_contributor_profile_for_content_item(
     if not profile:
         return None
 
-    if submission:
+    if contributor_user_id or submission:
         return profile
 
     item_author_key = normalize_author_name_key(item.author_name)
@@ -2240,6 +2144,7 @@ def public_content_for_contributor_query(db: Session, profile: models.UserProfil
     )
     return visible_content_card_query(db).filter(
         or_(
+            models.ContentItem.contributor_user_id == profile.user_id,
             models.ContentItem.created_by_user_id == profile.user_id,
             models.ContentItem.id.in_(published_submission_ids),
         )
@@ -2294,14 +2199,43 @@ def serialize_public_contributor_profile(
         "category_names": category_names,
         "content_count": len({item.id for item in content_items}),
         "published_content_count": len({item.id for item in content_items}),
-        "follower_count": None,
+        "follower_count": (
+            db.query(models.Follow)
+            .filter(models.Follow.target_type == "contributor")
+            .filter(models.Follow.target_id == profile.user_id)
+            .count()
+        ),
     }
+
+
+def get_public_contributor_profile_or_404(db: Session, user_id: int) -> models.UserProfile:
+    user = db.query(models.User.id).filter(models.User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Contributorul nu a fost gasit.")
+
+    profile = _public_user_profile_query(db).filter(models.UserProfile.user_id == user_id).first()
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Contributorul nu are profil public.")
+
+    has_public_content = public_content_for_contributor_query(db, profile).first() is not None
+    has_reviewed_submission = (
+        db.query(models.ContentSubmission.id)
+        .filter(models.ContentSubmission.submitter_user_id == user_id)
+        .filter(models.ContentSubmission.status.in_(["approved", "published"]))
+        .first()
+        is not None
+    )
+    if not has_public_content and not has_reviewed_submission:
+        raise HTTPException(status_code=404, detail="Contributorul nu are continut publicabil.")
+    return profile
 
 
 def validate_follow_target_or_404(db: Session, target_type: str, target_id: int):
     target_type = normalize_follow_target_type(target_type)
     if target_type == "publication":
         return get_public_publication_or_404(db, target_id)
+    if target_type == "contributor":
+        return get_public_contributor_profile_or_404(db, target_id)
     if target_type == "category":
         category = db.query(models.ContentCategory).filter(models.ContentCategory.id == target_id).first()
         if category is None:
@@ -2343,6 +2277,13 @@ def serialize_follow_target(db: Session, follow: models.Follow) -> dict:
             if author:
                 data["target_name"] = author_display_name(author, include_title=True)
                 data["author"] = serialize_author(author)
+        elif follow.target_type == "contributor":
+            profile = _public_user_profile_query(db).filter(models.UserProfile.user_id == follow.target_id).first()
+            if profile:
+                contributor_data = contributor_public_summary(profile)
+                data.update(contributor_data)
+                data["target_name"] = contributor_data["contributor_name"]
+                data["public_contributor"] = serialize_public_contributor_profile(db, profile)
         elif follow.target_type == "partner":
             partner = db.query(models.EventPartner).filter(models.EventPartner.id == follow.target_id).first()
             if partner:
@@ -2509,41 +2450,20 @@ def public_partner_content_query(db: Session, partner_id: int):
     )
 
 
-def serialize_partner_profile(db: Session, partner: models.EventPartner, content_items: Optional[list] = None):
-    items = content_items
-    if items is None:
-        items = (
-            public_partner_content_query(db, partner.id)
-            .order_by(*public_content_ordering())
-            .limit(80)
-            .all()
-        )
+def serialize_partner_profile(db: Session, partner: models.EventPartner):
+    items = public_partner_content_query(db, partner.id).limit(80).all()
     unique_content_ids = {item.id for item in items}
-    now = _datetime_for_comparison(datetime.utcnow())
     upcoming_count = len(
         [
             item
             for item in items
-            if item.event
-            and item.event.start_date
-            and _datetime_for_comparison(item.event.start_date) >= now
+            if item.event and item.event.start_date and item.event.start_date >= datetime.utcnow()
         ]
     )
     data = serialize_event_partner(partner)
     data["content_count"] = len(unique_content_ids)
     data["upcoming_event_count"] = upcoming_count
     return data
-
-
-def unique_serialized_content_cards(items):
-    seen_ids = set()
-    result = []
-    for item in items:
-        if item.id in seen_ids:
-            continue
-        seen_ids.add(item.id)
-        result.append(serialize_content_card(item))
-    return result
 
 
 def serialize_mapping(row):
@@ -3214,6 +3134,7 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
     followed_partner_ids: set[int] = set()
     followed_category_ids: set[int] = set()
     followed_specialization_ids: set[int] = set()
+    followed_contributor_ids: set[int] = set()
     followed_author_names: set[str] = set()
     if _safe_table_exists(db, "follows"):
         follow_rows = (
@@ -3245,6 +3166,11 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
             follow.target_id
             for follow in follow_rows
             if follow.target_type == "specialization"
+        }
+        followed_contributor_ids = {
+            follow.target_id
+            for follow in follow_rows
+            if follow.target_type == "contributor"
         }
         if followed_author_ids:
             authors = (
@@ -3290,6 +3216,7 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
         "followed_partner_ids": followed_partner_ids,
         "followed_category_ids": followed_category_ids,
         "followed_specialization_ids": followed_specialization_ids,
+        "followed_contributor_ids": followed_contributor_ids,
         "followed_author_names": followed_author_names,
         "has_activity": bool(
             recent_logs
@@ -3300,6 +3227,7 @@ def _build_for_you_context(db: Session, user_id: int) -> dict:
             or followed_partner_ids
             or followed_category_ids
             or followed_specialization_ids
+            or followed_contributor_ids
         ),
     }
 
@@ -3401,6 +3329,12 @@ def _score_for_you_item(
         score += 18.0
         if "urmaresti acest autor" not in reason_parts:
             reason_parts.insert(0, "urmaresti acest autor")
+
+    contributor_user_id = getattr(item, "contributor_user_id", None)
+    if contributor_user_id and contributor_user_id in context.get("followed_contributor_ids", set()):
+        score += 19.0
+        if "urmaresti acest contributor" not in reason_parts:
+            reason_parts.insert(0, "urmaresti acest contributor")
 
     item_partner_ids = set()
     if item.event and getattr(item.event, "partner_links", None):
@@ -4006,7 +3940,10 @@ def publish_submission_to_content_item(
     submission: models.ContentSubmission,
 ) -> models.ContentItem:
     if submission.published_content_item_id:
-        return get_content_item_or_404(db, submission.published_content_item_id)
+        existing_item = get_content_item_or_404(db, submission.published_content_item_id)
+        if getattr(existing_item, "contributor_user_id", None) is None:
+            existing_item.contributor_user_id = submission.submitter_user_id
+        return existing_item
 
     assert_submission_ready_for_review(submission)
     validate_submission_references(db, submission.category_id, submission.specialization_id)
@@ -4026,6 +3963,7 @@ def publish_submission_to_content_item(
         source_url=submission.source_url,
         is_featured=False,
         is_active=True,
+        contributor_user_id=submission.submitter_user_id,
         created_by_user_id=submission.submitter_user_id,
         published_by_user_id=submission.reviewer_user_id,
         published_at=now,
@@ -4666,7 +4604,7 @@ def track_user_activity(
         raise HTTPException(status_code=422, detail="content_item_id este necesar pentru această activitate.")
 
     if payload.content_item_id is not None:
-        get_public_content_item_or_404(db, payload.content_item_id, user_id)
+        get_public_content_item_or_404(db, payload.content_item_id)
 
     log = models.UserActivityLog(
         user_id=user_id,
@@ -4802,10 +4740,9 @@ def get_content_items(
 @app.get("/content-items/{content_item_id}")
 def get_content_item_detail(
     content_item_id: int,
-    user_id: Optional[int] = Depends(get_optional_current_user_id),
     db: Session = Depends(get_db),
 ):
-    item = get_public_content_item_or_404(db, content_item_id, user_id)
+    item = get_public_content_item_or_404(db, content_item_id)
     data = serialize_model(item, include_relationships=True)
     card_data = serialize_content_card(item)
     for key, value in card_data.items():
@@ -4872,7 +4809,7 @@ def report_content_item(
     user_id: int = Depends(get_current_user_id),
 ):
     require_rate_limit(request, "content_report", "WRITE_RATE_LIMIT_PER_MINUTE", 30)
-    item = get_public_content_item_or_404(db, content_id, user_id)
+    item = get_public_content_item_or_404(db, content_id)
     report = models.ContentReport(
         content_id=item.id,
         reporter_user_id=user_id,
@@ -5025,7 +4962,6 @@ def get_events(
 @app.get("/events/{event_id}")
 def get_event_detail(
     event_id: int,
-    user_id: Optional[int] = Depends(get_optional_current_user_id),
     db: Session = Depends(get_db),
 ):
     try:
@@ -5076,15 +5012,6 @@ def get_event_detail(
         ).mappings().first()
         if row is None:
             raise HTTPException(status_code=404, detail="Evenimentul nu a fost găsit")
-
-        item = (
-            visible_content_card_query(db, include_expired_opportunities=True)
-            .filter(models.ContentItem.id == row["content_item_id"])
-            .first()
-        )
-        if item is None:
-            raise HTTPException(status_code=404, detail="Evenimentul nu a fost găsit")
-        ensure_public_opportunity_access(db, item, user_id)
 
         data = serialize_event_view_row(row, partners=get_event_partners_by_event_id(db, event_id))
         apply_next_price_change_to_payload(
@@ -5187,7 +5114,6 @@ def get_publication_issue_detail(
     return serialize_publication_issue(issue)
 
 
-@app.get("/api/partners/{partner_id}")
 @app.get("/partners/{partner_id}")
 def get_partner_detail(
     partner_id: int,
@@ -5196,30 +5122,11 @@ def get_partner_detail(
     partner = db.query(models.EventPartner).filter(models.EventPartner.id == partner_id).first()
     if partner is None:
         raise HTTPException(status_code=404, detail="Partenerul nu a fost gasit.")
+    if public_partner_content_query(db, partner_id).first() is None:
+        raise HTTPException(status_code=404, detail="Partenerul nu are continut public.")
     return serialize_partner_profile(db, partner)
 
 
-@app.get("/api/partners/{partner_id}/profile")
-@app.get("/partners/{partner_id}/profile")
-def get_partner_profile(
-    partner_id: int,
-    db: Session = Depends(get_db),
-):
-    partner = db.query(models.EventPartner).filter(models.EventPartner.id == partner_id).first()
-    if partner is None:
-        raise HTTPException(status_code=404, detail="Partenerul nu a fost gasit.")
-    items = (
-        public_partner_content_query(db, partner_id)
-        .order_by(*public_content_ordering())
-        .limit(80)
-        .all()
-    )
-    data = serialize_partner_profile(db, partner, items)
-    data["contents"] = unique_serialized_content_cards(items)
-    return data
-
-
-@app.get("/api/partners/{partner_id}/content")
 @app.get("/partners/{partner_id}/content")
 def get_partner_content(
     partner_id: int,
@@ -5237,7 +5144,14 @@ def get_partner_content(
         .limit(limit)
         .all()
     )
-    return unique_serialized_content_cards(items)
+    seen_ids = set()
+    result = []
+    for item in items:
+        if item.id in seen_ids:
+            continue
+        seen_ids.add(item.id)
+        result.append(serialize_content_card(item))
+    return result
 
 
 @app.post("/publication-issues/{issue_id}/ai-summary")
@@ -5386,8 +5300,8 @@ def get_saved_content_ids(
         .filter(models.ContentItem.is_active == True)
         .filter(models.ContentItem.deleted_at.is_(None))
         .filter(models.ContentItem.status == models.ContentStatus.published)
+        .all()
     )
-    rows = apply_public_opportunity_window_filter(rows).all()
     return [row[0] for row in rows]
 
 
@@ -5406,9 +5320,6 @@ def get_saved_content(
         .filter(models.ContentItem.is_active == True)
         .filter(models.ContentItem.deleted_at.is_(None))
         .filter(models.ContentItem.status == models.ContentStatus.published)
-    )
-    saved_rows = (
-        apply_public_opportunity_window_filter(saved_rows)
         .order_by(models.SavedContent.saved_at.desc().nullslast())
         .all()
     )
@@ -5443,7 +5354,7 @@ def save_content(
     user_id: int = Depends(get_current_user_id),
 ):
     require_rate_limit(request, "saved_content_write", "WRITE_RATE_LIMIT_PER_MINUTE", 60)
-    get_public_content_item_or_404(db, content_item_id, user_id)
+    get_public_content_item_or_404(db, content_item_id)
 
     existing = (
         db.query(models.SavedContent)
@@ -6249,80 +6160,6 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
         "specialization_name": profile.specialization.name if profile.specialization else None,
         "professional_grade_name": profile.professional_grade.name if profile.professional_grade else None,
     }
-
-
-def _emc_source_label(source_type: Optional[str]) -> str:
-    normalized = (source_type or "").strip().lower()
-    return {
-        "course": "Curs",
-        "event": "Eveniment",
-        "publication": "Revistă",
-        "publication_subscription": "Abonament revistă",
-        "manual": "Activitate EMC",
-    }.get(normalized, "Activitate EMC")
-
-
-def _resolve_emc_source_title(db: Session, source_type: Optional[str], source_id: Optional[int]) -> str:
-    normalized = (source_type or "").strip().lower()
-    if source_id is None:
-        return "Activitate EMC"
-
-    if normalized == "course":
-        row = (
-            db.query(models.ContentItem.title)
-            .join(models.Course, models.Course.content_item_id == models.ContentItem.id)
-            .filter(models.Course.id == source_id)
-            .first()
-        )
-        return row[0] if row and row[0] else "Activitate EMC"
-
-    if normalized == "event":
-        row = (
-            db.query(models.ContentItem.title)
-            .join(models.Event, models.Event.content_item_id == models.ContentItem.id)
-            .filter(models.Event.id == source_id)
-            .first()
-        )
-        return row[0] if row and row[0] else "Activitate EMC"
-
-    if normalized in {"publication", "publication_subscription"}:
-        row = (
-            db.query(models.Publication.name)
-            .filter(models.Publication.id == source_id)
-            .first()
-        )
-        return row[0] if row and row[0] else "Activitate EMC"
-
-    return "Activitate EMC"
-
-
-@app.get("/api/me/emc-activity")
-def get_my_emc_activity(
-    user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db),
-):
-    logs = (
-        db.query(models.UserEmcPointLog)
-        .filter(models.UserEmcPointLog.user_id == user_id)
-        .order_by(
-            models.UserEmcPointLog.awarded_at.desc().nullslast(),
-            models.UserEmcPointLog.id.desc(),
-        )
-        .all()
-    )
-
-    return [
-        {
-            "id": log.id,
-            "points": log.points,
-            "source_type": log.source_type,
-            "source_id": log.source_id,
-            "source_title": _resolve_emc_source_title(db, log.source_type, log.source_id),
-            "source_label": _emc_source_label(log.source_type),
-            "awarded_at": serialize_value(log.awarded_at),
-        }
-        for log in logs
-    ]
 
 
 @app.post("/api/me/profile/avatar")
@@ -7162,11 +6999,6 @@ def register_for_event(
             "message": "Ești deja înscris la acest eveniment.",
             "ticket_code": existing.ticket_code,
         }
-    if _datetime_is_past(event.start_date):
-        raise HTTPException(
-            status_code=403,
-            detail="Evenimentul nu mai este disponibil pentru înscrieri noi.",
-        )
 
     registration = models.UserEventRegistration(
         user_id=user_id,
@@ -7221,11 +7053,6 @@ def pay_and_register_for_event(
     )
     if existing:
         raise HTTPException(status_code=400, detail="Ești deja înscris la acest eveniment.")
-    if _datetime_is_past(event.start_date):
-        raise HTTPException(
-            status_code=403,
-            detail="Evenimentul nu mai este disponibil pentru cumpărare sau înscriere.",
-        )
 
     payment_method = (
         db.query(models.UserPaymentMethod)
@@ -7517,11 +7344,6 @@ def enroll_in_course(
             "progress_percent": existing.progress_percent,
             "enrolled_at": serialize_value(existing.enrolled_at),
         }
-    if _datetime_is_past(course.valid_from):
-        raise HTTPException(
-            status_code=403,
-            detail="Cursul nu mai este disponibil pentru înscrieri noi.",
-        )
 
     enrollment = models.UserCourse(
         user_id=user_id,
@@ -8589,6 +8411,17 @@ def _content_author_target(db: Session, item: models.ContentItem) -> Optional[di
     }
 
 
+def _content_contributor_target(db: Session, item: models.ContentItem) -> Optional[dict]:
+    contributor_profile = public_contributor_profile_for_content_item(db, item)
+    if contributor_profile is None:
+        return None
+    return {
+        "target_type": "contributor",
+        "target_id": contributor_profile.user_id,
+        "target_name": _profile_public_display_name(contributor_profile),
+    }
+
+
 def _content_partner_targets(db: Session, item: models.ContentItem) -> list[dict]:
     event = getattr(item, "event", None)
     if event is None:
@@ -8629,6 +8462,10 @@ def follow_notification_targets_for_content(db: Session, item: models.ContentIte
     author_target = _content_author_target(db, item)
     if author_target:
         targets.append(author_target)
+
+    contributor_target = _content_contributor_target(db, item)
+    if contributor_target:
+        targets.append(contributor_target)
 
     if serialize_value(item.content_type) == "publication":
         publication_target = _content_publication_target(db, item)
