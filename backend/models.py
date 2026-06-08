@@ -642,6 +642,21 @@ class ContentSubmission(Base):
     published_content_item = relationship("ContentItem")
 
 
+class ContentReport(Base):
+    __tablename__ = "content_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    content_id = Column(Integer, nullable=False, index=True)
+    reporter_user_id = Column(Integer, index=True)
+    reason = Column(String(50), nullable=False)
+    details = Column(Text)
+    status = Column(String(30), nullable=False, default="open", index=True)
+    reviewed_by_admin_id = Column(Integer)
+    reviewed_at = Column(DateTime(timezone=True))
+    admin_note = Column(Text)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class UserCourse(Base):
     __tablename__ = "user_courses"
 

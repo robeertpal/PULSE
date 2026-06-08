@@ -96,50 +96,6 @@ class UserInterestsUpdate(BaseModel):
     interest_ids: List[int] = Field(default_factory=list)
 
 
-class UserProfileUpdate(BaseModel):
-    email: Optional[EmailStr] = Field(default=None)
-    first_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    last_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    phone: Optional[str] = Field(default=None, min_length=1, max_length=50)
-    correspondence_address: Optional[str] = Field(default=None, max_length=1000)
-    city_id: Optional[int] = Field(default=None, gt=0)
-    occupation_id: Optional[int] = Field(default=None, gt=0)
-    specialization_id: Optional[int] = Field(default=None, gt=0)
-    specialization_secondary_name: Optional[str] = Field(default=None, max_length=255)
-    professional_grade_id: Optional[int] = Field(default=None, gt=0)
-    institution_id: Optional[int] = Field(default=None, gt=0)
-    cuim: Optional[str] = Field(default=None, max_length=255)
-    cod_parafa: Optional[str] = Field(default=None, max_length=255)
-    professional_registration_code: Optional[str] = Field(default=None, max_length=255)
-    titlu_universitar: Optional[str] = Field(default=None, max_length=255)
-    acord_email: Optional[bool] = None
-    acord_sms: Optional[bool] = None
-    gdpr_consent: Optional[bool] = None
-
-    @field_validator(
-        "first_name",
-        "last_name",
-        "phone",
-        "correspondence_address",
-        "specialization_secondary_name",
-        "cuim",
-        "cod_parafa",
-        "professional_registration_code",
-        "titlu_universitar",
-        mode="before",
-    )
-    @classmethod
-    def strip_text(cls, value):
-        if isinstance(value, str):
-            return value.strip()
-        return value
-
-    @field_validator("email", mode="before")
-    @classmethod
-    def normalize_email(cls, value):
-        return normalize_email_value(value)
-
-
 class UserActivityCreate(BaseModel):
     action_type: str = Field(min_length=1, max_length=100)
     content_item_id: Optional[int] = Field(default=None, gt=0)
@@ -208,6 +164,30 @@ class ContentSubmissionReviewPayload(BaseModel):
     @field_validator("review_notes", mode="before")
     @classmethod
     def strip_review_notes(cls, value):
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+
+class ContentReportCreate(BaseModel):
+    reason: str = Field(min_length=1, max_length=50)
+    details: Optional[str] = Field(default=None, max_length=4000)
+
+    @field_validator("reason", "details", mode="before")
+    @classmethod
+    def strip_report_text(cls, value):
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+
+class ContentReportUpdate(BaseModel):
+    status: str = Field(min_length=1, max_length=30)
+    admin_note: Optional[str] = Field(default=None, max_length=4000)
+
+    @field_validator("status", "admin_note", mode="before")
+    @classmethod
+    def strip_update_text(cls, value):
         if isinstance(value, str):
             return value.strip()
         return value
