@@ -1214,7 +1214,7 @@ class RateLimiter:
         self._events = defaultdict(deque)
 
     def check(self, key: str, limit: int, window_seconds: int):
-        now = datetime.utcnow().timestamp()
+        now = datetime.now(timezone.utc).timestamp()
         events = self._events[key]
         while events and now - events[0] > window_seconds:
             events.popleft()
@@ -5465,7 +5465,7 @@ def save_content(
             models.SavedContent(
                 user_id=user_id,
                 content_item_id=content_item_id,
-                saved_at=datetime.utcnow(),
+                saved_at=datetime.now(timezone.utc),
             )
         )
         db.commit()
