@@ -67,6 +67,7 @@ class _EmcActivityScreenState extends State<EmcActivityScreen> {
       backgroundColor: _black,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
+        centerTitle: false,
         elevation: 0,
         foregroundColor: PulseTheme.textPrimary,
         toolbarHeight: 76,
@@ -193,22 +194,25 @@ class _ActivityCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.sourceLabel,
-                  style: const TextStyle(
-                    color: PulseTheme.textTertiary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  item.sourceTitle,
+                  '${item.points} ${item.points == 1 ? 'punct EMC adăugat' : 'puncte EMC adăugate'}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: PulseTheme.textPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  item.sourceSubtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: PulseTheme.textSecondary,
+                    fontSize: 13,
+                    height: 1.25,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -230,13 +234,24 @@ class _ActivityCard extends StatelessWidget {
               gradient: _EmcActivityScreenState._accentGradient,
               borderRadius: BorderRadius.circular(999),
             ),
-            child: Text(
-              '+${item.points}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '+${item.points}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const _SvgIcon(
+                  _EmcActivityScreenState._emcIcon,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ],
             ),
           ),
         ],
@@ -256,6 +271,7 @@ class _SourceIcon extends StatelessWidget {
       'course' => _EmcActivityScreenState._courseIcon,
       'event' => _EmcActivityScreenState._eventIcon,
       'publication' => _EmcActivityScreenState._publicationIcon,
+      'publication_subscription' => _EmcActivityScreenState._publicationIcon,
       'manual' => _EmcActivityScreenState._manualIcon,
       _ => _EmcActivityScreenState._emcIcon,
     };
@@ -372,6 +388,7 @@ class _EmcActivityItem {
     required this.id,
     required this.sourceType,
     required this.sourceTitle,
+    required this.sourceLabel,
     required this.points,
     required this.awardedAt,
   });
@@ -379,17 +396,15 @@ class _EmcActivityItem {
   final int id;
   final String sourceType;
   final String sourceTitle;
+  final String sourceLabel;
   final int points;
   final DateTime? awardedAt;
 
-  String get sourceLabel {
-    return switch (sourceType.toLowerCase()) {
-      'course' => 'Curs',
-      'event' => 'Eveniment',
-      'publication' => 'Publicație',
-      'manual' => 'Acordare manuală',
-      _ => 'Activitate EMC',
-    };
+  String get sourceSubtitle {
+    if (sourceTitle.trim().isEmpty || sourceTitle == 'Activitate EMC') {
+      return sourceLabel;
+    }
+    return 'Pentru ${sourceLabel.toLowerCase()} „$sourceTitle”';
   }
 
   String get awardedAtLabel {
@@ -419,13 +434,29 @@ class _EmcActivityItem {
     return 0;
   }
 
+  static String _fallbackSourceLabel(String sourceType) {
+    return switch (sourceType.toLowerCase()) {
+      'course' => 'Curs',
+      'event' => 'Eveniment',
+      'publication' => 'Revistă',
+      'publication_subscription' => 'Abonament revistă',
+      'manual' => 'Activitate EMC',
+      _ => 'Activitate EMC',
+    };
+  }
+
   factory _EmcActivityItem.fromJson(Map<String, dynamic> json) {
+    final sourceType = (json['source_type'] ?? 'emc').toString();
     final sourceTitle = (json['source_title'] ?? '').toString().trim();
+    final sourceLabel = (json['source_label'] ?? '').toString().trim();
     final awardedAtText = json['awarded_at']?.toString();
     return _EmcActivityItem(
       id: _readInt(json['id']),
-      sourceType: (json['source_type'] ?? 'emc').toString(),
+      sourceType: sourceType,
       sourceTitle: sourceTitle.isEmpty ? 'Activitate EMC' : sourceTitle,
+      sourceLabel: sourceLabel.isEmpty
+          ? _fallbackSourceLabel(sourceType)
+          : sourceLabel,
       points: _readInt(json['points']),
       awardedAt: awardedAtText == null
           ? null
