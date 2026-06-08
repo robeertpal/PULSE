@@ -10,6 +10,7 @@ class ContentItem {
   final DateTime? publishedAt;
   final int? authorId;
   final String? authorName;
+  final int? contributorUserId;
   final bool isFeatured;
   final String? tag; // Virtual field for UI
   final int? emcCredits;
@@ -57,6 +58,7 @@ class ContentItem {
     this.publishedAt,
     this.authorId,
     this.authorName,
+    this.contributorUserId,
     this.isFeatured = false,
     this.tag,
     this.emcCredits,
@@ -189,6 +191,9 @@ class ContentItem {
       publishedAt: parseDate(json['published_at']),
       authorId: parseInt(json['author_id'] ?? json['author']?['id']),
       authorName: json['author_name'],
+      contributorUserId: parseInt(
+        json['contributor_user_id'] ?? json['public_contributor']?['user_id'],
+      ),
       isFeatured: json['is_featured'] ?? false,
       tag: derivedTag,
       emcCredits: credits,

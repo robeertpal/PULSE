@@ -2069,6 +2069,115 @@ def find_author_for_content_item(db: Session, item: models.ContentItem) -> Optio
     return None
 
 
+def _public_user_profile_query(db: Session):
+    return db.query(models.UserProfile).options(
+        joinedload(models.UserProfile.occupation),
+        joinedload(models.UserProfile.specialization),
+        joinedload(models.UserProfile.institution),
+    )
+
+
+def _profile_public_display_name(profile: models.UserProfile) -> str:
+    full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
+    return full_name or "Contributor PULSE"
+
+
+def _profile_name_match_key(profile: models.UserProfile) -> str:
+    return normalize_author_name_key(_profile_public_display_name(profile))
+
+
+def public_contributor_profile_for_content_item(
+    db: Session,
+    item: models.ContentItem,
+) -> Optional[models.UserProfile]:
+    submission = (
+        db.query(models.ContentSubmission)
+        .filter(models.ContentSubmission.published_content_item_id == item.id)
+        .first()
+    )
+    user_id = submission.submitter_user_id if submission else item.created_by_user_id
+    if not user_id:
+        return None
+
+    profile = _public_user_profile_query(db).filter(models.UserProfile.user_id == user_id).first()
+    if not profile:
+        return None
+
+    if submission:
+        return profile
+
+    item_author_key = normalize_author_name_key(item.author_name)
+    if item_author_key and item_author_key == _profile_name_match_key(profile):
+        return profile
+    return None
+
+
+def public_content_for_contributor_query(db: Session, profile: models.UserProfile):
+    published_submission_ids = (
+        db.query(models.ContentSubmission.published_content_item_id)
+        .filter(models.ContentSubmission.submitter_user_id == profile.user_id)
+        .filter(models.ContentSubmission.published_content_item_id.isnot(None))
+    )
+    return visible_content_card_query(db).filter(
+        or_(
+            models.ContentItem.created_by_user_id == profile.user_id,
+            models.ContentItem.id.in_(published_submission_ids),
+        )
+    )
+
+
+def serialize_public_contributor_profile(
+    db: Session,
+    profile: models.UserProfile,
+    content_items: Optional[list] = None,
+):
+    if content_items is None:
+        content_items = (
+            public_content_for_contributor_query(db, profile)
+            .order_by(*public_content_ordering())
+            .limit(60)
+            .all()
+        )
+
+    specialization_names = sorted(
+        {
+            item.specialization.name
+            for item in content_items
+            if item.specialization and item.specialization.name
+        }
+    )
+    category_names = sorted(
+        {
+            item.category.name
+            for item in content_items
+            if item.category and item.category.name
+        }
+    )
+    occupation_name = profile.occupation.name if profile.occupation else None
+    specialization_name = profile.specialization.name if profile.specialization else None
+    institution_name = profile.institution.name if profile.institution else None
+
+    return {
+        "id": profile.user_id,
+        "user_id": profile.user_id,
+        "display_name": _profile_public_display_name(profile),
+        "full_name": _profile_public_display_name(profile),
+        "photo_url": profile.photo_url,
+        "bio": None,
+        "public_role": profile.titlu_universitar or occupation_name,
+        "occupation_name": occupation_name,
+        "specialization_name": specialization_name,
+        "institution_name": institution_name,
+        "is_verified_contributor": bool(profile.is_verified_contributor),
+        "verified_contributor_at": serialize_value(profile.verified_contributor_at),
+        "specialization_names": specialization_names,
+        "category_names": category_names,
+        "content_count": len({item.id for item in content_items}),
+        "published_content_count": len({item.id for item in content_items}),
+        "follower_count": None,
+    }
+
+
 def validate_follow_target_or_404(db: Session, target_type: str, target_id: int):
     target_type = normalize_follow_target_type(target_type)
     if target_type == "publication":
@@ -4566,6 +4675,13 @@ def get_content_item_detail(
         data["author"] = serialize_author(author)
         if not data.get("author_name"):
             data["author_name"] = author_display_name(author, include_title=True)
+    contributor_profile = public_contributor_profile_for_content_item(db, item)
+    if contributor_profile:
+        contributor_data = serialize_public_contributor_profile(db, contributor_profile, [item])
+        data["contributor_user_id"] = contributor_profile.user_id
+        data["public_contributor"] = contributor_data
+        if not data.get("author_name"):
+            data["author_name"] = contributor_data.get("display_name")
     if item.event:
         price_data = get_current_price_by_event_id(db, item.event.id)
         apply_current_price_to_payload(data, price_data)
@@ -11222,7 +11338,47 @@ def serialize_author_profile(db: Session, author: models.Author, content_items: 
     data["specialization_names"] = specialization_names
     data["category_names"] = category_names
     data["content_count"] = len({item.id for item in content_items})
+    data["published_content_count"] = data["content_count"]
+    data["follower_count"] = (
+        db.query(models.Follow)
+        .filter(models.Follow.target_type == "author")
+        .filter(models.Follow.target_id == author.id)
+        .count()
+    )
+
+    contributor_profile = public_contributor_profile_for_author(db, author, content_items)
+    if contributor_profile:
+        contributor_data = serialize_public_contributor_profile(db, contributor_profile, content_items)
+        data["contributor_user_id"] = contributor_profile.user_id
+        data["is_verified_contributor"] = contributor_data["is_verified_contributor"]
+        data["verified_contributor_at"] = contributor_data["verified_contributor_at"]
+        data["occupation_name"] = contributor_data["occupation_name"]
+        data["specialization_name"] = contributor_data["specialization_name"]
+        data["institution_name"] = contributor_data["institution_name"]
+        data["public_role"] = contributor_data["public_role"]
+        if not data.get("photo_url"):
+            data["photo_url"] = contributor_data.get("photo_url")
+    else:
+        data["contributor_user_id"] = None
+        data["is_verified_contributor"] = False
+        data["verified_contributor_at"] = None
     return data
+
+
+def public_contributor_profile_for_author(
+    db: Session,
+    author: models.Author,
+    content_items: list,
+) -> Optional[models.UserProfile]:
+    author_keys = set(author_name_match_values(author))
+    if not author_keys:
+        return None
+
+    for item in content_items:
+        profile = public_contributor_profile_for_content_item(db, item)
+        if profile and _profile_name_match_key(profile) in author_keys:
+            return profile
+    return None
 
 
 def event_partner_data(payload: BaseModel, exclude_unset: bool = False):
@@ -11313,6 +11469,64 @@ def get_author(
             .all()
         )
         return serialize_author_profile(db, author, content_items)
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/public-profiles/{user_id}/content")
+def get_public_contributor_content(
+    user_id: int,
+    skip: int = 0,
+    limit: int = Query(default=30, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    try:
+        profile = _public_user_profile_query(db).filter(models.UserProfile.user_id == user_id).first()
+        if profile is None:
+            raise HTTPException(status_code=404, detail="Profilul public nu a fost gasit.")
+
+        items = (
+            public_content_for_contributor_query(db, profile)
+            .order_by(*public_content_ordering())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        seen_ids = set()
+        result = []
+        for item in items:
+            if item.id in seen_ids:
+                continue
+            seen_ids.add(item.id)
+            result.append(serialize_content_card(item))
+        return result
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, status_code=400)
+
+
+@app.get("/public-profiles/{user_id}")
+def get_public_contributor_profile(
+    user_id: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        profile = _public_user_profile_query(db).filter(models.UserProfile.user_id == user_id).first()
+        if profile is None:
+            raise HTTPException(status_code=404, detail="Profilul public nu a fost gasit.")
+
+        content_items = (
+            public_content_for_contributor_query(db, profile)
+            .order_by(*public_content_ordering())
+            .limit(60)
+            .all()
+        )
+        if not content_items:
+            raise HTTPException(status_code=404, detail="Profilul public nu are continut publicat.")
+        return serialize_public_contributor_profile(db, profile, content_items)
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
