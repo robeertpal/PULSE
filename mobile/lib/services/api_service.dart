@@ -30,6 +30,14 @@ class ApiService {
     return {'Authorization': 'Bearer $sessionToken'};
   }
 
+  Future<Map<String, String>> _buildOptionalAuthHeaders() async {
+    final sessionToken = await _authStorage.getSessionToken();
+    if (sessionToken == null || sessionToken.isEmpty) {
+      return const {};
+    }
+    return {'Authorization': 'Bearer $sessionToken'};
+  }
+
   Future<Map<String, String>> authHeaders() => _buildAuthHeaders();
 
   static String get _baseUrl {
@@ -1806,15 +1814,24 @@ class ApiService {
 
   Future<Map<String, dynamic>> getContentItemDetail(int contentItemId) async {
     try {
+      final headers = await _buildOptionalAuthHeaders();
       final response = await http
-          .get(Uri.parse('$_baseUrl/content-items/$contentItemId'))
+          .get(
+            Uri.parse('$_baseUrl/content-items/$contentItemId'),
+            headers: headers,
+          )
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 404) {
         throw Exception('Content item not found');
       }
       if (response.statusCode != 200) {
-        throw Exception('Failed to load content item: ${response.statusCode}');
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Failed to load content item: ${response.statusCode}',
+          ),
+        );
       }
 
       final decoded = json.decode(response.body);
