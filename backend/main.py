@@ -3434,6 +3434,15 @@ def submitter_display_name(db: Session, user_id: int) -> Optional[str]:
     return user.email if user else None
 
 
+def contributor_verification_summary(db: Session, user_id: int) -> dict:
+    profile = db.query(models.UserProfile).filter(models.UserProfile.user_id == user_id).first()
+    return {
+        "is_verified_contributor": bool(profile and profile.is_verified_contributor),
+        "verified_contributor_at": serialize_value(profile.verified_contributor_at) if profile else None,
+        "verified_contributor_by": profile.verified_contributor_by if profile else None,
+    }
+
+
 AI_MODERATION_RISK_LEVELS = {"low", "medium", "high"}
 AI_MODERATION_FALLBACK_RECOMMENDATION = (
     "Pre-check AI indisponibil momentan. Submission-ul a fost trimis pentru review manual."
@@ -3579,10 +3588,14 @@ def apply_submission_moderation_result(submission: models.ContentSubmission, res
 
 
 def serialize_content_submission(db: Session, submission: models.ContentSubmission) -> dict:
+    contributor_verification = contributor_verification_summary(db, submission.submitter_user_id)
     data = {
         "id": submission.id,
         "submitter_user_id": submission.submitter_user_id,
         "submitter_name": submitter_display_name(db, submission.submitter_user_id),
+        "submitter_is_verified_contributor": contributor_verification["is_verified_contributor"],
+        "submitter_verified_contributor_at": contributor_verification["verified_contributor_at"],
+        "submitter_verification": contributor_verification,
         "title": submission.title,
         "content_type": submission.content_type,
         "category_id": submission.category_id,
@@ -3829,6 +3842,39 @@ def admin_get_content_submission(submission_id: int, db: Session = Depends(get_d
     return serialize_content_submission(db, submission)
 
 
+class ContributorVerificationPayload(BaseModel):
+    is_verified_contributor: bool = Field(default=True)
+
+
+@app.patch("/admin/contributors/{user_id}/verification")
+def admin_update_contributor_verification(
+    user_id: int,
+    payload: ContributorVerificationPayload,
+    db: Session = Depends(get_db),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Contributorul nu a fost gasit.")
+
+    profile = db.query(models.UserProfile).filter(models.UserProfile.user_id == user_id).first()
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Contributorul nu are profil medical.")
+
+    is_verified = bool(payload.is_verified_contributor)
+    profile.is_verified_contributor = is_verified
+    profile.verified_contributor_at = datetime.utcnow() if is_verified else None
+    profile.verified_contributor_by = None
+    profile.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(profile)
+
+    return {
+        "user_id": user_id,
+        "name": submitter_display_name(db, user_id),
+        **contributor_verification_summary(db, user_id),
+    }
+
+
 @app.get("/admin/contributor-analytics")
 def admin_get_contributor_analytics(db: Session = Depends(get_db)):
     tracked_statuses = [
@@ -3851,6 +3897,13 @@ def admin_get_contributor_analytics(db: Session = Depends(get_db)):
         normalized_status = str(status or "unknown")
         status_counts[normalized_status] = int(count or 0)
     total_submissions = sum(status_counts.values())
+    verified_contributors_count = int(
+        db.query(func.count(func.distinct(models.ContentSubmission.submitter_user_id)))
+        .join(models.UserProfile, models.UserProfile.user_id == models.ContentSubmission.submitter_user_id)
+        .filter(models.UserProfile.is_verified_contributor == True)
+        .scalar()
+        or 0
+    )
 
     published_by_contributor = {
         int(user_id): int(count or 0)
@@ -3876,6 +3929,9 @@ def admin_get_contributor_analytics(db: Session = Depends(get_db)):
             models.User.email,
             models.UserProfile.first_name,
             models.UserProfile.last_name,
+            models.UserProfile.is_verified_contributor,
+            models.UserProfile.verified_contributor_at,
+            models.UserProfile.verified_contributor_by,
             func.count(models.ContentSubmission.id).label("total_count"),
             func.max(models.ContentSubmission.updated_at).label("last_activity_at"),
         )
@@ -3886,19 +3942,35 @@ def admin_get_contributor_analytics(db: Session = Depends(get_db)):
             models.User.email,
             models.UserProfile.first_name,
             models.UserProfile.last_name,
+            models.UserProfile.is_verified_contributor,
+            models.UserProfile.verified_contributor_at,
+            models.UserProfile.verified_contributor_by,
         )
         .order_by(func.count(models.ContentSubmission.id).desc())
         .limit(50)
         .all()
     )
     contributors = []
-    for user_id, email, first_name, last_name, total_count, last_activity_at in contributor_rows:
+    for (
+        user_id,
+        email,
+        first_name,
+        last_name,
+        is_verified_contributor,
+        verified_contributor_at,
+        verified_contributor_by,
+        total_count,
+        last_activity_at,
+    ) in contributor_rows:
         display_name = f"{first_name or ''} {last_name or ''}".strip() or email or f"User #{user_id}"
         contributors.append(
             {
                 "user_id": user_id,
                 "name": display_name,
                 "email": email,
+                "is_verified_contributor": bool(is_verified_contributor),
+                "verified_contributor_at": serialize_value(verified_contributor_at),
+                "verified_contributor_by": verified_contributor_by,
                 "total_submissions": int(total_count or 0),
                 "submitted_or_reviewable": submitted_by_contributor.get(int(user_id), 0),
                 "published": published_by_contributor.get(int(user_id), 0),
@@ -4024,6 +4096,7 @@ def admin_get_contributor_analytics(db: Session = Depends(get_db)):
     return {
         "totals": {
             "total_submissions": total_submissions,
+            "verified_contributors": verified_contributors_count,
             **status_counts,
         },
         "contributors": contributors,

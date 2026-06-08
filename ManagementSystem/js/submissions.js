@@ -54,6 +54,11 @@ function statusBadge(status) {
     return `<span class="badge ${escapeHtml(status)}">${escapeHtml(statusLabels[status] || status)}</span>`;
 }
 
+function verifiedContributorBadge(item) {
+    if (!item?.submitter_is_verified_contributor) return '';
+    return '<span class="badge active" style="margin-left:8px;">Contributor verificat</span>';
+}
+
 async function loadSubmissions() {
     const tbody = document.getElementById('submissions-table-body');
     const status = document.getElementById('status-filter').value;
@@ -96,7 +101,7 @@ function renderSubmissions() {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td><strong>${escapeHtml(item.title)}</strong></td>
-            <td>${escapeHtml(item.submitter_name || '-')}</td>
+            <td>${escapeHtml(item.submitter_name || '-')}${verifiedContributorBadge(item)}</td>
             <td>${escapeHtml(typeLabels[item.content_type] || item.content_type || '-')}</td>
             <td>${statusBadge(item.status)}</td>
             <td>${formatDate(item.submitted_at || item.updated_at || item.created_at)}</td>
@@ -183,7 +188,11 @@ function renderDetail(item) {
     const canPublish = item.status === 'approved';
     detail.innerHTML = `
         <h2 style="margin-top:0;">${escapeHtml(item.title)}</h2>
-        ${detailRow('Autor', item.submitter_name)}
+        <div class="detail-row">
+            <div class="detail-label">Autor</div>
+            <div class="detail-value">${escapeHtml(item.submitter_name || '-')}${verifiedContributorBadge(item)}</div>
+        </div>
+        ${item.submitter_is_verified_contributor ? detailRow('Regula editoriala', 'Contributor verificat: review prioritar, fara auto-publicare.') : ''}
         ${detailRow('Tip', typeLabels[item.content_type] || item.content_type)}
         ${detailRow('Status', statusLabels[item.status] || item.status)}
         ${detailRow('Categorie', item.category_name)}

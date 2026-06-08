@@ -238,6 +238,9 @@ class UserProfile(Base):
     acord_sms = Column(Boolean, nullable=False, default=False)
     gdpr_consent = Column(Boolean, nullable=False, default=False)
     total_emc_points = Column(Integer, nullable=False, default=0)
+    is_verified_contributor = Column(Boolean, nullable=False, default=False)
+    verified_contributor_at = Column(DateTime(timezone=True))
+    verified_contributor_by = Column(Integer)
     created_at = Column(DateTime(timezone=True))
     updated_at = Column(DateTime(timezone=True))
 

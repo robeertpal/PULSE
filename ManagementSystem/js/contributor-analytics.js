@@ -11,6 +11,7 @@ const statusIds = {
     approved: 'stat-approved',
     needs_changes: 'stat-needs-changes',
     published: 'stat-published',
+    verified_contributors: 'stat-verified-contributors',
     rejected: 'stat-rejected',
 };
 
@@ -46,7 +47,7 @@ function setLoadingState() {
     Object.values(statusIds).forEach((id) => {
         document.getElementById(id).textContent = '-';
     });
-    document.getElementById('contributors-table-body').innerHTML = '<tr><td colspan="6">Se incarca...</td></tr>';
+    document.getElementById('contributors-table-body').innerHTML = '<tr><td colspan="8">Se incarca...</td></tr>';
     document.getElementById('categories-table-body').innerHTML = '<tr><td colspan="2">Se incarca...</td></tr>';
     document.getElementById('specializations-table-body').innerHTML = '<tr><td colspan="2">Se incarca...</td></tr>';
     document.getElementById('top-content-table-body').innerHTML = '<tr><td colspan="7">Se incarca...</td></tr>';
@@ -77,7 +78,7 @@ async function loadContributorAnalytics() {
         renderTopContent(data.top_content || []);
     } catch (error) {
         UI.showError('error-msg', `Nu am putut incarca analytics: ${error.message}`);
-        document.getElementById('contributors-table-body').innerHTML = '<tr><td colspan="6">Nu am putut incarca datele.</td></tr>';
+        document.getElementById('contributors-table-body').innerHTML = '<tr><td colspan="8">Nu am putut incarca datele.</td></tr>';
         document.getElementById('categories-table-body').innerHTML = '<tr><td colspan="2">-</td></tr>';
         document.getElementById('specializations-table-body').innerHTML = '<tr><td colspan="2">-</td></tr>';
         document.getElementById('top-content-table-body').innerHTML = '<tr><td colspan="7">-</td></tr>';
@@ -96,7 +97,7 @@ function renderTotals(totals) {
 function renderContributors(items) {
     const tbody = document.getElementById('contributors-table-body');
     if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="6">Nu exista contributori inca.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8">Nu exista contributori inca.</td></tr>';
         return;
     }
 
@@ -104,12 +105,37 @@ function renderContributors(items) {
         <tr>
             <td><strong>${escapeHtml(item.name || '-')}</strong></td>
             <td>${escapeHtml(item.email || '-')}</td>
+            <td>${verifiedContributorBadge(item)}</td>
             <td>${formatNumber(item.total_submissions)}</td>
             <td>${formatNumber(item.submitted_or_reviewable)}</td>
             <td>${formatNumber(item.published)}</td>
             <td>${escapeHtml(formatDate(item.last_activity_at))}</td>
+            <td class="table-actions">
+                <button type="button" onclick="toggleContributorVerification(${Number(item.user_id)}, ${item.is_verified_contributor ? 'false' : 'true'})">
+                    ${item.is_verified_contributor ? 'Elimina verificarea' : 'Marcheaza verificat'}
+                </button>
+            </td>
         </tr>
     `).join('');
+}
+
+function verifiedContributorBadge(item) {
+    if (!item?.is_verified_contributor) return '<span class="muted">Neverificat</span>';
+    return '<span class="badge active">Contributor verificat</span>';
+}
+
+async function toggleContributorVerification(userId, shouldVerify) {
+    if (!userId) return;
+    if (!shouldVerify && !confirm('Elimini verificarea pentru acest contributor?')) return;
+    UI.hideAlert('error-msg');
+    try {
+        await API.patch(`/admin/contributors/${userId}/verification`, {
+            is_verified_contributor: Boolean(shouldVerify),
+        });
+        await loadContributorAnalytics();
+    } catch (error) {
+        UI.showError('error-msg', `Nu am putut actualiza verificarea: ${error.message}`);
+    }
 }
 
 function renderSimpleCountTable(tableBodyId, items, labelKey, countKey, emptyText) {
