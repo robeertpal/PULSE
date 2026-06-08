@@ -1,10 +1,14 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/content_item.dart';
 import '../services/api_service.dart';
-import '../theme/pulse_theme.dart';
 import '../widgets/content_card.dart';
-import '../widgets/pulse_animated_background.dart';
+import '../widgets/skeleton_loading.dart';
+import 'profile_screen.dart';
 
 class PartnerProfileScreen extends StatefulWidget {
   final int partnerId;
@@ -24,7 +28,21 @@ class PartnerProfileScreen extends StatefulWidget {
   State<PartnerProfileScreen> createState() => _PartnerProfileScreenState();
 }
 
-class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
+class _PartnerProfileScreenState extends State<PartnerProfileScreen>
+    with SingleTickerProviderStateMixin {
+  // ── Design tokens ──────────────────────────────────────────────────────────
+  static const Color _black = Color(0xFF050505);
+  static const Color _surface = Color(0xFF101010);
+  static const Color _surfaceSoft = Color(0xFF181818);
+  static const Color _pink = Color(0xFFFF4FA3);
+  static const Color _orange = Color(0xFFFF8A2A);
+  static const LinearGradient _accentGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [_pink, _orange],
+  );
+
+  // ── State ──────────────────────────────────────────────────────────────────
   final ApiService _apiService = ApiService();
   Map<String, dynamic>? _profile;
   List<ContentItem> _items = [];
@@ -34,12 +52,30 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
   bool _isFollowLoading = false;
   String? _errorMessage;
 
+  late final AnimationController _heroController;
+  late final Animation<double> _heroFade;
+
   @override
   void initState() {
     super.initState();
+    _heroController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 480),
+    );
+    _heroFade = CurvedAnimation(
+      parent: _heroController,
+      curve: Curves.easeOutCubic,
+    );
     _loadProfile();
   }
 
+  @override
+  void dispose() {
+    _heroController.dispose();
+    super.dispose();
+  }
+
+  // ── Data helpers ───────────────────────────────────────────────────────────
   String? _clean(dynamic value) {
     final text = value?.toString().trim();
     if (text == null || text.isEmpty) return null;
@@ -55,20 +91,34 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
   String? get _websiteUrl =>
       _clean(_profile?['website_url']) ?? _clean(widget.initialWebsiteUrl);
 
-  int get _contentCount {
-    final value = _profile?['content_count'];
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return _items.length;
+  String? get _description => _clean(_profile?['description']);
+
+
+
+  List<ContentItem> _parseContentItems(dynamic rawContents) {
+    if (rawContents is! List) return const [];
+    final items = <ContentItem>[];
+    for (final rawItem in rawContents) {
+      if (rawItem is! Map<String, dynamic>) continue;
+      try {
+        items.add(ContentItem.fromJson(rawItem));
+      } catch (error) {
+        debugPrint('Ignored invalid partner content item: $error');
+      }
+    }
+    return items;
   }
 
-  int get _upcomingEventCount {
-    final value = _profile?['upcoming_event_count'];
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return 0;
+  String _initials(String name) {
+    final parts = name
+        .split(RegExp(r'\s+'))
+        .where((part) => part.trim().isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return 'P';
+    return parts.map((part) => part[0].toUpperCase()).take(2).join();
   }
 
+  // ── API calls ──────────────────────────────────────────────────────────────
   Future<void> _loadProfile() async {
     setState(() {
       _isLoading = true;
@@ -77,7 +127,6 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
 
     try {
       final profileFuture = _apiService.getPartnerProfile(widget.partnerId);
-      final contentFuture = _apiService.getPartnerContent(widget.partnerId);
       final savedFuture = _apiService.getSavedContentIds();
       final followFuture = _apiService.getFollowStatus(
         targetType: 'partner',
@@ -85,7 +134,11 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
       );
 
       final profile = await profileFuture;
-      final items = await contentFuture;
+      final rawContents = profile['contents'];
+      final items = rawContents is List
+          ? _parseContentItems(rawContents)
+          : await _apiService.getPartnerContent(widget.partnerId);
+
       Set<int> savedIds = {};
       var isFollowing = false;
       try {
@@ -107,6 +160,7 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
         _isFollowing = isFollowing;
         _isLoading = false;
       });
+      _heroController.forward();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -116,16 +170,37 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
     }
   }
 
+  Future<void> _openWebsite() async {
+    final websiteUrl = _websiteUrl;
+    if (websiteUrl == null) return;
+
+    final normalized =
+        websiteUrl.startsWith('http://') || websiteUrl.startsWith('https://')
+        ? websiteUrl
+        : 'https://$websiteUrl';
+    final uri = Uri.tryParse(normalized);
+    if (uri == null) return;
+
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Nu am putut deschide site-ul partenerului.'),
+          backgroundColor: _surfaceSoft,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+      );
+    }
+  }
+
   Future<void> _loadSavedIds() async {
     try {
       final savedIds = await _apiService.getSavedContentIds();
       if (!mounted) return;
-      setState(() {
-        _savedContentIds = savedIds;
-      });
-    } catch (_) {
-      // Saved state is useful, but not required for reading this page.
-    }
+      setState(() => _savedContentIds = savedIds);
+    } catch (_) {}
   }
 
   Future<void> _toggleSavedContent(int contentItemId) async {
@@ -148,7 +223,10 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(wasSaved ? 'Eliminat din salvate' : 'Salvat'),
+          backgroundColor: _surfaceSoft,
           behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
       );
     } catch (_) {
@@ -161,9 +239,12 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
         }
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nu am putut actualiza salvarea'),
+        SnackBar(
+          content: const Text('Nu am putut actualiza salvarea'),
+          backgroundColor: _surfaceSoft,
           behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
       );
     }
@@ -197,247 +278,421 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
                 ? 'Nu mai urmaresti aceasta organizatie.'
                 : 'Urmaresti aceasta organizatie.',
           ),
+          backgroundColor: _surfaceSoft,
           behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
       );
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _isFollowing = wasFollowing;
-      });
+      setState(() => _isFollowing = wasFollowing);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nu am putut actualiza follow-ul.'),
+        SnackBar(
+          content: const Text('Nu am putut actualiza follow-ul.'),
+          backgroundColor: _surfaceSoft,
           behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isFollowLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isFollowLoading = false);
     }
   }
 
-  String _initials(String name) {
-    final parts = name
-        .split(RegExp(r'\s+'))
-        .where((part) => part.trim().isNotEmpty)
-        .toList();
-    if (parts.isEmpty) return 'P';
-    return parts.map((part) => part[0].toUpperCase()).take(2).join();
+  // ── Build helpers ──────────────────────────────────────────────────────────
+
+  /// Renders a small SVG icon with optional color filter.
+  Widget _svgIcon(String asset, {double size = 16, Color? color}) {
+    return SvgPicture.asset(
+      asset,
+      width: size,
+      height: size,
+      colorFilter:
+          color == null ? null : ColorFilter.mode(color, BlendMode.srcIn),
+    );
   }
 
+  /// Glass card consistent with profile_screen _GlassCard.
+  Widget _glassCard({required Widget child, EdgeInsetsGeometry? padding}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(26),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          width: double.infinity,
+          padding: padding ?? const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: _surface.withValues(alpha: 0.86),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.34),
+                blurRadius: 24,
+                offset: const Offset(0, 14),
+                spreadRadius: -14,
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  // ── Logo ───────────────────────────────────────────────────────────────────
   Widget _buildLogo() {
     final logoUrl = _logoUrl;
-    return Container(
-      width: 82,
-      height: 82,
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        gradient: PulseTheme.primaryGradient,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: logoUrl != null &&
-                (logoUrl.startsWith('http://') ||
-                    logoUrl.startsWith('https://'))
-            ? Image.network(
-                logoUrl,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) =>
-                    _buildLogoFallback(),
-              )
-            : _buildLogoFallback(),
-      ),
-    );
-  }
+    final hasValidUrl =
+        logoUrl != null &&
+        (logoUrl.startsWith('http://') || logoUrl.startsWith('https://'));
 
-  Widget _buildLogoFallback() {
-    return Container(
-      color: PulseTheme.surfaceElevated,
-      child: Center(
-        child: Text(
-          _initials(_displayName),
-          style: const TextStyle(
-            color: PulseTheme.textPrimary,
-            fontSize: 24,
-            fontWeight: FontWeight.w900,
-          ),
+    if (!hasValidUrl) {
+      // Fallback: initials with gradient, no outer ring
+      return Container(
+        width: 96,
+        height: 96,
+        decoration: BoxDecoration(
+          gradient: _accentGradient,
+          borderRadius: BorderRadius.circular(24),
         ),
-      ),
-    );
-  }
-
-  Widget _buildFollowButton() {
-    return OutlinedButton.icon(
-      onPressed: _isFollowLoading ? null : _toggleFollow,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: _isFollowing
-            ? PulseTheme.textPrimary
-            : PulseTheme.primaryLight,
-        side: BorderSide(
-          color: _isFollowing
-              ? Colors.white.withValues(alpha: 0.18)
-              : PulseTheme.primaryLight.withValues(alpha: 0.42),
-        ),
-        backgroundColor: _isFollowing
-            ? Colors.white.withValues(alpha: 0.10)
-            : PulseTheme.primary.withValues(alpha: 0.10),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-      ),
-      icon: _isFollowLoading
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(
-              _isFollowing
-                  ? Icons.check_circle_rounded
-                  : Icons.add_circle_outline_rounded,
-              size: 18,
-            ),
-      label: Text(
-        _isFollowing ? 'Following' : 'Follow',
-        style: const TextStyle(fontWeight: FontWeight.w900),
-      ),
-    );
-  }
-
-  Widget _buildStat(String value, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
+        child: Center(
+          child: Text(
+            _initials(_displayName),
             style: const TextStyle(
-              color: PulseTheme.textPrimary,
-              fontSize: 17,
+              color: Colors.white,
+              fontSize: 32,
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(
-              color: PulseTheme.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+        ),
+      );
+    }
+
+    // Raw logo — no background, no ring, no gradient wrapper
+    return SizedBox(
+      width: 96,
+      height: 96,
+      child: Image.network(
+        logoUrl,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => Container(
+          width: 96,
+          height: 96,
+          decoration: BoxDecoration(
+            gradient: _accentGradient,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Center(
+            child: Text(
+              _initials(_displayName),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildHeader() {
-    final websiteUrl = _websiteUrl;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-        boxShadow: PulseTheme.cardShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              _buildLogo(),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _displayName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: PulseTheme.textPrimary,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                        height: 1.08,
-                      ),
-                    ),
-                    if (websiteUrl != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        websiteUrl,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: PulseTheme.textSecondary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
+  // ── Follow button ─────────────────────────────────────────────────────────
+  Widget _buildFollowButton() {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(999),
+      child: _isFollowing
+          ? Ink(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.18),
+                ),
+              ),
+              child: InkWell(
+                onTap: _isFollowLoading ? null : _toggleFollow,
+                borderRadius: BorderRadius.circular(999),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 13,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _isFollowLoading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : _svgIcon(
+                              'assets/icons/checkmark.svg',
+                              size: 15,
+                              color: Colors.white,
+                            ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Urmărești',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
                     ],
-                  ],
+                  ),
                 ),
               ),
-            ],
+            )
+          : Ink(
+              decoration: BoxDecoration(
+                gradient: _accentGradient,
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: _pink.withValues(alpha: 0.30),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                    spreadRadius: -4,
+                  ),
+                ],
+              ),
+              child: InkWell(
+                onTap: _isFollowLoading ? null : _toggleFollow,
+                borderRadius: BorderRadius.circular(999),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 13,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _isFollowLoading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : _svgIcon(
+                              'assets/icons/people.svg',
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Urmărește',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+
+  // ── Website button ────────────────────────────────────────────────────────
+  Widget _buildWebsiteButton() {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(999),
+      child: Ink(
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: _orange.withValues(alpha: 0.30),
           ),
+        ),
+        child: InkWell(
+          onTap: _openWebsite,
+          borderRadius: BorderRadius.circular(999),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _svgIcon(
+                  'assets/icons/globe.svg',
+                  size: 16,
+                  color: _orange,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Site partener',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Hero / Header card ─────────────────────────────────────────────────────
+  Widget _buildHeroCard() {
+    final websiteUrl = _websiteUrl;
+    final description = _description;
+
+    return _glassCard(
+      padding: const EdgeInsets.fromLTRB(22, 28, 22, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // ── Logo ────────────────────────────────────────────────────────
+          _buildLogo(),
+
           const SizedBox(height: 18),
-          Row(
+
+          // ── Partner name ─────────────────────────────────────────────────
+          Text(
+            _displayName,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+              height: 1.1,
+            ),
+          ),
+
+          if (description != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              description,
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.55),
+                fontSize: 14,
+                height: 1.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 24),
+
+          Divider(
+            height: 1,
+            color: Colors.white.withValues(alpha: 0.08),
+          ),
+
+          const SizedBox(height: 24),
+
+          // ── Action buttons — centered ─────────────────────────────────────
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 12,
+            runSpacing: 12,
             children: [
-              Expanded(
-                child: _buildStat(
-                  _contentCount.toString(),
-                  _contentCount == 1 ? 'material public' : 'materiale publice',
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildStat(
-                  _upcomingEventCount.toString(),
-                  _upcomingEventCount == 1
-                      ? 'eveniment viitor'
-                      : 'evenimente viitoare',
-                ),
-              ),
+              _buildFollowButton(),
+              if (websiteUrl != null) _buildWebsiteButton(),
             ],
           ),
-          const SizedBox(height: 18),
-          _buildFollowButton(),
         ],
       ),
     );
   }
 
+  // ── Content section label ─────────────────────────────────────────────────
+  Widget _buildSectionLabel(String text) {
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 22,
+          decoration: BoxDecoration(
+            gradient: _accentGradient,
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          text,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -0.3,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Content list ───────────────────────────────────────────────────────────
   Widget _buildContentList() {
     if (_items.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(22),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-        ),
-        child: const Text(
-          'Nu exista continut public pentru acest partener momentan.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: PulseTheme.textSecondary,
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-          ),
+      return _glassCard(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
+        child: Column(
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: _surface,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Center(
+                child: _svgIcon(
+                  'assets/icons/books.svg',
+                  size: 34,
+                  color: Colors.white.withValues(alpha: 0.14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Niciun conținut publicat',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Acest partener nu are conținut publicat momentan.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.48),
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -445,15 +700,8 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Continut asociat',
-          style: TextStyle(
-            color: PulseTheme.textPrimary,
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        const SizedBox(height: 14),
+        _buildSectionLabel('Conținut publicat'),
+        const SizedBox(height: 16),
         ..._items.map(
           (item) => Padding(
             padding: const EdgeInsets.only(bottom: 16),
@@ -475,49 +723,120 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
     );
   }
 
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: PulseTheme.primaryLight),
-      );
-    }
+  // ── Loading state ─────────────────────────────────────────────────────────
+  Widget _buildSkeletons() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 32),
+      children: [
+        const SkeletonBlock(height: 320, radius: 26),
+        const SizedBox(height: 24),
+        const SkeletonBlock(height: 20, radius: 8),
+        const SizedBox(height: 14),
+        const SkeletonBlock(height: 260, radius: 20),
+        const SizedBox(height: 16),
+        const SkeletonBlock(height: 260, radius: 20),
+      ],
+    );
+  }
 
-    if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: PulseTheme.textSecondary),
+  // ── Error state ────────────────────────────────────────────────────────────
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: _surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
               ),
-              const SizedBox(height: 14),
-              OutlinedButton(
-                onPressed: _loadProfile,
-                child: const Text('Reincearca'),
+              child: Center(
+                child: _svgIcon(
+                  'assets/icons/globe.svg',
+                  size: 32,
+                  color: Colors.white.withValues(alpha: 0.16),
+                ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'A apărut o eroare',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage ?? '',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.50),
+                fontSize: 15,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 28),
+            Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+              child: Ink(
+                decoration: BoxDecoration(
+                  gradient: _accentGradient,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: InkWell(
+                  onTap: _loadProfile,
+                  borderRadius: BorderRadius.circular(16),
+                  child: const Padding(
+                    padding:
+                        EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                    child: Text(
+                      'Încearcă din nou',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-      );
-    }
+      ),
+    );
+  }
+
+  // ── Main body ──────────────────────────────────────────────────────────────
+  Widget _buildBody() {
+    if (_isLoading) return _buildSkeletons();
+    if (_errorMessage != null) return _buildErrorState();
 
     return RefreshIndicator(
-      color: PulseTheme.primaryLight,
+      color: _pink,
+      backgroundColor: _surface,
       onRefresh: _loadProfile,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: BouncingScrollPhysics(),
+      child: FadeTransition(
+        opacity: _heroFade,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
+          children: [
+            _buildHeroCard(),
+            const SizedBox(height: 28),
+            _buildContentList(),
+          ],
         ),
-        padding: const EdgeInsets.fromLTRB(18, 10, 18, 28),
-        children: [
-          _buildHeader(),
-          const SizedBox(height: 24),
-          _buildContentList(),
-        ],
       ),
     );
   }
@@ -525,14 +844,23 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: PulseTheme.background,
-      appBar: AppBar(title: const Text('Profil partener')),
-      body: Stack(
-        children: [
-          const Positioned.fill(child: PulseAnimatedBackground()),
-          _buildBody(),
-        ],
+      backgroundColor: _black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        toolbarHeight: 76,
+        leadingWidth: 72,
+        titleSpacing: 0,
+        centerTitle: false,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 18),
+          child: ProfileBackButton(
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+        ),
+        title: const ProfileGradientHeading('Profil partener'),
       ),
+      body: _buildBody(),
     );
   }
 }

@@ -1818,7 +1818,7 @@ class ApiService {
   Future<Map<String, dynamic>> getPartnerProfile(int partnerId) async {
     try {
       final response = await http
-          .get(Uri.parse('$_baseUrl/partners/$partnerId'))
+          .get(Uri.parse('$_baseUrl/api/partners/$partnerId/profile'))
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 404) {
@@ -1847,7 +1847,7 @@ class ApiService {
   }) async {
     try {
       final uri = Uri.parse(
-        '$_baseUrl/partners/$partnerId/content',
+        '$_baseUrl/api/partners/$partnerId/content',
       ).replace(queryParameters: {'limit': limit.toString()});
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
 
