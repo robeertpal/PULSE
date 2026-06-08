@@ -89,13 +89,17 @@ class SecurityTests(unittest.TestCase):
         main.app.dependency_overrides[main.get_db] = lambda: fake_db
         main.app.dependency_overrides[main.get_current_user_id] = lambda: 7
 
-        with patch(
-            "main.get_public_content_item_or_404",
-            lambda db, content_item_id: SimpleNamespace(id=content_item_id),
-        ):
+        checked_user_ids = []
+
+        def fake_get_public_content_item_or_404(db, content_item_id, user_id=None):
+            checked_user_ids.append(user_id)
+            return SimpleNamespace(id=content_item_id)
+
+        with patch("main.get_public_content_item_or_404", fake_get_public_content_item_or_404):
             response = client.post("/saved-content/123?user_id=999")
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(checked_user_ids, [7])
         self.assertEqual(fake_db.added.user_id, 7)
         self.assertEqual(fake_db.added.content_item_id, 123)
 

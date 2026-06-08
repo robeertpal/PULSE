@@ -621,17 +621,131 @@ def get_optional_current_user_id(
     return user.id
 
 
-def visible_content_query(db: Session):
-    return (
+def _public_availability_now() -> datetime:
+    return datetime.utcnow()
+
+
+def apply_public_opportunity_window_filter(query, now: Optional[datetime] = None):
+    comparable_now = now or _public_availability_now()
+    return query.filter(
+        or_(
+            models.ContentItem.content_type != models.ContentItemType.event,
+            models.ContentItem.event.has(
+                or_(
+                    models.Event.start_date.is_(None),
+                    models.Event.start_date >= comparable_now,
+                )
+            ),
+        )
+    ).filter(
+        or_(
+            models.ContentItem.content_type != models.ContentItemType.course,
+            models.ContentItem.course.has(
+                or_(
+                    models.Course.valid_from.is_(None),
+                    models.Course.valid_from >= comparable_now,
+                )
+            ),
+        )
+    )
+
+
+def _datetime_is_past(value: Optional[datetime], now: Optional[datetime] = None) -> bool:
+    if value is None:
+        return False
+    comparable_value = value
+    if comparable_value.tzinfo is not None:
+        comparable_value = comparable_value.astimezone(timezone.utc).replace(tzinfo=None)
+    return comparable_value < (now or _public_availability_now())
+
+
+def is_expired_public_opportunity(item: models.ContentItem, now: Optional[datetime] = None) -> bool:
+    content_type = serialize_value(item.content_type)
+    if content_type == "event" and item.event:
+        return _datetime_is_past(item.event.start_date, now)
+    if content_type == "course" and item.course:
+        return _datetime_is_past(item.course.valid_from, now)
+    return False
+
+
+def user_has_existing_opportunity_access(db: Session, item: models.ContentItem, user_id: Optional[int]) -> bool:
+    if user_id is None:
+        return False
+
+    content_type = serialize_value(item.content_type)
+    if content_type == "event" and item.event:
+        active_registration = (
+            db.query(models.UserEventRegistration.id)
+            .filter(
+                models.UserEventRegistration.user_id == user_id,
+                models.UserEventRegistration.event_id == item.event.id,
+                models.UserEventRegistration.status.notin_(
+                    [
+                        models.RegistrationStatus.cancelled,
+                        models.RegistrationStatus.no_show,
+                    ]
+                ),
+            )
+            .first()
+        )
+        if active_registration is not None:
+            return True
+
+        paid_payment = (
+            db.query(models.Payment.id)
+            .filter(
+                models.Payment.user_id == user_id,
+                models.Payment.content_item_id == item.id,
+                models.Payment.status == models.PaymentStatus.paid,
+            )
+            .first()
+        )
+        return paid_payment is not None
+
+    if content_type == "course" and item.course:
+        enrollment = (
+            db.query(models.UserCourse.id)
+            .filter(
+                models.UserCourse.user_id == user_id,
+                models.UserCourse.course_id == item.course.id,
+                models.UserCourse.status != models.UserCourseStatus.cancelled,
+            )
+            .first()
+        )
+        return enrollment is not None
+
+    return False
+
+
+def ensure_public_opportunity_access(
+    db: Session,
+    item: models.ContentItem,
+    user_id: Optional[int] = None,
+) -> None:
+    if not is_expired_public_opportunity(item):
+        return
+    if user_has_existing_opportunity_access(db, item, user_id):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Această oportunitate nu mai este disponibilă public.",
+    )
+
+
+def visible_content_query(db: Session, include_expired_opportunities: bool = False):
+    query = (
         db.query(models.ContentItem)
         .filter(models.ContentItem.is_active == True)
         .filter(models.ContentItem.deleted_at.is_(None))
         .filter(models.ContentItem.status == models.ContentStatus.published)
     )
+    if not include_expired_opportunities:
+        query = apply_public_opportunity_window_filter(query)
+    return query
 
 
-def visible_content_card_query(db: Session):
-    return visible_content_query(db).options(
+def visible_content_card_query(db: Session, include_expired_opportunities: bool = False):
+    return visible_content_query(db, include_expired_opportunities).options(
         joinedload(models.ContentItem.category),
         joinedload(models.ContentItem.specialization),
         joinedload(models.ContentItem.event).joinedload(models.Event.city),
@@ -1545,14 +1659,19 @@ def _ensure_registration_schema(db: Session) -> None:
     db.commit()
 
 
-def get_public_content_item_or_404(db: Session, content_item_id: int):
+def get_public_content_item_or_404(
+    db: Session,
+    content_item_id: int,
+    user_id: Optional[int] = None,
+):
     item = (
-        visible_content_card_query(db)
+        visible_content_card_query(db, include_expired_opportunities=True)
         .filter(models.ContentItem.id == content_item_id)
         .first()
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Content item not found")
+    ensure_public_opportunity_access(db, item, user_id)
     return item
 
 
@@ -4525,7 +4644,7 @@ def track_user_activity(
         raise HTTPException(status_code=422, detail="content_item_id este necesar pentru această activitate.")
 
     if payload.content_item_id is not None:
-        get_public_content_item_or_404(db, payload.content_item_id)
+        get_public_content_item_or_404(db, payload.content_item_id, user_id)
 
     log = models.UserActivityLog(
         user_id=user_id,
@@ -4661,9 +4780,10 @@ def get_content_items(
 @app.get("/content-items/{content_item_id}")
 def get_content_item_detail(
     content_item_id: int,
+    user_id: Optional[int] = Depends(get_optional_current_user_id),
     db: Session = Depends(get_db),
 ):
-    item = get_public_content_item_or_404(db, content_item_id)
+    item = get_public_content_item_or_404(db, content_item_id, user_id)
     data = serialize_model(item, include_relationships=True)
     card_data = serialize_content_card(item)
     for key, value in card_data.items():
@@ -4730,7 +4850,7 @@ def report_content_item(
     user_id: int = Depends(get_current_user_id),
 ):
     require_rate_limit(request, "content_report", "WRITE_RATE_LIMIT_PER_MINUTE", 30)
-    item = get_public_content_item_or_404(db, content_id)
+    item = get_public_content_item_or_404(db, content_id, user_id)
     report = models.ContentReport(
         content_id=item.id,
         reporter_user_id=user_id,
@@ -4883,6 +5003,7 @@ def get_events(
 @app.get("/events/{event_id}")
 def get_event_detail(
     event_id: int,
+    user_id: Optional[int] = Depends(get_optional_current_user_id),
     db: Session = Depends(get_db),
 ):
     try:
@@ -4933,6 +5054,15 @@ def get_event_detail(
         ).mappings().first()
         if row is None:
             raise HTTPException(status_code=404, detail="Evenimentul nu a fost găsit")
+
+        item = (
+            visible_content_card_query(db, include_expired_opportunities=True)
+            .filter(models.ContentItem.id == row["content_item_id"])
+            .first()
+        )
+        if item is None:
+            raise HTTPException(status_code=404, detail="Evenimentul nu a fost găsit")
+        ensure_public_opportunity_access(db, item, user_id)
 
         data = serialize_event_view_row(row, partners=get_event_partners_by_event_id(db, event_id))
         apply_next_price_change_to_payload(
@@ -5221,8 +5351,8 @@ def get_saved_content_ids(
         .filter(models.ContentItem.is_active == True)
         .filter(models.ContentItem.deleted_at.is_(None))
         .filter(models.ContentItem.status == models.ContentStatus.published)
-        .all()
     )
+    rows = apply_public_opportunity_window_filter(rows).all()
     return [row[0] for row in rows]
 
 
@@ -5241,6 +5371,9 @@ def get_saved_content(
         .filter(models.ContentItem.is_active == True)
         .filter(models.ContentItem.deleted_at.is_(None))
         .filter(models.ContentItem.status == models.ContentStatus.published)
+    )
+    saved_rows = (
+        apply_public_opportunity_window_filter(saved_rows)
         .order_by(models.SavedContent.saved_at.desc().nullslast())
         .all()
     )
@@ -5275,7 +5408,7 @@ def save_content(
     user_id: int = Depends(get_current_user_id),
 ):
     require_rate_limit(request, "saved_content_write", "WRITE_RATE_LIMIT_PER_MINUTE", 60)
-    get_public_content_item_or_404(db, content_item_id)
+    get_public_content_item_or_404(db, content_item_id, user_id)
 
     existing = (
         db.query(models.SavedContent)
@@ -6994,6 +7127,11 @@ def register_for_event(
             "message": "Ești deja înscris la acest eveniment.",
             "ticket_code": existing.ticket_code,
         }
+    if _datetime_is_past(event.start_date):
+        raise HTTPException(
+            status_code=403,
+            detail="Evenimentul nu mai este disponibil pentru înscrieri noi.",
+        )
 
     registration = models.UserEventRegistration(
         user_id=user_id,
@@ -7048,6 +7186,11 @@ def pay_and_register_for_event(
     )
     if existing:
         raise HTTPException(status_code=400, detail="Ești deja înscris la acest eveniment.")
+    if _datetime_is_past(event.start_date):
+        raise HTTPException(
+            status_code=403,
+            detail="Evenimentul nu mai este disponibil pentru cumpărare sau înscriere.",
+        )
 
     payment_method = (
         db.query(models.UserPaymentMethod)
@@ -7339,6 +7482,11 @@ def enroll_in_course(
             "progress_percent": existing.progress_percent,
             "enrolled_at": serialize_value(existing.enrolled_at),
         }
+    if _datetime_is_past(course.valid_from):
+        raise HTTPException(
+            status_code=403,
+            detail="Cursul nu mai este disponibil pentru înscrieri noi.",
+        )
 
     enrollment = models.UserCourse(
         user_id=user_id,
