@@ -34,7 +34,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from pypdf import PdfReader
-from sqlalchemy import bindparam, func, or_, text
+from sqlalchemy import and_, bindparam, func, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, object_session
 
@@ -606,6 +606,24 @@ def visible_content_card_query(db: Session):
         joinedload(models.ContentItem.publication)
         .joinedload(models.Publication.author_links)
         .joinedload(models.PublicationAuthor.author),
+    )
+
+
+def exclude_expired_public_courses(query):
+    now = datetime.utcnow()
+    active_course_window = and_(
+        or_(models.Course.valid_from.is_(None), models.Course.valid_from > now),
+        or_(models.Course.valid_until.is_(None), models.Course.valid_until >= now),
+    )
+    return query.outerjoin(
+        models.Course,
+        models.Course.content_item_id == models.ContentItem.id,
+    ).filter(
+        or_(
+            models.ContentItem.content_type != models.ContentItemType.course,
+            models.Course.id.is_(None),
+            active_course_window,
+        )
     )
 
 
@@ -4241,7 +4259,7 @@ def get_for_you_recommendations(
 ):
     require_rate_limit(request, "for_you", "READ_RATE_LIMIT_PER_MINUTE", 90)
     candidates = (
-        visible_content_card_query(db)
+        exclude_expired_public_courses(visible_content_card_query(db))
         .order_by(*public_content_ordering())
         .limit(160)
         .all()
@@ -4336,7 +4354,7 @@ def get_content_items(
     db: Session = Depends(get_db),
 ):
     try:
-        query = visible_content_card_query(db)
+        query = exclude_expired_public_courses(visible_content_card_query(db))
         query = apply_content_filters(query, category_ids, specialization_ids)
         items = query.offset(skip).limit(limit).all()
         return [serialize_model(item, include_relationships=True) for item in items]
@@ -4409,7 +4427,7 @@ def get_featured_content(
 ):
     try:
         query = (
-            visible_content_card_query(db)
+            exclude_expired_public_courses(visible_content_card_query(db))
             .filter(models.ContentItem.is_featured == True)
         )
         query = apply_content_filters(query, category_ids, specialization_ids)
@@ -4482,7 +4500,9 @@ def get_courses(
     db: Session = Depends(get_db),
 ):
     try:
-        query = visible_content_card_query(db).filter(models.ContentItem.content_type == models.ContentItemType.course)
+        query = exclude_expired_public_courses(
+            visible_content_card_query(db)
+        ).filter(models.ContentItem.content_type == models.ContentItemType.course)
         query = apply_content_filters(query, category_ids, specialization_ids)
         items = (
             query
@@ -4601,7 +4621,9 @@ def get_courses_events(
     db: Session = Depends(get_db),
 ):
     try:
-        query = visible_content_card_query(db).filter(
+        query = exclude_expired_public_courses(
+            visible_content_card_query(db)
+        ).filter(
             models.ContentItem.content_type.in_(
                 [models.ContentItemType.course, models.ContentItemType.event]
             )
@@ -6016,6 +6038,9 @@ def get_my_payments(
             "payment_method_id": payment.payment_method_id,
             "content_item_id": payment.content_item_id,
             "content_title": payment.content_item.title if payment.content_item else None,
+            "content_short_description": payment.content_item.short_description if payment.content_item else None,
+            "content_hero_image_url": payment.content_item.hero_image_url if payment.content_item else None,
+            "content_thumbnail_url": payment.content_item.thumbnail_url if payment.content_item else None,
             "content_type": serialize_value(payment.content_item.content_type) if payment.content_item else None,
             "event_id": event_id,
             "registration_status": registration_status.value if registration_status else None,
@@ -6055,6 +6080,7 @@ def get_my_tickets(
             "event_id": registration.event_id,
             "content_item_id": content_item.id if content_item else None,
             "event_title": content_item.title if content_item else None,
+            "short_description": content_item.short_description if content_item else None,
             "ticket_code": registration.ticket_code,
             "registration_status": registration.status.value if registration.status else None,
             "registered_at": serialize_value(registration.registered_at),
