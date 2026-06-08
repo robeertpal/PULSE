@@ -5967,6 +5967,80 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
     }
 
 
+def _emc_source_label(source_type: Optional[str]) -> str:
+    normalized = (source_type or "").strip().lower()
+    return {
+        "course": "Curs",
+        "event": "Eveniment",
+        "publication": "Revistă",
+        "publication_subscription": "Abonament revistă",
+        "manual": "Activitate EMC",
+    }.get(normalized, "Activitate EMC")
+
+
+def _resolve_emc_source_title(db: Session, source_type: Optional[str], source_id: Optional[int]) -> str:
+    normalized = (source_type or "").strip().lower()
+    if source_id is None:
+        return "Activitate EMC"
+
+    if normalized == "course":
+        row = (
+            db.query(models.ContentItem.title)
+            .join(models.Course, models.Course.content_item_id == models.ContentItem.id)
+            .filter(models.Course.id == source_id)
+            .first()
+        )
+        return row[0] if row and row[0] else "Activitate EMC"
+
+    if normalized == "event":
+        row = (
+            db.query(models.ContentItem.title)
+            .join(models.Event, models.Event.content_item_id == models.ContentItem.id)
+            .filter(models.Event.id == source_id)
+            .first()
+        )
+        return row[0] if row and row[0] else "Activitate EMC"
+
+    if normalized in {"publication", "publication_subscription"}:
+        row = (
+            db.query(models.Publication.name)
+            .filter(models.Publication.id == source_id)
+            .first()
+        )
+        return row[0] if row and row[0] else "Activitate EMC"
+
+    return "Activitate EMC"
+
+
+@app.get("/api/me/emc-activity")
+def get_my_emc_activity(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    logs = (
+        db.query(models.UserEmcPointLog)
+        .filter(models.UserEmcPointLog.user_id == user_id)
+        .order_by(
+            models.UserEmcPointLog.awarded_at.desc().nullslast(),
+            models.UserEmcPointLog.id.desc(),
+        )
+        .all()
+    )
+
+    return [
+        {
+            "id": log.id,
+            "points": log.points,
+            "source_type": log.source_type,
+            "source_id": log.source_id,
+            "source_title": _resolve_emc_source_title(db, log.source_type, log.source_id),
+            "source_label": _emc_source_label(log.source_type),
+            "awarded_at": serialize_value(log.awarded_at),
+        }
+        for log in logs
+    ]
+
+
 @app.post("/api/me/profile/avatar")
 async def upload_my_profile_avatar(
     request: Request,
