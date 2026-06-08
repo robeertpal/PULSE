@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import 'content_detail_screen.dart';
 import 'profile_screen.dart';
 
 class TicketDetailScreen extends StatelessWidget {
@@ -11,6 +12,7 @@ class TicketDetailScreen extends StatelessWidget {
 
   static const Color _black = Color(0xFF050505);
   static const Color _surface = Color(0xFF101010);
+  static const Color _surfaceSoft = Color(0xFF181818);
   static const Color _orange = Color(0xFFF97316);
 
   String _formatDate(String? isoDate) {
@@ -42,11 +44,161 @@ class TicketDetailScreen extends StatelessWidget {
     }
   }
 
+  int? _readInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  String? _readText(Object? value) {
+    final text = value?.toString().trim();
+    if (text == null || text.isEmpty) return null;
+    return text;
+  }
+
+  void _openContentDetail(BuildContext context, int contentItemId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ContentDetailScreen(contentItemId: contentItemId),
+      ),
+    );
+  }
+
+  Widget _buildProfileStyleButton({
+    required String label,
+    required VoidCallback? onPressed,
+  }) {
+    final enabled = onPressed != null;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(17),
+      child: Ink(
+        height: 50,
+        decoration: BoxDecoration(
+          gradient: enabled
+              ? const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFFFF4FA3), Color(0xFFFF8A2A)],
+                )
+              : null,
+          color: enabled ? null : Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(17),
+        ),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(17),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: enabled ? Colors.white : Colors.white54,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroSection({
+    required String title,
+    required String? description,
+    required String? imageUrl,
+  }) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          if (imageUrl != null)
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  color: _surfaceSoft,
+                  child: Center(
+                    child: SvgPicture.asset(
+                      'assets/icons/events.svg',
+                      width: 42,
+                      height: 42,
+                      colorFilter: const ColorFilter.mode(
+                        _orange,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              children: [
+                if (imageUrl == null) ...[
+                  SvgPicture.asset(
+                    'assets/icons/events.svg',
+                    width: 36,
+                    height: 36,
+                    colorFilter: const ColorFilter.mode(
+                      _orange,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                ],
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                    letterSpacing: -0.4,
+                  ),
+                ),
+                if (description != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    description,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.58),
+                      fontSize: 14,
+                      height: 1.45,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = ticket['event_title'] as String? ?? 'Eveniment PULSE';
+    final description = _readText(ticket['short_description']);
+    final imageUrl =
+        _readText(ticket['hero_image_url']) ??
+        _readText(ticket['thumbnail_url']);
     final dateStr = ticket['start_date'] as String?;
     final ticketCode = ticket['ticket_code'] as String?;
+    final contentItemId = _readInt(ticket['content_item_id']);
 
     final venueName = ticket['venue_name'] as String?;
     final cityName = ticket['city_name'] as String?;
@@ -87,6 +239,12 @@ class TicketDetailScreen extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
+                    _buildHeroSection(
+                      title: title,
+                      description: description,
+                      imageUrl: imageUrl,
+                    ),
+                    const SizedBox(height: 18),
                     Container(
                       width: double.infinity,
                       decoration: BoxDecoration(
@@ -98,40 +256,6 @@ class TicketDetailScreen extends StatelessWidget {
                       ),
                       child: Column(
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              children: [
-                                SvgPicture.asset(
-                                  'assets/icons/events.svg',
-                                  width: 34,
-                                  height: 34,
-                                  colorFilter: const ColorFilter.mode(
-                                    _orange,
-                                    BlendMode.srcIn,
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
-                                Text(
-                                  title,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                    height: 1.2,
-                                    letterSpacing: -0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          Divider(
-                            height: 1,
-                            color: Colors.white.withValues(alpha: 0.05),
-                          ),
-
                           Padding(
                             padding: const EdgeInsets.all(24),
                             child: Column(
@@ -203,6 +327,13 @@ class TicketDetailScreen extends StatelessWidget {
                           ],
                         ],
                       ),
+                    ),
+                    const SizedBox(height: 18),
+                    _buildProfileStyleButton(
+                      label: 'Vezi detalii',
+                      onPressed: contentItemId == null
+                          ? null
+                          : () => _openContentDetail(context, contentItemId),
                     ),
                     const SizedBox(height: 32),
                   ],
