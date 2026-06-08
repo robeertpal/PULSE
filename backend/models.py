@@ -791,6 +791,18 @@ class AuditLog(Base):
     created_at = Column(DateTime(timezone=True))
 
 
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_user_id = Column(Integer)
+    action = Column(String(100), nullable=False, index=True)
+    target_type = Column(String(100), index=True)
+    target_id = Column(Integer, index=True)
+    details = Column(JSONB)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class EventGallery(Base):
     __tablename__ = "event_gallery"
 
