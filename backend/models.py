@@ -233,6 +233,7 @@ class UserProfile(Base):
     cod_parafa = Column(String(255))
     professional_registration_code = Column(String(255))
     titlu_universitar = Column(String(255))
+    photo_url = Column(Text)
     acord_email = Column(Boolean, nullable=False, default=False)
     acord_sms = Column(Boolean, nullable=False, default=False)
     gdpr_consent = Column(Boolean, nullable=False, default=False)
@@ -658,6 +659,7 @@ class UserEventRegistration(Base):
     event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
     registered_at = Column(DateTime(timezone=True))
     status = Column(Enum(RegistrationStatus, name="registration_status"), nullable=False)
+    ticket_code = Column(String(100), unique=True)
 
 
 class UserActivityLog(Base):

@@ -516,10 +516,7 @@ class ApiService {
       await _handleAuthFailure(response);
       if (response.statusCode != 200) {
         throw Exception(
-          _responseErrorMessage(
-            response,
-            'Nu am putut incarca contributiile.',
-          ),
+          _responseErrorMessage(response, 'Nu am putut incarca contributiile.'),
         );
       }
 
@@ -846,6 +843,7 @@ class ApiService {
       rethrow;
     }
   }
+
   Future<List<Map<String, dynamic>>> getMyPayments() async {
     try {
       final headers = await _buildAuthHeaders();
@@ -1393,15 +1391,18 @@ class ApiService {
   }) async {
     try {
       final headers = await _buildAuthHeaders();
+      final body = <String, dynamic>{
+        'action_type': actionType,
+        'metadata': metadata ?? <String, dynamic>{},
+      };
+      if (contentItemId != null) {
+        body['content_item_id'] = contentItemId;
+      }
       final response = await http
           .post(
             Uri.parse('$_baseUrl/user-activity'),
             headers: {...headers, 'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'action_type': actionType,
-              if (contentItemId != null) 'content_item_id': contentItemId,
-              'metadata': metadata ?? <String, dynamic>{},
-            }),
+            body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 8));
 

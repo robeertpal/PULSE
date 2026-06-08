@@ -65,7 +65,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   bool _isFollowingAuthor = false;
   bool _isAuthorFollowLoading = false;
   Set<int> _followedPartnerIds = {};
-  Set<int> _partnerFollowLoadingIds = {};
+  final Set<int> _partnerFollowLoadingIds = {};
 
   @override
   void initState() {
@@ -1003,10 +1003,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              [
-                ?date,
-                '${_readingMinutes(item)} min citire',
-              ].join(' • '),
+              [?date, '${_readingMinutes(item)} min citire'].join(' • '),
               style: const TextStyle(
                 color: PulseTheme.textSecondary,
                 fontSize: 13,
@@ -1331,7 +1328,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(15),
-      child: logoUrl != null &&
+      child:
+          logoUrl != null &&
               (logoUrl.startsWith('http://') || logoUrl.startsWith('https://'))
           ? Image.network(
               logoUrl,
@@ -1475,11 +1473,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                   color: accent.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  Icons.business_rounded,
-                  color: accent,
-                  size: 17,
-                ),
+                child: Icon(Icons.business_rounded, color: accent, size: 17),
               ),
               const SizedBox(width: 10),
               const Expanded(
@@ -1666,25 +1660,43 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
             color: PulseTheme.eventContent.withValues(alpha: 0.3),
           ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.check_circle_rounded,
-              color: PulseTheme.eventContent,
-              size: 20,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: PulseTheme.eventContent,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _eventRegistrationStatus == 'confirmed'
+                      ? 'Ești înscris (Confirmat)'
+                      : 'Ești înscris',
+                  style: const TextStyle(
+                    color: PulseTheme.eventContent,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Text(
-              _eventRegistrationStatus == 'confirmed'
-                  ? 'Ești înscris (Confirmat)'
-                  : 'Ești înscris',
-              style: const TextStyle(
-                color: PulseTheme.eventContent,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
+            if (_eventTicketCode?.trim().isNotEmpty == true) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Cod bilet: ${_eventTicketCode!.trim()}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: PulseTheme.textPrimary.withValues(alpha: 0.82),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       );
@@ -2156,6 +2168,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
       ),
     );
   }
+
   Widget _buildEventContent(ContentItem item) {
     final accent = _accentFor(item);
 

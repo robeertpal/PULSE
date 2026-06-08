@@ -39,11 +39,7 @@ class ContentSubmission {
     this.publishedContentItemId,
   });
 
-  bool get canEdit => {
-    'draft',
-    'needs_changes',
-    'rejected',
-  }.contains(status);
+  bool get canEdit => {'draft', 'needs_changes', 'rejected'}.contains(status);
 
   String get statusLabel {
     return switch (status) {
@@ -104,18 +100,29 @@ class ContentSubmission {
     String? imageUrl,
     String? sourceUrl,
   }) {
-    return {
+    final payload = <String, dynamic>{
       'title': title,
       'content_type': contentType,
-      if (categoryId != null) 'category_id': categoryId,
-      if (specializationId != null) 'specialization_id': specializationId,
-      if (summary != null && summary.trim().isNotEmpty)
-        'summary': summary.trim(),
       'body': body,
-      if (imageUrl != null && imageUrl.trim().isNotEmpty)
-        'image_url': imageUrl.trim(),
-      if (sourceUrl != null && sourceUrl.trim().isNotEmpty)
-        'source_url': sourceUrl.trim(),
     };
+    if (categoryId != null) {
+      payload['category_id'] = categoryId;
+    }
+    if (specializationId != null) {
+      payload['specialization_id'] = specializationId;
+    }
+    final trimmedSummary = summary?.trim();
+    if (trimmedSummary != null && trimmedSummary.isNotEmpty) {
+      payload['summary'] = trimmedSummary;
+    }
+    final trimmedImageUrl = imageUrl?.trim();
+    if (trimmedImageUrl != null && trimmedImageUrl.isNotEmpty) {
+      payload['image_url'] = trimmedImageUrl;
+    }
+    final trimmedSourceUrl = sourceUrl?.trim();
+    if (trimmedSourceUrl != null && trimmedSourceUrl.isNotEmpty) {
+      payload['source_url'] = trimmedSourceUrl;
+    }
+    return payload;
   }
 }
