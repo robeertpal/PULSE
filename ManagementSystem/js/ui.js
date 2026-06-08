@@ -38,6 +38,7 @@ const UI = {
                     <li><a href="partners.html" class="${activePage === 'partners' ? 'active' : ''}">Parteneri</a></li>
                     <li><a href="authors.html" class="${activePage === 'authors' ? 'active' : ''}">Autori</a></li>
                     <li><a href="publications.html" class="${activePage === 'publications' ? 'active' : ''}">Publicații</a></li>
+                    <li><a href="subscriptions.html" class="${activePage === 'subscriptions' ? 'active' : ''}">Abonamente</a></li>
                     <li><a href="ads.html" class="${activePage === 'ads' ? 'active' : ''}">Reclame</a></li>
                     <li><a href="notifications.html" class="${activePage === 'notifications' ? 'active' : ''}">Notificări</a></li>
                     <li><a href="content-reports.html" class="${activePage === 'content-reports' ? 'active' : ''}">Raportări conținut</a></li>

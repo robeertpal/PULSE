@@ -1320,7 +1320,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         ),
                         _buildCompactMenuItem(
                           iconAsset: 'assets/icons/books.svg',
-                          label: 'Revistele mele',
+                          label: 'Abonamentele mele',
                           onTap: () => closeAndRun(_openMyPublications),
                         ),
                         _buildCompactMenuItem(
