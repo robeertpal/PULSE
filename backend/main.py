@@ -56,6 +56,7 @@ from schemas import (
     UserInterestsUpdate,
     UserLogin,
     UserLogout,
+    UserProfileUpdate,
 )
 
 try:
@@ -5735,8 +5736,7 @@ def logout_user(payload: UserLogout, db: Session = Depends(get_db)):
     return {"message": "Logout successful"}
 
 
-@app.get("/api/me/profile")
-def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+def get_my_profile_or_404(db: Session, user_id: int):
     user_model = get_user_model()
     user = db.query(user_model).filter(user_model.id == user_id).first()
     if user is None:
@@ -5750,18 +5750,24 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
             joinedload(models.UserProfile.occupation),
             joinedload(models.UserProfile.specialization),
             joinedload(models.UserProfile.professional_grade),
+            joinedload(models.UserProfile.institution),
         )
         .first()
     )
     if profile is None:
         raise HTTPException(status_code=404, detail="User profile not found")
+    return user, profile
 
+
+def serialize_my_profile_response(user, profile: models.UserProfile):
     profile_data = serialize_model(profile, include_relationships=True)
     secondary_specialization = getattr(profile, "specialization_secondary_name", None)
     if secondary_specialization is not None:
         profile_data["specialization_secondary_name"] = secondary_specialization
     photo_url = getattr(profile, "photo_url", None)
     profile_data["photo_url"] = photo_url
+    if profile.institution:
+        profile_data["institution_name"] = profile.institution.name
 
     return {
         "user": serialize_model(user),
@@ -5778,7 +5784,106 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
         "occupation_name": profile.occupation.name if profile.occupation else None,
         "specialization_name": profile.specialization.name if profile.specialization else None,
         "professional_grade_name": profile.professional_grade.name if profile.professional_grade else None,
+        "institution_name": profile.institution.name if profile.institution else None,
     }
+
+
+@app.get("/api/me/profile")
+def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user, profile = get_my_profile_or_404(db, user_id)
+    return serialize_my_profile_response(user, profile)
+
+
+def ensure_reference_id(db: Session, model, value: Optional[int], label: str) -> Optional[int]:
+    if value is None:
+        return None
+    exists = db.query(model.id).filter(model.id == value).first()
+    if exists is None:
+        raise HTTPException(status_code=422, detail=f"{label} nu este valid.")
+    return value
+
+
+@app.patch("/api/me/profile")
+def update_my_profile(
+    payload: UserProfileUpdate,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    _ensure_registration_schema(db)
+    user, profile = get_my_profile_or_404(db, user_id)
+    data = pydantic_dump(payload, exclude_unset=True)
+    if not data:
+        return serialize_my_profile_response(user, profile)
+
+    try:
+        if "email" in data:
+            email = str(data["email"]).strip().lower()
+            if not email:
+                raise HTTPException(status_code=422, detail="Emailul este obligatoriu.")
+            existing = (
+                db.query(models.User)
+                .filter(models.User.email == email, models.User.id != user_id)
+                .first()
+            )
+            if existing is not None:
+                raise HTTPException(status_code=409, detail="Emailul este deja folosit de alt cont.")
+            user.email = email
+
+        required_text_fields = {
+            "first_name": "Prenumele este obligatoriu.",
+            "last_name": "Numele este obligatoriu.",
+            "phone": "Telefonul este obligatoriu.",
+        }
+        for field, message in required_text_fields.items():
+            if field in data and not (data[field] or "").strip():
+                raise HTTPException(status_code=422, detail=message)
+
+        reference_fields = {
+            "city_id": (models.City, "Orașul"),
+            "occupation_id": (models.Occupation, "Rolul / ocupația"),
+            "specialization_id": (models.Specialization, "Specializarea"),
+            "professional_grade_id": (models.ProfessionalGrade, "Gradul profesional"),
+            "institution_id": (models.Institution, "Instituția"),
+        }
+        for field, (model, label) in reference_fields.items():
+            if field in data:
+                data[field] = ensure_reference_id(db, model, data[field], label)
+
+        profile_fields = {
+            "first_name",
+            "last_name",
+            "phone",
+            "correspondence_address",
+            "city_id",
+            "occupation_id",
+            "specialization_id",
+            "specialization_secondary_name",
+            "professional_grade_id",
+            "institution_id",
+            "cuim",
+            "cod_parafa",
+            "professional_registration_code",
+            "titlu_universitar",
+            "acord_email",
+            "acord_sms",
+            "gdpr_consent",
+        }
+        for field in profile_fields:
+            if field in data:
+                setattr(profile, field, data[field])
+
+        now = datetime.utcnow()
+        profile.updated_at = now
+        user.updated_at = now
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        if isinstance(exc, HTTPException):
+            raise exc
+        raise_safe_error(exc, detail="Nu am putut salva profilul.", status_code=400)
+
+    user, profile = get_my_profile_or_404(db, user_id)
+    return serialize_my_profile_response(user, profile)
 
 
 @app.post("/api/me/profile/avatar")
