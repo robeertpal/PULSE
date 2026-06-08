@@ -1440,6 +1440,7 @@ def _ensure_registration_schema(db: Session) -> None:
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS cod_parafa VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS professional_registration_code VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS titlu_universitar VARCHAR(255)",
+        "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS photo_url TEXT",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS specialization_secondary_name VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS acord_email BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS acord_sms BOOLEAN NOT NULL DEFAULT FALSE",
@@ -5420,6 +5421,8 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
     secondary_specialization = getattr(profile, "specialization_secondary_name", None)
     if secondary_specialization is not None:
         profile_data["specialization_secondary_name"] = secondary_specialization
+    photo_url = getattr(profile, "photo_url", None)
+    profile_data["photo_url"] = photo_url
 
     return {
         "user": serialize_model(user),
@@ -5428,11 +5431,628 @@ def get_my_profile(user_id: int = Depends(get_current_user_id), db: Session = De
         "total_emc_points": getattr(profile, "total_emc_points", 0) or 0,
         "email": user.email,
         "phone": profile.phone,
+        "photo_url": photo_url,
+        "avatar_url": photo_url,
+        "profile_photo_url": photo_url,
         "county_name": profile.city.county.name if getattr(profile.city, "county", None) else None,
         "city_name": profile.city.name if profile.city else None,
         "occupation_name": profile.occupation.name if profile.occupation else None,
         "specialization_name": profile.specialization.name if profile.specialization else None,
         "professional_grade_name": profile.professional_grade.name if profile.professional_grade else None,
+    }
+
+
+@app.post("/api/me/profile/avatar")
+async def upload_my_profile_avatar(
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    require_rate_limit(request, "profile_avatar_upload", "WRITE_RATE_LIMIT_PER_MINUTE", 20)
+    _ensure_registration_schema(db)
+    profile = (
+        db.query(models.UserProfile)
+        .filter(models.UserProfile.user_id == user_id)
+        .first()
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    upload_result = await handle_upload(
+        file=file,
+        folder=f"user-avatars/{user_id}",
+        max_size=IMAGE_MAX_SIZE,
+        allowed_content_types=IMAGE_ALLOWED_CONTENT_TYPES,
+        allowed_extensions=IMAGE_ALLOWED_EXTENSIONS,
+    )
+    profile.photo_url = upload_result["url"]
+    profile.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        **upload_result,
+        "photo_url": profile.photo_url,
+        "avatar_url": profile.photo_url,
+        "profile_photo_url": profile.photo_url,
+    }
+
+
+class MyPaymentMethodCreate(BaseModel):
+    card_brand: Optional[str] = Field(default=None, max_length=50)
+    card_last4: str = Field(min_length=4, max_length=4)
+    exp_month: int = Field(ge=1, le=12)
+    exp_year: int = Field(ge=2024, le=2100)
+    is_default: bool = False
+
+
+class EventPaymentRegisterPayload(BaseModel):
+    payment_method_id: int = Field(gt=0)
+
+
+def generate_ticket_code(db: Session, event_id: int, user_id: int) -> str:
+    for _ in range(20):
+        code = f"PULSE-EVT-{event_id}-USER-{user_id}-{secrets.token_hex(3).upper()}"
+        existing = (
+            db.query(models.UserEventRegistration.id)
+            .filter(models.UserEventRegistration.ticket_code == code)
+            .first()
+        )
+        if existing is None:
+            return code
+    raise HTTPException(status_code=500, detail="Nu am putut genera codul biletului.")
+
+
+def _is_free_event(db: Session, event: models.Event) -> bool:
+    price_data = get_current_price_by_event_id(db, event.id)
+    current_price_type = price_data.get("current_price_type") if price_data else event.price_type
+    current_price_amount = price_data.get("current_price_amount") if price_data else event.price_amount
+    return (
+        current_price_type == "free"
+        or current_price_type == models.PriceTypeEnum.free
+        or (current_price_amount or 0) == 0
+    )
+
+
+def _serialize_payment_method(row: models.UserPaymentMethod) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "provider": row.provider,
+        "provider_customer_id": row.provider_customer_id,
+        "provider_payment_method_id": row.provider_payment_method_id,
+        "card_brand": row.card_brand,
+        "card_last4": row.card_last4,
+        "exp_month": row.exp_month,
+        "exp_year": row.exp_year,
+        "is_default": row.is_default,
+        "created_at": serialize_value(row.created_at),
+        "updated_at": serialize_value(row.updated_at),
+    }
+
+
+@app.get("/api/me/payment-methods")
+def get_my_payment_methods(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .order_by(
+            models.UserPaymentMethod.is_default.desc(),
+            models.UserPaymentMethod.created_at.desc(),
+            models.UserPaymentMethod.id.desc(),
+        )
+        .all()
+    )
+    return [_serialize_payment_method(row) for row in rows]
+
+
+@app.post("/api/me/payment-methods")
+def add_my_payment_method(
+    payload: MyPaymentMethodCreate,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    card_last4 = payload.card_last4.strip()
+    if not re.fullmatch(r"\d{4}", card_last4):
+        raise HTTPException(status_code=422, detail="Ultimele 4 cifre ale cardului nu sunt valide.")
+
+    brand = (payload.card_brand or "Card").strip()[:50] or "Card"
+    active_count = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .count()
+    )
+    make_default = payload.is_default or active_count == 0
+    now = datetime.utcnow()
+
+    if make_default:
+        (
+            db.query(models.UserPaymentMethod)
+            .filter(
+                models.UserPaymentMethod.user_id == user_id,
+                models.UserPaymentMethod.deleted_at.is_(None),
+            )
+            .update(
+                {
+                    models.UserPaymentMethod.is_default: False,
+                    models.UserPaymentMethod.updated_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
+
+    payment_method = models.UserPaymentMethod(
+        user_id=user_id,
+        provider="demo",
+        provider_customer_id=f"demo_cus_{user_id}",
+        provider_payment_method_id=f"demo_pm_{int(time.time())}_{secrets.token_hex(4)}",
+        card_brand=brand,
+        card_last4=card_last4,
+        exp_month=payload.exp_month,
+        exp_year=payload.exp_year,
+        is_default=make_default,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(payment_method)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Metoda de plată există deja.")
+    db.refresh(payment_method)
+    return _serialize_payment_method(payment_method)
+
+
+@app.delete("/api/me/payment-methods/{method_id}")
+def delete_my_payment_method(
+    method_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    payment_method = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.id == method_id,
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if payment_method is None:
+        raise HTTPException(status_code=404, detail="Cardul nu a fost găsit.")
+
+    was_default = payment_method.is_default
+    now = datetime.utcnow()
+    payment_method.deleted_at = now
+    payment_method.updated_at = now
+
+    if was_default:
+        replacement = (
+            db.query(models.UserPaymentMethod)
+            .filter(
+                models.UserPaymentMethod.user_id == user_id,
+                models.UserPaymentMethod.id != method_id,
+                models.UserPaymentMethod.deleted_at.is_(None),
+            )
+            .order_by(models.UserPaymentMethod.created_at.desc(), models.UserPaymentMethod.id.desc())
+            .first()
+        )
+        if replacement is not None:
+            replacement.is_default = True
+            replacement.updated_at = now
+
+    db.commit()
+    return {"success": True}
+
+
+@app.patch("/api/me/payment-methods/{method_id}/default")
+def set_default_payment_method(
+    method_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    payment_method = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.id == method_id,
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if payment_method is None:
+        raise HTTPException(status_code=404, detail="Cardul nu a fost găsit.")
+
+    now = datetime.utcnow()
+    (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .update(
+            {
+                models.UserPaymentMethod.is_default: False,
+                models.UserPaymentMethod.updated_at: now,
+            },
+            synchronize_session=False,
+        )
+    )
+    payment_method.is_default = True
+    payment_method.updated_at = now
+    db.commit()
+    db.refresh(payment_method)
+    return _serialize_payment_method(payment_method)
+
+
+@app.get("/api/me/payments")
+def get_my_payments(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(
+            models.Payment,
+            models.Event.id.label("event_id"),
+            models.UserEventRegistration.status.label("registration_status"),
+            models.UserEventRegistration.ticket_code,
+        )
+        .options(
+            joinedload(models.Payment.payment_method),
+            joinedload(models.Payment.content_item),
+        )
+        .outerjoin(models.Event, models.Event.content_item_id == models.Payment.content_item_id)
+        .outerjoin(
+            models.UserEventRegistration,
+            (models.UserEventRegistration.event_id == models.Event.id)
+            & (models.UserEventRegistration.user_id == user_id),
+        )
+        .filter(models.Payment.user_id == user_id)
+        .order_by(
+            models.Payment.paid_at.desc().nullslast(),
+            models.Payment.created_at.desc().nullslast(),
+            models.Payment.id.desc(),
+        )
+        .all()
+    )
+    result = []
+    for payment, event_id, registration_status, ticket_code in rows:
+        data = {
+            "id": payment.id,
+            "amount": float(payment.amount) if payment.amount is not None else 0.0,
+            "currency": payment.currency,
+            "provider": payment.provider,
+            "provider_transaction_id": payment.provider_transaction_id,
+            "status": payment.status.value if payment.status else None,
+            "paid_at": serialize_value(payment.paid_at),
+            "created_at": serialize_value(payment.created_at),
+            "subscription_id": payment.subscription_id,
+            "payment_method_id": payment.payment_method_id,
+            "content_item_id": payment.content_item_id,
+            "content_title": payment.content_item.title if payment.content_item else None,
+            "content_type": serialize_value(payment.content_item.content_type) if payment.content_item else None,
+            "event_id": event_id,
+            "registration_status": registration_status.value if registration_status else None,
+            "ticket_code": ticket_code,
+            "card_brand": payment.payment_method.card_brand if payment.payment_method else None,
+            "card_last4": payment.payment_method.card_last4 if payment.payment_method else None,
+        }
+        result.append(data)
+    return result
+
+
+@app.get("/api/me/tickets")
+def get_my_tickets(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(
+            models.UserEventRegistration,
+            models.Event,
+            models.ContentItem,
+            models.City,
+        )
+        .outerjoin(models.Event, models.UserEventRegistration.event_id == models.Event.id)
+        .outerjoin(models.ContentItem, models.ContentItem.id == models.Event.content_item_id)
+        .outerjoin(models.City, models.City.id == models.Event.city_id)
+        .filter(models.UserEventRegistration.user_id == user_id)
+        .order_by(
+            models.UserEventRegistration.registered_at.desc().nullslast(),
+            models.UserEventRegistration.id.desc(),
+        )
+        .all()
+    )
+    return [
+        {
+            "registration_id": registration.id,
+            "event_id": registration.event_id,
+            "content_item_id": content_item.id if content_item else None,
+            "event_title": content_item.title if content_item else None,
+            "ticket_code": registration.ticket_code,
+            "registration_status": registration.status.value if registration.status else None,
+            "registered_at": serialize_value(registration.registered_at),
+            "start_date": serialize_value(event.start_date) if event else None,
+            "end_date": serialize_value(event.end_date) if event else None,
+            "venue_name": event.venue_name if event else None,
+            "city_name": city.name if city else None,
+            "hero_image_url": content_item.hero_image_url if content_item else None,
+            "thumbnail_url": content_item.thumbnail_url if content_item else None,
+        }
+        for registration, event, content_item, city in rows
+    ]
+
+
+@app.get("/api/me/courses")
+def get_my_courses(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(models.UserCourse, models.Course, models.ContentItem)
+        .join(models.Course, models.Course.id == models.UserCourse.course_id)
+        .join(models.ContentItem, models.ContentItem.id == models.Course.content_item_id)
+        .filter(models.UserCourse.user_id == user_id)
+        .order_by(
+            models.UserCourse.enrolled_at.desc().nullslast(),
+            models.UserCourse.id.desc(),
+        )
+        .all()
+    )
+    return [
+        {
+            "user_course_id": user_course.id,
+            "course_id": course.id,
+            "content_item_id": content_item.id,
+            "course_title": content_item.title,
+            "short_description": content_item.short_description,
+            "provider": course.provider,
+            "emc_credits": course.emc_credits,
+            "valid_from": serialize_value(course.valid_from),
+            "valid_until": serialize_value(course.valid_until),
+            "progress_percent": user_course.progress_percent,
+            "status": user_course.status.value if user_course.status else None,
+            "enrolled_at": serialize_value(user_course.enrolled_at),
+            "hero_image_url": content_item.hero_image_url,
+            "thumbnail_url": content_item.thumbnail_url,
+            "content_type": serialize_value(content_item.content_type),
+        }
+        for user_course, course, content_item in rows
+    ]
+
+
+@app.get("/api/events/{event_id}/registration-status")
+def get_event_registration_status(
+    event_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    registration = (
+        db.query(models.UserEventRegistration)
+        .filter(
+            models.UserEventRegistration.user_id == user_id,
+            models.UserEventRegistration.event_id == event_id,
+        )
+        .first()
+    )
+    if registration:
+        return {
+            "is_registered": True,
+            "status": registration.status.value if registration.status else None,
+            "ticket_code": registration.ticket_code,
+        }
+    return {"is_registered": False, "status": None, "ticket_code": None}
+
+
+@app.post("/api/events/{event_id}/register")
+def register_for_event(
+    event_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Evenimentul nu există.")
+    if not _is_free_event(db, event):
+        raise HTTPException(status_code=400, detail="Acest eveniment este cu plată.")
+
+    existing = (
+        db.query(models.UserEventRegistration)
+        .filter(
+            models.UserEventRegistration.user_id == user_id,
+            models.UserEventRegistration.event_id == event_id,
+        )
+        .first()
+    )
+    if existing:
+        return {
+            "message": "Ești deja înscris la acest eveniment.",
+            "ticket_code": existing.ticket_code,
+        }
+
+    registration = models.UserEventRegistration(
+        user_id=user_id,
+        event_id=event_id,
+        registered_at=datetime.utcnow(),
+        status=models.RegistrationStatus.registered,
+        ticket_code=generate_ticket_code(db, event_id, user_id),
+    )
+    db.add(registration)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"message": "Înregistrat cu succes.", "ticket_code": registration.ticket_code}
+
+
+@app.post("/api/events/{event_id}/pay-and-register")
+def pay_and_register_for_event(
+    event_id: int,
+    payload: EventPaymentRegisterPayload,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Evenimentul nu există.")
+
+    price_data = get_current_price_by_event_id(db, event_id)
+    if not price_data:
+        raise HTTPException(status_code=400, detail="Nu s-a putut obține prețul.")
+    current_price_amount = price_data.get("current_price_amount")
+    if _is_free_event(db, event):
+        raise HTTPException(status_code=400, detail="Acest eveniment este gratuit.")
+
+    existing = (
+        db.query(models.UserEventRegistration)
+        .filter(
+            models.UserEventRegistration.user_id == user_id,
+            models.UserEventRegistration.event_id == event_id,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Ești deja înscris la acest eveniment.")
+
+    payment_method = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.id == payload.payment_method_id,
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if payment_method is None:
+        raise HTTPException(status_code=404, detail="Metoda de plată nu a fost găsită.")
+
+    now = datetime.utcnow()
+    payment = models.Payment(
+        user_id=user_id,
+        content_item_id=event.content_item_id,
+        payment_method_id=payment_method.id,
+        amount=current_price_amount,
+        currency=price_data.get("current_price_currency") or "RON",
+        provider="demo",
+        provider_transaction_id=f"demo_tx_{int(time.time())}_{secrets.token_hex(4)}",
+        status=models.PaymentStatus.paid,
+        paid_at=now,
+        created_at=now,
+    )
+    registration = models.UserEventRegistration(
+        user_id=user_id,
+        event_id=event_id,
+        registered_at=now,
+        status=models.RegistrationStatus.confirmed,
+        ticket_code=generate_ticket_code(db, event_id, user_id),
+    )
+    db.add(payment)
+    db.add(registration)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {
+        "message": "Plata și înscrierea au fost realizate cu succes.",
+        "ticket_code": registration.ticket_code,
+    }
+
+
+@app.get("/api/courses/{course_id}/enrollment-status")
+def get_course_enrollment_status(
+    course_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    course = db.query(models.Course).filter(models.Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Cursul nu există.")
+
+    enrollment = (
+        db.query(models.UserCourse)
+        .filter(
+            models.UserCourse.user_id == user_id,
+            models.UserCourse.course_id == course_id,
+        )
+        .first()
+    )
+    if enrollment:
+        return {
+            "is_enrolled": True,
+            "status": enrollment.status.value if enrollment.status else None,
+            "user_course_id": enrollment.id,
+            "progress_percent": enrollment.progress_percent,
+            "enrolled_at": serialize_value(enrollment.enrolled_at),
+        }
+    return {
+        "is_enrolled": False,
+        "status": None,
+        "user_course_id": None,
+        "progress_percent": None,
+        "enrolled_at": None,
+    }
+
+
+@app.post("/api/courses/{course_id}/enroll")
+def enroll_in_course(
+    course_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    course = db.query(models.Course).filter(models.Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Cursul nu există.")
+
+    existing = (
+        db.query(models.UserCourse)
+        .filter(
+            models.UserCourse.user_id == user_id,
+            models.UserCourse.course_id == course_id,
+        )
+        .first()
+    )
+    if existing:
+        return {
+            "message": "Ești deja înscris la acest curs.",
+            "is_enrolled": True,
+            "status": existing.status.value if existing.status else None,
+            "user_course_id": existing.id,
+            "progress_percent": existing.progress_percent,
+            "enrolled_at": serialize_value(existing.enrolled_at),
+        }
+
+    enrollment = models.UserCourse(
+        user_id=user_id,
+        course_id=course_id,
+        progress_percent=0,
+        enrolled_at=datetime.utcnow(),
+        status=models.UserCourseStatus.enrolled,
+    )
+    db.add(enrollment)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(enrollment)
+    return {
+        "message": "Înscriere reușită.",
+        "is_enrolled": True,
+        "status": enrollment.status.value,
+        "user_course_id": enrollment.id,
+        "progress_percent": enrollment.progress_percent,
+        "enrolled_at": serialize_value(enrollment.enrolled_at),
     }
 
 
@@ -5874,6 +6494,14 @@ def validate_upload_file(file: UploadFile, allowed_content_types: set, allowed_e
     content_type = (file.content_type or "").lower()
     sanitized_name = sanitize_filename(file.filename or "upload")
     extension = Path(sanitized_name).suffix.lower()
+    inferred_image_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }
+    if content_type in {"", "application/octet-stream"} and extension in inferred_image_types:
+        content_type = inferred_image_types[extension]
 
     if content_type not in allowed_content_types:
         allowed = ", ".join(sorted(allowed_content_types))

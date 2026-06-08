@@ -263,7 +263,7 @@ class _ContentSubmissionFormScreenState
     required ValueChanged<T?> onChanged,
   }) {
     return DropdownButtonFormField<T>(
-      value: value,
+      initialValue: value,
       items: items,
       onChanged: _canEdit && !_isSaving ? onChanged : null,
       dropdownColor: PulseTheme.surfaceElevated,
@@ -371,10 +371,8 @@ class _ContentSubmissionFormScreenState
             items: [
               const DropdownMenuItem(value: 0, child: Text('Fara categorie')),
               ..._categories.map(
-                (item) => DropdownMenuItem(
-                  value: item.id,
-                  child: Text(item.name),
-                ),
+                (item) =>
+                    DropdownMenuItem(value: item.id, child: Text(item.name)),
               ),
             ],
             onChanged: (value) {
@@ -393,10 +391,8 @@ class _ContentSubmissionFormScreenState
                 child: Text('Fara specializare'),
               ),
               ..._specializations.map(
-                (item) => DropdownMenuItem(
-                  value: item.id,
-                  child: Text(item.name),
-                ),
+                (item) =>
+                    DropdownMenuItem(value: item.id, child: Text(item.name)),
               ),
             ],
             onChanged: (value) {
@@ -406,11 +402,7 @@ class _ContentSubmissionFormScreenState
             },
           ),
           const SizedBox(height: 14),
-          _field(
-            label: 'Rezumat',
-            controller: _summaryController,
-            maxLines: 3,
-          ),
+          _field(label: 'Rezumat', controller: _summaryController, maxLines: 3),
           const SizedBox(height: 14),
           _field(
             label: 'Continut',
