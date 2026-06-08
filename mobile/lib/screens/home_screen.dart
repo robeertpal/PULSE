@@ -1320,7 +1320,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         ),
                         _buildCompactMenuItem(
                           iconAsset: 'assets/icons/books.svg',
-                          label: 'Abonamentele mele',
+                          label: 'Revistele mele',
                           onTap: () => closeAndRun(_openMyPublications),
                         ),
                         _buildCompactMenuItem(
@@ -2774,7 +2774,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Scaffold(
       backgroundColor: _darkCanvas,
       extendBody: true,
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: _buildPostariMeleButton(),
       bottomNavigationBar: _buildGlassBottomNav(),
       body: Container(
