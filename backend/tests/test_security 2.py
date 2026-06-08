@@ -86,7 +86,13 @@ def test_saved_content_uses_authenticated_user_not_query_user_id(monkeypatch):
             pass
 
     fake_db = FakeDb()
-    monkeypatch.setattr(main, "get_public_content_item_or_404", lambda db, content_item_id: SimpleNamespace(id=content_item_id))
+    checked_user_ids = []
+
+    def fake_get_public_content_item_or_404(db, content_item_id, user_id=None):
+        checked_user_ids.append(user_id)
+        return SimpleNamespace(id=content_item_id)
+
+    monkeypatch.setattr(main, "get_public_content_item_or_404", fake_get_public_content_item_or_404)
 
     main.app.dependency_overrides[main.get_db] = lambda: fake_db
     main.app.dependency_overrides[main.get_current_user_id] = lambda: 7
@@ -96,6 +102,7 @@ def test_saved_content_uses_authenticated_user_not_query_user_id(monkeypatch):
         main.app.dependency_overrides.clear()
 
     assert response.status_code == 200
+    assert checked_user_ids == [7]
     assert fake_db.added.user_id == 7
     assert fake_db.added.content_item_id == 123
 
