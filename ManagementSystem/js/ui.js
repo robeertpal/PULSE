@@ -39,6 +39,7 @@ const UI = {
                     <li><a href="publications.html" class="${activePage === 'publications' ? 'active' : ''}">Publicații</a></li>
                     <li><a href="ads.html" class="${activePage === 'ads' ? 'active' : ''}">Reclame</a></li>
                     <li><a href="notifications.html" class="${activePage === 'notifications' ? 'active' : ''}">Notificări</a></li>
+                    <li><a href="contributor-analytics.html" class="${activePage === 'contributor-analytics' ? 'active' : ''}">Analytics contributori</a></li>
                     <li><a href="users.html" class="${activePage === 'users' ? 'active' : ''}">Utilizatori</a></li>
                 </ul>
                 <div class="sidebar-footer">

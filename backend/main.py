@@ -3829,6 +3829,210 @@ def admin_get_content_submission(submission_id: int, db: Session = Depends(get_d
     return serialize_content_submission(db, submission)
 
 
+@app.get("/admin/contributor-analytics")
+def admin_get_contributor_analytics(db: Session = Depends(get_db)):
+    tracked_statuses = [
+        "draft",
+        "submitted",
+        "under_review",
+        "approved",
+        "rejected",
+        "needs_changes",
+        "published",
+        "archived",
+    ]
+    status_counts = {status: 0 for status in tracked_statuses}
+    status_rows = (
+        db.query(models.ContentSubmission.status, func.count(models.ContentSubmission.id))
+        .group_by(models.ContentSubmission.status)
+        .all()
+    )
+    for status, count in status_rows:
+        normalized_status = str(status or "unknown")
+        status_counts[normalized_status] = int(count or 0)
+    total_submissions = sum(status_counts.values())
+
+    published_by_contributor = {
+        int(user_id): int(count or 0)
+        for user_id, count in (
+            db.query(models.ContentSubmission.submitter_user_id, func.count(models.ContentSubmission.id))
+            .filter(models.ContentSubmission.status == "published")
+            .group_by(models.ContentSubmission.submitter_user_id)
+            .all()
+        )
+    }
+    submitted_by_contributor = {
+        int(user_id): int(count or 0)
+        for user_id, count in (
+            db.query(models.ContentSubmission.submitter_user_id, func.count(models.ContentSubmission.id))
+            .filter(models.ContentSubmission.status.in_(["submitted", "under_review", "approved"]))
+            .group_by(models.ContentSubmission.submitter_user_id)
+            .all()
+        )
+    }
+    contributor_rows = (
+        db.query(
+            models.ContentSubmission.submitter_user_id,
+            models.User.email,
+            models.UserProfile.first_name,
+            models.UserProfile.last_name,
+            func.count(models.ContentSubmission.id).label("total_count"),
+            func.max(models.ContentSubmission.updated_at).label("last_activity_at"),
+        )
+        .join(models.User, models.User.id == models.ContentSubmission.submitter_user_id)
+        .outerjoin(models.UserProfile, models.UserProfile.user_id == models.User.id)
+        .group_by(
+            models.ContentSubmission.submitter_user_id,
+            models.User.email,
+            models.UserProfile.first_name,
+            models.UserProfile.last_name,
+        )
+        .order_by(func.count(models.ContentSubmission.id).desc())
+        .limit(50)
+        .all()
+    )
+    contributors = []
+    for user_id, email, first_name, last_name, total_count, last_activity_at in contributor_rows:
+        display_name = f"{first_name or ''} {last_name or ''}".strip() or email or f"User #{user_id}"
+        contributors.append(
+            {
+                "user_id": user_id,
+                "name": display_name,
+                "email": email,
+                "total_submissions": int(total_count or 0),
+                "submitted_or_reviewable": submitted_by_contributor.get(int(user_id), 0),
+                "published": published_by_contributor.get(int(user_id), 0),
+                "last_activity_at": serialize_value(last_activity_at),
+            }
+        )
+
+    category_rows = (
+        db.query(
+            models.ContentSubmission.category_id,
+            models.ContentCategory.name,
+            func.count(models.ContentSubmission.id).label("total_count"),
+        )
+        .outerjoin(models.ContentCategory, models.ContentCategory.id == models.ContentSubmission.category_id)
+        .group_by(models.ContentSubmission.category_id, models.ContentCategory.name)
+        .order_by(func.count(models.ContentSubmission.id).desc())
+        .limit(30)
+        .all()
+    )
+    categories = [
+        {
+            "category_id": category_id,
+            "name": name or "Fara categorie",
+            "total_submissions": int(total_count or 0),
+        }
+        for category_id, name, total_count in category_rows
+    ]
+
+    specialization_rows = (
+        db.query(
+            models.ContentSubmission.specialization_id,
+            models.Specialization.name,
+            func.count(models.ContentSubmission.id).label("total_count"),
+        )
+        .outerjoin(models.Specialization, models.Specialization.id == models.ContentSubmission.specialization_id)
+        .group_by(models.ContentSubmission.specialization_id, models.Specialization.name)
+        .order_by(func.count(models.ContentSubmission.id).desc())
+        .limit(30)
+        .all()
+    )
+    specializations = [
+        {
+            "specialization_id": specialization_id,
+            "name": name or "Fara specializare",
+            "total_submissions": int(total_count or 0),
+        }
+        for specialization_id, name, total_count in specialization_rows
+    ]
+
+    published_submissions = (
+        db.query(models.ContentSubmission)
+        .options(joinedload(models.ContentSubmission.published_content_item))
+        .filter(models.ContentSubmission.status == "published")
+        .filter(models.ContentSubmission.published_content_item_id.isnot(None))
+        .all()
+    )
+    content_ids = [
+        submission.published_content_item_id
+        for submission in published_submissions
+        if submission.published_content_item_id is not None
+    ]
+    view_counts: dict[int, int] = defaultdict(int)
+    activity_counts: dict[int, int] = defaultdict(int)
+    saved_counts: dict[int, int] = defaultdict(int)
+
+    if content_ids and _safe_table_exists(db, "user_activity_logs"):
+        for content_item_id, count in (
+            db.query(models.UserActivityLog.content_item_id, func.count(models.UserActivityLog.id))
+            .filter(models.UserActivityLog.content_item_id.in_(content_ids))
+            .group_by(models.UserActivityLog.content_item_id)
+            .all()
+        ):
+            if content_item_id is not None:
+                activity_counts[int(content_item_id)] = int(count or 0)
+        for content_item_id, count in (
+            db.query(models.UserActivityLog.content_item_id, func.count(models.UserActivityLog.id))
+            .filter(models.UserActivityLog.content_item_id.in_(content_ids))
+            .filter(models.UserActivityLog.action_type == "content_view")
+            .group_by(models.UserActivityLog.content_item_id)
+            .all()
+        ):
+            if content_item_id is not None:
+                view_counts[int(content_item_id)] = int(count or 0)
+
+    if content_ids and _safe_table_exists(db, "saved_content"):
+        for content_item_id, count in (
+            db.query(models.SavedContent.content_item_id, func.count(models.SavedContent.id))
+            .filter(models.SavedContent.content_item_id.in_(content_ids))
+            .group_by(models.SavedContent.content_item_id)
+            .all()
+        ):
+            if content_item_id is not None:
+                saved_counts[int(content_item_id)] = int(count or 0)
+
+    top_content = []
+    for submission in published_submissions:
+        item = submission.published_content_item
+        if item is None or submission.published_content_item_id is None:
+            continue
+        content_item_id = int(submission.published_content_item_id)
+        view_count = view_counts.get(content_item_id, 0)
+        saved_count = saved_counts.get(content_item_id, 0)
+        activity_count = activity_counts.get(content_item_id, 0)
+        score = view_count + saved_count * 3 + max(0, activity_count - view_count)
+        if score <= 0:
+            continue
+        top_content.append(
+            {
+                "submission_id": submission.id,
+                "content_item_id": content_item_id,
+                "title": item.title,
+                "content_type": serialize_value(item.content_type),
+                "submitter_name": submitter_display_name(db, submission.submitter_user_id),
+                "view_count": view_count,
+                "saved_count": saved_count,
+                "activity_count": activity_count,
+                "score": score,
+                "published_at": serialize_value(item.published_at),
+            }
+        )
+    top_content.sort(key=lambda row: row["score"], reverse=True)
+
+    return {
+        "totals": {
+            "total_submissions": total_submissions,
+            **status_counts,
+        },
+        "contributors": contributors,
+        "categories": categories,
+        "specializations": specializations,
+        "top_content": top_content[:20],
+    }
+
+
 def admin_mark_submission(
     db: Session,
     submission_id: int,

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Contributor Analytics - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .analytics-section {
+            margin-top: 28px;
+        }
+        .analytics-section h2 {
+            margin: 0 0 14px;
+            font-size: 20px;
+        }
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 24px;
+        }
+        .analytics-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        }
+        .analytics-card table {
+            box-shadow: none;
+            border: 1px solid var(--border);
+        }
+        .muted {
+            color: var(--text-secondary);
+        }
+        .empty-state {
+            padding: 24px;
+            border: 1px dashed var(--border);
+            border-radius: 14px;
+            background: var(--surface);
+            color: var(--text-secondary);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="header-actions">
+                <p class="muted" style="margin:0;">Agregari simple pentru contributii editoriale si content publicat din submissions.</p>
+                <button class="btn btn-primary" id="refresh-btn">Reincarca</button>
+            </div>
+
+            <div id="error-msg" class="alert error"></div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-title">Total submissions</div>
+                    <div class="stat-value" id="stat-total">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Draft</div>
+                    <div class="stat-value" id="stat-draft">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Trimise / review</div>
+                    <div class="stat-value" id="stat-submitted">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Aprobate</div>
+                    <div class="stat-value" id="stat-approved">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Needs changes</div>
+                    <div class="stat-value" id="stat-needs-changes">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Publicate</div>
+                    <div class="stat-value" id="stat-published">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Respinse</div>
+                    <div class="stat-value" id="stat-rejected">-</div>
+                </div>
+            </div>
+
+            <section class="analytics-section">
+                <h2>Contributori</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Contributor</th>
+                            <th>Email</th>
+                            <th>Total</th>
+                            <th>In review</th>
+                            <th>Publicate</th>
+                            <th>Ultima activitate</th>
+                        </tr>
+                    </thead>
+                    <tbody id="contributors-table-body">
+                        <tr><td colspan="6">Se incarca...</td></tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="analytics-section analytics-grid">
+                <div class="analytics-card">
+                    <h2>Categorii</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Categorie</th>
+                                <th>Submissions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="categories-table-body">
+                            <tr><td colspan="2">Se incarca...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="analytics-card">
+                    <h2>Specializari</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Specializare</th>
+                                <th>Submissions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="specializations-table-body">
+                            <tr><td colspan="2">Se incarca...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="analytics-section">
+                <h2>Top content publicat din submissions</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Titlu</th>
+                            <th>Tip</th>
+                            <th>Contributor</th>
+                            <th>Views</th>
+                            <th>Saved</th>
+                            <th>Activitate</th>
+                            <th>Scor</th>
+                        </tr>
+                    </thead>
+                    <tbody id="top-content-table-body">
+                        <tr><td colspan="7">Se incarca...</td></tr>
+                    </tbody>
+                </table>
+            </section>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/contributor-analytics.js"></script>
+</body>
+</html>
