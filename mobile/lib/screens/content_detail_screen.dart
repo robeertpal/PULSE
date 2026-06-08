@@ -64,6 +64,10 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   bool _isEnrollingCourse = false;
   bool _isFollowingAuthor = false;
   bool _isAuthorFollowLoading = false;
+  bool _isFollowingCategory = false;
+  bool _isCategoryFollowLoading = false;
+  bool _isFollowingSpecialization = false;
+  bool _isSpecializationFollowLoading = false;
   Set<int> _followedPartnerIds = {};
   final Set<int> _partnerFollowLoadingIds = {};
 
@@ -115,6 +119,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
 
       final item = ContentItem.fromJson(detail);
       var isFollowingAuthor = false;
+      var isFollowingCategory = false;
+      var isFollowingSpecialization = false;
       if (item.authorId != null) {
         try {
           isFollowingAuthor = await _apiService.getFollowStatus(
@@ -123,6 +129,26 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           );
         } catch (e) {
           debugPrint('Author follow status ignored: $e');
+        }
+      }
+      if (item.categoryId != null) {
+        try {
+          isFollowingCategory = await _apiService.getFollowStatus(
+            targetType: 'category',
+            targetId: item.categoryId!,
+          );
+        } catch (e) {
+          debugPrint('Category follow status ignored: $e');
+        }
+      }
+      if (item.specializationId != null) {
+        try {
+          isFollowingSpecialization = await _apiService.getFollowStatus(
+            targetType: 'specialization',
+            targetId: item.specializationId!,
+          );
+        } catch (e) {
+          debugPrint('Specialization follow status ignored: $e');
         }
       }
       final followedPartnerIds = <int>{};
@@ -182,6 +208,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         _savedContentIds = savedIds;
         _recommendations = recommendations;
         _isFollowingAuthor = isFollowingAuthor;
+        _isFollowingCategory = isFollowingCategory;
+        _isFollowingSpecialization = isFollowingSpecialization;
         _followedPartnerIds = followedPartnerIds;
         _isLoading = false;
       });
@@ -1207,6 +1235,233 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                   ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _toggleCategoryFollow(ContentItem item) async {
+    final categoryId = item.categoryId;
+    if (categoryId == null || _isCategoryFollowLoading) return;
+    final wasFollowing = _isFollowingCategory;
+
+    setState(() {
+      _isFollowingCategory = !wasFollowing;
+      _isCategoryFollowLoading = true;
+    });
+
+    try {
+      if (wasFollowing) {
+        await _apiService.unfollowTarget(
+          targetType: 'category',
+          targetId: categoryId,
+        );
+      } else {
+        await _apiService.followTarget(
+          targetType: 'category',
+          targetId: categoryId,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wasFollowing
+                ? 'Nu mai urmărești categoria.'
+                : 'Urmărești categoria.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isFollowingCategory = wasFollowing;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nu am putut actualiza categoria urmărită.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCategoryFollowLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleSpecializationFollow(ContentItem item) async {
+    final specializationId = item.specializationId;
+    if (specializationId == null || _isSpecializationFollowLoading) return;
+    final wasFollowing = _isFollowingSpecialization;
+
+    setState(() {
+      _isFollowingSpecialization = !wasFollowing;
+      _isSpecializationFollowLoading = true;
+    });
+
+    try {
+      if (wasFollowing) {
+        await _apiService.unfollowTarget(
+          targetType: 'specialization',
+          targetId: specializationId,
+        );
+      } else {
+        await _apiService.followTarget(
+          targetType: 'specialization',
+          targetId: specializationId,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wasFollowing
+                ? 'Nu mai urmărești specializarea.'
+                : 'Urmărești specializarea.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isFollowingSpecialization = wasFollowing;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nu am putut actualiza specializarea urmărită.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSpecializationFollowLoading = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildTaxonomyFollowSection(ContentItem item) {
+    final hasCategory = item.categoryId != null;
+    final hasSpecialization = item.specializationId != null;
+    if (!hasCategory && !hasSpecialization) return const SizedBox.shrink();
+
+    final accent = _accentFor(item);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: PulseTheme.surfaceElevated.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: PulseTheme.borderLight),
+      ),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          if (hasCategory)
+            _buildTaxonomyFollowChip(
+              icon: Icons.category_rounded,
+              label: _isFollowingCategory
+                  ? 'Urmărești categoria'
+                  : 'Urmărește categoria',
+              value: item.categoryName,
+              isFollowing: _isFollowingCategory,
+              isLoading: _isCategoryFollowLoading,
+              accent: accent,
+              onTap: () => _toggleCategoryFollow(item),
+            ),
+          if (hasSpecialization)
+            _buildTaxonomyFollowChip(
+              icon: Icons.medical_services_rounded,
+              label: _isFollowingSpecialization
+                  ? 'Urmărești specializarea'
+                  : 'Urmărește specializarea',
+              value: item.specializationName,
+              isFollowing: _isFollowingSpecialization,
+              isLoading: _isSpecializationFollowLoading,
+              accent: accent,
+              onTap: () => _toggleSpecializationFollow(item),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTaxonomyFollowChip({
+    required IconData icon,
+    required String label,
+    required String? value,
+    required bool isFollowing,
+    required bool isLoading,
+    required Color accent,
+    required VoidCallback onTap,
+  }) {
+    final cleanValue = value?.trim();
+    final text = cleanValue == null || cleanValue.isEmpty
+        ? label
+        : '$label · $cleanValue';
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: isLoading ? null : onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          constraints: BoxConstraints(
+            minHeight: 40,
+            maxWidth: MediaQuery.sizeOf(context).width - 58,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+          decoration: BoxDecoration(
+            color: isFollowing
+                ? accent.withValues(alpha: 0.18)
+                : Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: isFollowing
+                  ? accent.withValues(alpha: 0.48)
+                  : Colors.white.withValues(alpha: 0.10),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isLoading)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                Icon(
+                  isFollowing ? Icons.check_circle_rounded : icon,
+                  color: isFollowing ? accent : PulseTheme.textSecondary,
+                  size: 16,
+                ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isFollowing
+                        ? PulseTheme.textPrimary
+                        : PulseTheme.textSecondary,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2360,6 +2615,11 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                       children: [
                         if (item.authorId != null) ...[
                           _buildAuthorFollowCard(item),
+                          const SizedBox(height: 22),
+                        ],
+                        if (item.categoryId != null ||
+                            item.specializationId != null) ...[
+                          _buildTaxonomyFollowSection(item),
                           const SizedBox(height: 22),
                         ],
                         if (item.contentType == 'event')
