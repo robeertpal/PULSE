@@ -1,5 +1,6 @@
 from collections import defaultdict, deque
 import base64
+import calendar
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timedelta
@@ -560,6 +561,39 @@ def get_current_user_id(
 ) -> int:
     if authorization is None:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
+
+    parts = authorization.strip().split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
+        raise HTTPException(status_code=401, detail="Invalid Authorization header")
+
+    session_token = parts[1].strip()
+    session_hash = hashlib.sha256(session_token.encode("utf-8")).hexdigest()
+    session_model = get_user_session_model()
+    user_model = get_user_model()
+
+    session_record = (
+        db.query(session_model)
+        .filter(session_model.refresh_token_hash == session_hash)
+        .filter(session_model.revoked_at.is_(None))
+        .filter(session_model.expires_at > datetime.utcnow())
+        .first()
+    )
+    if session_record is None:
+        raise HTTPException(status_code=401, detail="Session is invalid or expired")
+
+    user = db.query(user_model).filter(user_model.id == session_record.user_id).first()
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=401, detail="User is inactive or missing")
+
+    return user.id
+
+
+def get_optional_current_user_id(
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+) -> Optional[int]:
+    if authorization is None:
+        return None
 
     parts = authorization.strip().split(" ", 1)
     if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
@@ -4877,9 +4911,11 @@ def get_publication_issues_for_publication(
 @app.get("/publication-issues/{issue_id}")
 def get_publication_issue_detail(
     issue_id: int,
+    user_id: Optional[int] = Depends(get_optional_current_user_id),
     db: Session = Depends(get_db),
 ):
     issue = get_public_publication_issue_or_404(db, issue_id)
+    _ensure_publication_subscription_access(db, issue.publication_id, user_id)
     return serialize_publication_issue(issue)
 
 
@@ -4927,10 +4963,12 @@ def get_partner_content(
 def generate_publication_issue_ai_summary(
     issue_id: int,
     request: Request,
+    user_id: Optional[int] = Depends(get_optional_current_user_id),
     db: Session = Depends(get_db),
 ):
     require_rate_limit(request, "ai_summary", "AI_RATE_LIMIT_PER_MINUTE", 10)
     issue = get_public_publication_issue_or_404(db, issue_id)
+    _ensure_publication_subscription_access(db, issue.publication_id, user_id)
     pdf_bytes = download_publication_issue_pdf_bytes(issue)
     pdf_text = extract_pdf_text(pdf_bytes)
     summary_input = build_publication_issue_summary_input(issue, pdf_text)
@@ -5027,8 +5065,11 @@ def build_publication_issue_pdf_response(
 def get_publication_issue_pdf(
     issue_id: int,
     range_header: Optional[str] = Header(default=None, alias="Range"),
+    user_id: Optional[int] = Depends(get_optional_current_user_id),
     db: Session = Depends(get_db),
 ):
+    issue = get_public_publication_issue_or_404(db, issue_id)
+    _ensure_publication_subscription_access(db, issue.publication_id, user_id)
     return build_publication_issue_pdf_response(issue_id, range_header, db)
 
 
@@ -5036,8 +5077,11 @@ def get_publication_issue_pdf(
 def head_publication_issue_pdf(
     issue_id: int,
     range_header: Optional[str] = Header(default=None, alias="Range"),
+    user_id: Optional[int] = Depends(get_optional_current_user_id),
     db: Session = Depends(get_db),
 ):
+    issue = get_public_publication_issue_or_404(db, issue_id)
+    _ensure_publication_subscription_access(db, issue.publication_id, user_id)
     return build_publication_issue_pdf_response(
         issue_id,
         range_header,
@@ -5971,6 +6015,10 @@ class EventPaymentRegisterPayload(BaseModel):
     payment_method_id: int = Field(gt=0)
 
 
+class PublicationSubscriptionPaymentPayload(BaseModel):
+    payment_method_id: int = Field(gt=0)
+
+
 def generate_ticket_code(db: Session, event_id: int, user_id: int) -> str:
     for _ in range(20):
         code = f"PULSE-EVT-{event_id}-USER-{user_id}-{secrets.token_hex(3).upper()}"
@@ -6009,6 +6057,383 @@ def _serialize_payment_method(row: models.UserPaymentMethod) -> dict[str, Any]:
         "created_at": serialize_value(row.created_at),
         "updated_at": serialize_value(row.updated_at),
     }
+
+
+def _serialize_subscription_plan(plan: models.SubscriptionPlan) -> dict[str, Any]:
+    return {
+        "id": plan.id,
+        "name": plan.name,
+        "price": float(plan.price) if plan.price is not None else 0.0,
+        "currency": plan.currency,
+        "billing_period": plan.billing_period,
+    }
+
+
+def _billing_period_label(billing_period: Optional[str]) -> str:
+    period = (billing_period or "").strip().lower()
+    if period == "monthly":
+        return "lunar"
+    if period == "yearly":
+        return "anual"
+    if period == "one_time":
+        return "plată unică"
+    return period or "abonament"
+
+
+def _serialize_my_subscription(
+    subscription: models.UserSubscription,
+    plan: models.SubscriptionPlan,
+    publication: Optional[models.Publication] = None,
+    content_item: Optional[models.ContentItem] = None,
+) -> dict[str, Any]:
+    is_recurring = _is_recurring_billing_period(plan.billing_period)
+    access_valid = _subscription_has_access(subscription)
+    title = plan.name
+    publication_name = publication.name if publication else None
+    plan_scope = serialize_value(plan.scope)
+    if publication_name and plan_scope == "publication":
+        title = publication_name
+
+    return {
+        "id": subscription.id,
+        "subscription_plan_id": subscription.subscription_plan_id,
+        "plan_name": plan.name,
+        "title": title,
+        "publication_id": publication.id if publication else None,
+        "publication_name": publication_name,
+        "publication_description": publication.description if publication else None,
+        "publication_logo_url": publication.logo_url if publication else None,
+        "publication_emc_credits_text": publication.emc_credits_text if publication else None,
+        "publication_creditation_text": publication.creditation_text if publication else None,
+        "publication_indexing_text": publication.indexing_text if publication else None,
+        "publication_subscription_url": publication.subscription_url if publication else None,
+        "publication_title": content_item.title if content_item else None,
+        "content_item_id": content_item.id if content_item else None,
+        "content_title": content_item.title if content_item else None,
+        "content_type": serialize_value(content_item.content_type) if content_item else None,
+        "hero_image_url": content_item.hero_image_url if content_item else None,
+        "thumbnail_url": content_item.thumbnail_url if content_item else None,
+        "status": _subscription_status_value(subscription.status),
+        "access_valid": access_valid,
+        "start_date": serialize_value(subscription.start_date),
+        "end_date": serialize_value(subscription.end_date),
+        "billing_period": plan.billing_period,
+        "billing_period_label": _billing_period_label(plan.billing_period),
+        "price": float(plan.price) if plan.price is not None else 0.0,
+        "currency": plan.currency or "RON",
+        "is_recurring": is_recurring,
+        "auto_renew": bool(subscription.auto_renew),
+        "created_at": serialize_value(subscription.created_at),
+    }
+
+
+def _my_subscription_query(db: Session):
+    return (
+        db.query(
+            models.UserSubscription,
+            models.SubscriptionPlan,
+            models.Publication,
+            models.ContentItem,
+        )
+        .join(
+            models.SubscriptionPlan,
+            models.SubscriptionPlan.id == models.UserSubscription.subscription_plan_id,
+        )
+        .outerjoin(models.Publication, models.Publication.id == models.SubscriptionPlan.publication_id)
+        .outerjoin(models.ContentItem, models.ContentItem.id == models.Publication.content_item_id)
+    )
+
+
+def _active_publication_subscription_plan(
+    db: Session,
+    publication_id: int,
+) -> Optional[models.SubscriptionPlan]:
+    return (
+        db.query(models.SubscriptionPlan)
+        .filter(
+            models.SubscriptionPlan.scope == models.SubscriptionPlanScope.publication,
+            models.SubscriptionPlan.publication_id == publication_id,
+            models.SubscriptionPlan.is_active.is_(True),
+        )
+        .order_by(models.SubscriptionPlan.id.desc())
+        .first()
+    )
+
+
+def _active_user_subscription_for_plan(
+    db: Session,
+    user_id: int,
+    plan_id: int,
+    now: Optional[datetime] = None,
+) -> Optional[models.UserSubscription]:
+    now = now or datetime.utcnow()
+    return (
+        db.query(models.UserSubscription)
+        .filter(
+            models.UserSubscription.user_id == user_id,
+            models.UserSubscription.subscription_plan_id == plan_id,
+            models.UserSubscription.status.in_(
+                [
+                    models.SubscriptionStatus.active,
+                    models.SubscriptionStatus.cancelled,
+                ]
+            ),
+            models.UserSubscription.start_date <= now,
+            or_(
+                models.UserSubscription.end_date.is_(None),
+                models.UserSubscription.end_date >= now,
+            ),
+        )
+        .first()
+    )
+
+
+def _datetime_for_comparison(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _subscription_status_value(status: Any) -> Optional[str]:
+    if status is None:
+        return None
+    if hasattr(status, "value"):
+        return status.value
+    return str(status)
+
+
+def _subscription_has_access(subscription: models.UserSubscription, now: Optional[datetime] = None) -> bool:
+    comparable_now = _datetime_for_comparison(now or datetime.utcnow())
+    start_date = _datetime_for_comparison(subscription.start_date)
+    end_date = _datetime_for_comparison(subscription.end_date)
+    if _subscription_status_value(subscription.status) not in {"active", "cancelled"}:
+        return False
+    if start_date and start_date > comparable_now:
+        return False
+    return end_date is None or end_date >= comparable_now
+
+
+def _add_months(value: datetime, months: int) -> datetime:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
+
+
+def _is_recurring_billing_period(billing_period: Optional[str]) -> bool:
+    return (billing_period or "").strip().lower() in {"monthly", "yearly"}
+
+
+def _parse_emc_points(value: Optional[str]) -> Optional[int]:
+    if value is None:
+        return None
+    match = re.search(r"\d+(?:[.,]\d+)?", str(value))
+    if match is None:
+        return None
+    try:
+        points = int(Decimal(match.group(0).replace(",", ".")))
+    except Exception:
+        return None
+    return points if points > 0 else None
+
+
+def _award_publication_subscription_emc_points_if_needed(
+    db: Session,
+    *,
+    user_id: int,
+    publication: models.Publication,
+    awarded_at: Optional[datetime] = None,
+) -> Optional[models.UserEmcPointLog]:
+    points = _parse_emc_points(publication.emc_credits_text)
+    if points is None:
+        return None
+
+    now = awarded_at or datetime.utcnow()
+    year_start = datetime(now.year, 1, 1)
+    year_end = datetime(now.year + 1, 1, 1)
+    existing = (
+        db.query(models.UserEmcPointLog.id)
+        .filter(
+            models.UserEmcPointLog.user_id == user_id,
+            models.UserEmcPointLog.source_type == "publication_subscription",
+            models.UserEmcPointLog.source_id == publication.id,
+            models.UserEmcPointLog.awarded_at >= year_start,
+            models.UserEmcPointLog.awarded_at < year_end,
+        )
+        .first()
+    )
+    if existing is not None:
+        return None
+
+    profile = (
+        db.query(models.UserProfile)
+        .filter(models.UserProfile.user_id == user_id)
+        .first()
+    )
+    if profile is None:
+        return None
+
+    log = models.UserEmcPointLog(
+        user_id=user_id,
+        source_type="publication_subscription",
+        source_id=publication.id,
+        points=points,
+        awarded_at=now,
+    )
+    db.add(log)
+    profile.total_emc_points = (profile.total_emc_points or 0) + points
+    profile.updated_at = now
+
+    notification_category_id = _account_notification_category_id(
+        db,
+        ["emc", "emc_points", "account"],
+    )
+    if notification_category_id is not None:
+        create_account_notification_for_user(
+            db,
+            user_id=user_id,
+            title=f"{points} puncte EMC adăugate",
+            description=(
+                f"Ți-au fost adăugate {points} puncte EMC pentru abonamentul "
+                f"la revista «{publication.name}»."
+            ),
+            category_id=notification_category_id,
+        )
+
+    return log
+
+
+def _try_award_publication_subscription_emc_points(
+    db: Session,
+    *,
+    user_id: int,
+    publication: models.Publication,
+    awarded_at: Optional[datetime] = None,
+) -> Optional[models.UserEmcPointLog]:
+    try:
+        with db.begin_nested():
+            return _award_publication_subscription_emc_points_if_needed(
+                db,
+                user_id=user_id,
+                publication=publication,
+                awarded_at=awarded_at,
+            )
+    except Exception:
+        logger.exception(
+            "Publication subscription EMC award failed user_id=%s publication_id=%s",
+            user_id,
+            publication.id,
+        )
+        return None
+
+
+def _subscription_end_date(start_date: datetime, billing_period: Optional[str]) -> Optional[datetime]:
+    period = (billing_period or "").strip().lower()
+    if period in {"monthly", "month"}:
+        return _add_months(start_date, 1)
+    if period in {"yearly", "annual", "year"}:
+        return _add_months(start_date, 12)
+    if period in {"weekly", "week"}:
+        return start_date + timedelta(days=7)
+    if period in {"one_time", "lifetime", "permanent"}:
+        return None
+    return start_date + timedelta(days=30)
+
+
+def _create_subscription_payment(
+    db: Session,
+    *,
+    user_id: int,
+    subscription_id: int,
+    content_item_id: int,
+    payment_method_id: Optional[int],
+    amount: Decimal,
+    currency: str,
+    provider: str = "demo",
+    provider_transaction_id: Optional[str] = None,
+) -> models.Payment:
+    now = datetime.utcnow()
+    payment = models.Payment(
+        user_id=user_id,
+        subscription_id=subscription_id,
+        content_item_id=content_item_id,
+        payment_method_id=payment_method_id,
+        amount=amount,
+        currency=currency or "RON",
+        provider=provider,
+        provider_transaction_id=provider_transaction_id
+        or f"demo_sub_{int(time.time())}_{secrets.token_hex(4)}",
+        status=models.PaymentStatus.paid,
+        paid_at=now,
+        created_at=now,
+    )
+    db.add(payment)
+    return payment
+
+
+def _apply_provider_confirmed_subscription_renewal(
+    db: Session,
+    *,
+    subscription: models.UserSubscription,
+    plan: models.SubscriptionPlan,
+    publication: models.Publication,
+    payment_method_id: Optional[int],
+    provider_transaction_id: str,
+    provider: str = "recurring_provider",
+) -> models.Payment:
+    if not _is_recurring_billing_period(plan.billing_period):
+        raise HTTPException(status_code=400, detail="Planul nu este recurent.")
+
+    now = datetime.utcnow()
+    current_end = subscription.end_date or now
+    extension_start = current_end if current_end > now else now
+    subscription.end_date = _subscription_end_date(extension_start, plan.billing_period)
+    subscription.status = models.SubscriptionStatus.active
+    subscription.auto_renew = True
+
+    payment = _create_subscription_payment(
+        db,
+        user_id=subscription.user_id,
+        subscription_id=subscription.id,
+        content_item_id=publication.content_item_id,
+        payment_method_id=payment_method_id,
+        amount=plan.price,
+        currency=plan.currency or "RON",
+        provider=provider,
+        provider_transaction_id=provider_transaction_id,
+    )
+    db.flush()
+    _try_award_publication_subscription_emc_points(
+        db,
+        user_id=subscription.user_id,
+        publication=publication,
+        awarded_at=now,
+    )
+    return payment
+
+
+def _ensure_publication_subscription_access(
+    db: Session,
+    publication_id: int,
+    user_id: Optional[int],
+):
+    plan = _active_publication_subscription_plan(db, publication_id)
+    if plan is None:
+        return
+    if user_id is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Autentifică-te pentru a accesa numerele acestei reviste.",
+        )
+    if _active_user_subscription_for_plan(db, user_id, plan.id) is not None:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Acces exclusiv prin abonament. Abonează-te pentru a debloca numerele acestei reviste.",
+    )
 
 
 @app.get("/api/me/payment-methods")
@@ -6390,9 +6815,18 @@ def register_for_event(
     db.add(registration)
     try:
         db.commit()
-    except Exception:
+    except Exception as exc:
         db.rollback()
-        raise
+        logger.exception(
+            "Publication subscription activation failed user_id=%s publication_id=%s plan_id=%s",
+            user_id,
+            publication_id,
+            plan.id,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Abonamentul nu a putut fi activat. Te rugăm să încerci din nou.",
+        ) from exc
     return {"message": "Înregistrat cu succes.", "ticket_code": registration.ticket_code}
 
 
@@ -6468,6 +6902,189 @@ def pay_and_register_for_event(
         "message": "Plata și înscrierea au fost realizate cu succes.",
         "ticket_code": registration.ticket_code,
     }
+
+
+@app.get("/api/publications/{publication_id}/subscription-status")
+def get_publication_subscription_status(
+    publication_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    publication = db.query(models.Publication.id).filter(models.Publication.id == publication_id).first()
+    if publication is None:
+        raise HTTPException(status_code=404, detail="Publicația nu există.")
+
+    plan = _active_publication_subscription_plan(db, publication_id)
+    if plan is None:
+        return {
+            "requires_subscription": False,
+            "has_active_subscription": True,
+            "subscription_plan": None,
+        }
+
+    active_subscription = _active_user_subscription_for_plan(db, user_id, plan.id)
+    return {
+        "requires_subscription": True,
+        "has_active_subscription": active_subscription is not None,
+        "subscription_plan": _serialize_subscription_plan(plan),
+        "user_subscription_id": active_subscription.id if active_subscription else None,
+    }
+
+
+@app.post("/api/publications/{publication_id}/subscribe")
+def subscribe_to_publication(
+    publication_id: int,
+    payload: PublicationSubscriptionPaymentPayload,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    publication = (
+        db.query(models.Publication)
+        .filter(models.Publication.id == publication_id)
+        .first()
+    )
+    if publication is None:
+        raise HTTPException(status_code=404, detail="Publicația nu există.")
+
+    plan = _active_publication_subscription_plan(db, publication_id)
+    if plan is None:
+        raise HTTPException(status_code=400, detail="Publicația nu are un abonament activ.")
+
+    if _active_user_subscription_for_plan(db, user_id, plan.id) is not None:
+        raise HTTPException(status_code=400, detail="Ai deja un abonament activ pentru această revistă.")
+
+    payment_method = (
+        db.query(models.UserPaymentMethod)
+        .filter(
+            models.UserPaymentMethod.id == payload.payment_method_id,
+            models.UserPaymentMethod.user_id == user_id,
+            models.UserPaymentMethod.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if payment_method is None:
+        raise HTTPException(status_code=404, detail="Metoda de plată nu a fost găsită.")
+
+    now = datetime.utcnow()
+    is_recurring = _is_recurring_billing_period(plan.billing_period)
+    subscription = models.UserSubscription(
+        user_id=user_id,
+        subscription_plan_id=plan.id,
+        start_date=now,
+        end_date=_subscription_end_date(now, plan.billing_period),
+        status=models.SubscriptionStatus.active,
+        auto_renew=is_recurring,
+        created_at=now,
+    )
+    db.add(subscription)
+    db.flush()
+
+    payment = _create_subscription_payment(
+        db,
+        user_id=user_id,
+        subscription_id=subscription.id,
+        content_item_id=publication.content_item_id,
+        payment_method_id=payment_method.id,
+        amount=plan.price,
+        currency=plan.currency or "RON",
+        provider_transaction_id=f"demo_sub_{int(time.time())}_{secrets.token_hex(4)}",
+    )
+    db.flush()
+    _try_award_publication_subscription_emc_points(
+        db,
+        user_id=user_id,
+        publication=publication,
+        awarded_at=now,
+    )
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return {
+        "message": "Abonamentul tău a fost activat. Ai acces la toate numerele revistei.",
+        "subscription_id": subscription.id,
+        "payment_id": payment.id,
+        "subscription_plan": _serialize_subscription_plan(plan),
+        "start_date": serialize_value(subscription.start_date),
+        "end_date": serialize_value(subscription.end_date),
+    }
+
+
+@app.get("/api/me/subscriptions")
+def get_my_subscriptions(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        _my_subscription_query(db)
+        .filter(models.UserSubscription.user_id == user_id)
+        .order_by(
+            models.UserSubscription.created_at.desc().nullslast(),
+            models.UserSubscription.start_date.desc().nullslast(),
+            models.UserSubscription.id.desc(),
+        )
+        .all()
+    )
+    return [
+        _serialize_my_subscription(subscription, plan, publication, content_item)
+        for subscription, plan, publication, content_item in rows
+    ]
+
+
+@app.get("/api/me/subscriptions/{subscription_id}")
+def get_my_subscription_detail(
+    subscription_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    row = (
+        _my_subscription_query(db)
+        .filter(models.UserSubscription.user_id == user_id)
+        .filter(models.UserSubscription.id == subscription_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Abonamentul nu a fost găsit.")
+    subscription, plan, publication, content_item = row
+    return _serialize_my_subscription(subscription, plan, publication, content_item)
+
+
+@app.post("/api/me/subscriptions/{subscription_id}/cancel")
+def cancel_my_subscription(
+    subscription_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    row = (
+        _my_subscription_query(db)
+        .filter(models.UserSubscription.user_id == user_id)
+        .filter(models.UserSubscription.id == subscription_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Abonamentul nu a fost găsit.")
+
+    subscription, plan, publication, content_item = row
+    subscription.auto_renew = False
+    subscription.status = models.SubscriptionStatus.cancelled
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    db.refresh(subscription)
+    data = _serialize_my_subscription(subscription, plan, publication, content_item)
+    access_until = data["end_date"] or "permanent"
+    data["message"] = (
+        f"Dezabonarea a fost înregistrată. Vei avea acces la revistă până la {access_until}, "
+        "iar abonamentul nu se va mai reînnoi automat."
+    )
+    return data
 
 
 @app.get("/api/courses/{course_id}/enrollment-status")
@@ -6915,6 +7532,32 @@ class AdminSubscriptionCreate(BaseModel):
     end_date: Optional[datetime] = None
     status: str = "active"
     auto_renew: bool = False
+
+
+class AdminSubscriptionPlanPayload(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    code: str = Field(min_length=1, max_length=100)
+    price: Decimal = Field(ge=0)
+    currency: str = Field(default="RON", min_length=1, max_length=10)
+    billing_period: str = Field(min_length=1, max_length=20)
+    scope: str = "platform"
+    publication_id: Optional[int] = Field(default=None, gt=0)
+    is_active: bool = True
+
+    @field_validator("name", "code", "currency", "billing_period", "scope")
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Field is required")
+        return value
+
+    @field_validator("scope")
+    @classmethod
+    def validate_scope(cls, value: str) -> str:
+        if value not in {"platform", "publication"}:
+            raise ValueError("scope must be platform or publication")
+        return value
 
 
 class AdminNotificationCreate(BaseModel):
@@ -9111,11 +9754,6 @@ def admin_get_roles(db: Session = Depends(get_db)):
     return get_roles(db)
 
 
-@app.get("/admin/subscription-plans")
-def admin_get_subscription_plans(db: Session = Depends(get_db)):
-    return get_subscription_plans(db)
-
-
 def admin_audit(
     db: Session,
     entity_type: str,
@@ -9817,6 +10455,185 @@ def admin_get_user_emc(user_id: int, db: Session = Depends(get_db)):
         "logs": [serialize_model(row) for row in logs],
         "certificates": [serialize_model(row) for row in certificates],
     }
+
+
+def subscription_plan_scope_label(scope: str) -> str:
+    return "Revistă" if scope == "publication" else "Platformă"
+
+
+def serialize_admin_publication_option(publication: models.Publication, content_item: Optional[models.ContentItem] = None) -> dict:
+    title = content_item.title if content_item else None
+    name = publication.name or title or f"Publicație #{publication.id}"
+    label = name if not title or title == name else f"{name} ({title})"
+    return {
+        "id": publication.id,
+        "publication_id": publication.id,
+        "content_item_id": publication.content_item_id,
+        "name": publication.name,
+        "title": title,
+        "label": label,
+    }
+
+
+def serialize_admin_subscription_plan(
+    plan: models.SubscriptionPlan,
+    publication: Optional[models.Publication] = None,
+    content_item: Optional[models.ContentItem] = None,
+) -> dict:
+    data = serialize_model(plan)
+    scope = data.get("scope") or "platform"
+    data["scope"] = scope
+    data["scope_label"] = subscription_plan_scope_label(scope)
+    data["publication_name"] = publication.name if publication else None
+    data["publication_title"] = content_item.title if content_item else None
+    data["publication_label"] = (
+        serialize_admin_publication_option(publication, content_item)["label"]
+        if publication
+        else None
+    )
+    return data
+
+
+def admin_subscription_plan_query(db: Session):
+    return (
+        db.query(models.SubscriptionPlan, models.Publication, models.ContentItem)
+        .outerjoin(models.Publication, models.Publication.id == models.SubscriptionPlan.publication_id)
+        .outerjoin(models.ContentItem, models.ContentItem.id == models.Publication.content_item_id)
+    )
+
+
+def get_admin_subscription_plan_or_404(db: Session, plan_id: int) -> models.SubscriptionPlan:
+    plan = db.query(models.SubscriptionPlan).filter(models.SubscriptionPlan.id == plan_id).first()
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Planul de abonament nu există.")
+    return plan
+
+
+def normalize_subscription_plan_payload(
+    db: Session,
+    payload: AdminSubscriptionPlanPayload,
+    exclude_plan_id: Optional[int] = None,
+) -> dict:
+    data = pydantic_dump(payload)
+    data["currency"] = (data.get("currency") or "RON").strip() or "RON"
+    data["scope"] = data.get("scope") or "platform"
+
+    existing = db.query(models.SubscriptionPlan.id).filter(models.SubscriptionPlan.code == data["code"])
+    if exclude_plan_id is not None:
+        existing = existing.filter(models.SubscriptionPlan.id != exclude_plan_id)
+    if existing.first() is not None:
+        raise HTTPException(status_code=422, detail="Codul abonamentului trebuie să fie unic.")
+
+    if data["scope"] == "platform":
+        data["publication_id"] = None
+    else:
+        publication_id = data.get("publication_id")
+        if publication_id is None:
+            raise HTTPException(status_code=422, detail="Alege o revistă pentru abonamentele de tip Revistă.")
+        publication = db.query(models.Publication.id).filter(models.Publication.id == publication_id).first()
+        if publication is None:
+            raise HTTPException(status_code=422, detail="Revista selectată nu există.")
+
+    data["scope"] = enum_value(models.SubscriptionPlanScope, data["scope"], "scope")
+    return data
+
+
+@app.get("/admin/publications/options")
+def admin_get_publication_options(db: Session = Depends(get_db)):
+    rows = (
+        db.query(models.Publication, models.ContentItem)
+        .outerjoin(models.ContentItem, models.ContentItem.id == models.Publication.content_item_id)
+        .filter(or_(models.ContentItem.id.is_(None), models.ContentItem.deleted_at.is_(None)))
+        .order_by(models.Publication.name.asc().nullslast(), models.ContentItem.title.asc().nullslast())
+        .all()
+    )
+    return [serialize_admin_publication_option(publication, item) for publication, item in rows]
+
+
+@app.get("/admin/subscription-plans")
+def admin_get_subscription_plans(db: Session = Depends(get_db)):
+    rows = (
+        admin_subscription_plan_query(db)
+        .order_by(
+            models.SubscriptionPlan.created_at.desc().nullslast(),
+            models.SubscriptionPlan.id.desc(),
+        )
+        .all()
+    )
+    return [serialize_admin_subscription_plan(plan, publication, item) for plan, publication, item in rows]
+
+
+@app.post("/admin/subscription-plans")
+def admin_create_subscription_plan(payload: AdminSubscriptionPlanPayload, db: Session = Depends(get_db)):
+    data = normalize_subscription_plan_payload(db, payload)
+    now = datetime.utcnow()
+    plan = models.SubscriptionPlan(
+        **data,
+        created_at=now,
+        updated_at=now,
+    )
+    try:
+        db.add(plan)
+        db.flush()
+        admin_audit(db, "subscription_plans", plan.id, "create", new_data=serialize_model(plan))
+        db.commit()
+        row = admin_subscription_plan_query(db).filter(models.SubscriptionPlan.id == plan.id).first()
+        return serialize_admin_subscription_plan(*row)
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=422, detail="Planul nu poate fi salvat. Verifică unicitatea codului și tipul abonamentului.") from e
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, detail="Nu am putut crea planul de abonament.", status_code=400)
+
+
+@app.put("/admin/subscription-plans/{plan_id}")
+def admin_update_subscription_plan(
+    plan_id: int,
+    payload: AdminSubscriptionPlanPayload,
+    db: Session = Depends(get_db),
+):
+    plan = get_admin_subscription_plan_or_404(db, plan_id)
+    old_data = serialize_model(plan)
+    data = normalize_subscription_plan_payload(db, payload, exclude_plan_id=plan_id)
+    try:
+        for key, value in data.items():
+            setattr(plan, key, value)
+        plan.updated_at = datetime.utcnow()
+        db.flush()
+        admin_audit(db, "subscription_plans", plan.id, "update", old_data=old_data, new_data=serialize_model(plan))
+        db.commit()
+        row = admin_subscription_plan_query(db).filter(models.SubscriptionPlan.id == plan.id).first()
+        return serialize_admin_subscription_plan(*row)
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=422, detail="Planul nu poate fi salvat. Verifică unicitatea codului și tipul abonamentului.") from e
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, detail="Nu am putut actualiza planul de abonament.", status_code=400)
+
+
+@app.patch("/admin/subscription-plans/{plan_id}/toggle-active")
+def admin_toggle_subscription_plan(plan_id: int, db: Session = Depends(get_db)):
+    plan = get_admin_subscription_plan_or_404(db, plan_id)
+    old_data = serialize_model(plan)
+    plan.is_active = not bool(plan.is_active)
+    plan.updated_at = datetime.utcnow()
+    try:
+        db.flush()
+        admin_audit(db, "subscription_plans", plan.id, "toggle_active", old_data=old_data, new_data=serialize_model(plan))
+        db.commit()
+        row = admin_subscription_plan_query(db).filter(models.SubscriptionPlan.id == plan.id).first()
+        return serialize_admin_subscription_plan(*row)
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, detail="Nu am putut schimba statusul planului.", status_code=400)
 
 
 @app.get("/admin/users/{user_id}/subscriptions")

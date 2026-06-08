@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -11,6 +12,7 @@ import '../theme/pulse_theme.dart';
 import '../widgets/ai_summary.dart';
 import '../widgets/content_card.dart';
 import '../widgets/emc_badge.dart';
+import '../widgets/event_payment_modal.dart';
 import '../widgets/favorite_button.dart';
 import '../widgets/skeleton_loading.dart';
 
@@ -83,6 +85,8 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
   bool _isSaving = false;
   bool _isFollowingPublication = false;
   bool _isPublicationFollowLoading = false;
+  bool _isSubscribing = false;
+  Map<String, dynamic>? _subscriptionStatus;
   List<ContentItem> _morePublications = [];
 
   @override
@@ -187,8 +191,12 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
       final detailsFuture = _apiService.getPublicationDetails(
         widget.publicationId,
       );
+      final subscriptionFuture = _apiService.getPublicationSubscriptionStatus(
+        widget.publicationId,
+      );
       final publicationsFuture = _apiService.getPublications(limit: 8);
       final issues = await issuesFuture;
+      final subscriptionStatus = await subscriptionFuture;
       final publications = await publicationsFuture;
       Map<String, dynamic>? publicationDetails;
       try {
@@ -200,6 +208,7 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
       setState(() {
         _issues = _sortIssues(issues);
         _publicationDetails = publicationDetails;
+        _subscriptionStatus = subscriptionStatus;
         _morePublications = publications
             .where(
               (publication) =>
@@ -361,6 +370,36 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
         _clean(_latestIssue?.publicationSubscriptionUrl);
   }
 
+  Map<String, dynamic>? get _subscriptionPlan {
+    final plan = _subscriptionStatus?['subscription_plan'];
+    return plan is Map<String, dynamic> ? plan : null;
+  }
+
+  bool get _requiresSubscription =>
+      _subscriptionStatus?['requires_subscription'] == true &&
+      _subscriptionPlan != null;
+
+  bool get _hasActiveSubscription =>
+      _subscriptionStatus?['has_active_subscription'] == true;
+
+  bool get _isIssueAccessLocked =>
+      _requiresSubscription && !_hasActiveSubscription;
+
+  String _billingPeriodLabel(dynamic value) {
+    switch (value?.toString()) {
+      case 'monthly':
+        return 'lunar';
+      case 'yearly':
+        return 'anual';
+      case 'weekly':
+        return 'săptămânal';
+      case 'one_time':
+        return 'acces permanent';
+      default:
+        return value?.toString() ?? 'abonament';
+    }
+  }
+
   List<PublicationAuthor> get _publicationAuthors {
     final rawAuthors = _publicationDetails?['authors'];
     final authors = rawAuthors is List
@@ -397,11 +436,125 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
   }
 
   void _openIssue(PublicationIssue issue) {
+    if (_isIssueAccessLocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Abonează-te pentru a debloca numerele revistei.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => PublicationIssueDetailScreen(
           issueId: issue.id,
           initialIssue: issue,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showSubscriptionPayment() async {
+    if (_isSubscribing) return;
+    final plan = _subscriptionPlan;
+    if (plan == null) return;
+    final amount = double.tryParse(plan['price']?.toString() ?? '') ?? 0.0;
+    final currency = plan['currency']?.toString() ?? 'RON';
+    final title = plan['name']?.toString() ?? 'Abonament revistă';
+    final billingPeriod = plan['billing_period']?.toString() ?? 'one_time';
+
+    setState(() => _isSubscribing = true);
+    try {
+      await EventPaymentModal.showSubscription(
+        context: context,
+        title: title,
+        amount: amount,
+        currency: currency,
+        billingPeriod: billingPeriod,
+        paymentProcessor: (paymentMethodId) => _apiService
+            .subscribeToPublication(widget.publicationId, paymentMethodId),
+        onSuccess: (_) async {
+          if (!mounted) return;
+          await _loadIssues();
+          if (!mounted) return;
+          await _showSubscriptionSuccessPopup(
+            'Abonamentul tău a fost activat. Ai acces la toate numerele revistei.',
+          );
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _isSubscribing = false);
+    }
+  }
+
+  Future<void> _showSubscriptionSuccessPopup(String message) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: PulseTheme.magazineContent.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: PulseTheme.magazineContent.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: PulseTheme.magazineContent,
+                  size: 40,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Felicitări!',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 15,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: PulseTheme.magazineContent,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text(
+                  'Închide',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -911,6 +1064,55 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
     );
   }
 
+  Widget _buildPremiumIssuesArea() {
+    final issuesContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildYearFilter(),
+        _buildLatestSection(),
+        _buildArchiveSection(),
+      ],
+    );
+
+    if (!_isIssueAccessLocked) return issuesContent;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 28),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          IgnorePointer(
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+              child: Opacity(opacity: 0.62, child: issuesContent),
+            ),
+          ),
+          Positioned.fill(
+            child: Container(color: Colors.white.withValues(alpha: 0.34)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 34, 20, 26),
+            child: _PublicationSubscriptionCard(
+              planName:
+                  _subscriptionPlan?['name']?.toString() ?? 'Abonament revistă',
+              price:
+                  double.tryParse(
+                    _subscriptionPlan?['price']?.toString() ?? '',
+                  ) ??
+                  0.0,
+              currency: _subscriptionPlan?['currency']?.toString() ?? 'RON',
+              billingPeriod: _billingPeriodLabel(
+                _subscriptionPlan?['billing_period'],
+              ),
+              isLoading: _isSubscribing,
+              onSubscribe: _showSubscriptionPayment,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMorePublicationsSection() {
     if (_morePublications.isEmpty) return const SizedBox.shrink();
 
@@ -1069,9 +1271,7 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                         _PublicationAuthorsCarousel(
                           authors: _publicationAuthors,
                         ),
-                        _buildYearFilter(),
-                        _buildLatestSection(),
-                        _buildArchiveSection(),
+                        _buildPremiumIssuesArea(),
                         _buildMorePublicationsSection(),
                         if (_emcCreditsText != null)
                           Padding(
@@ -1120,6 +1320,162 @@ class _PublicationAuthorsCarousel extends StatefulWidget {
   @override
   State<_PublicationAuthorsCarousel> createState() =>
       _PublicationAuthorsCarouselState();
+}
+
+class _PublicationSubscriptionCard extends StatelessWidget {
+  final String planName;
+  final double price;
+  final String currency;
+  final String billingPeriod;
+  final bool isLoading;
+  final VoidCallback onSubscribe;
+
+  const _PublicationSubscriptionCard({
+    required this.planName,
+    required this.price,
+    required this.currency,
+    required this.billingPeriod,
+    required this.isLoading,
+    required this.onSubscribe,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: PulseTheme.background,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: PulseTheme.magazineContent.withValues(alpha: 0.28),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 28,
+            offset: const Offset(0, 18),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: PulseTheme.magazineContent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: const Text(
+              'Acces exclusiv prin abonament',
+              style: TextStyle(
+                color: PulseTheme.magazineContent,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Abonează-te pentru a debloca toate numerele acestei reviste.',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
+              height: 1.18,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: PulseTheme.magazineContent.withValues(alpha: 0.16),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.auto_stories_rounded,
+                    color: PulseTheme.magazineContent,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        planName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$billingPeriod • ${price.toStringAsFixed(2)} $currency',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.66),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: isLoading ? null : onSubscribe,
+              style: FilledButton.styleFrom(
+                backgroundColor: PulseTheme.magazineContent,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: PulseTheme.magazineContent.withValues(
+                  alpha: 0.36,
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+              icon: isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.lock_open_rounded, size: 19),
+              label: Text(
+                isLoading ? 'Se procesează...' : 'Abonează-te acum',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _PublicationAuthorsCarouselState
@@ -1490,6 +1846,7 @@ class _PublicationIssueDetailScreenState
   List<String> _aiKeyPoints = [];
   String? _aiDisclaimer;
   String? _aiSummaryError;
+  Map<String, String> _pdfHeaders = const {};
 
   @override
   void initState() {
@@ -1500,7 +1857,18 @@ class _PublicationIssueDetailScreenState
       _logIssuePdf('initial', _issue!);
       _logPdfDiagnostics(_issue!);
     }
+    _loadPdfHeaders();
     _loadIssue();
+  }
+
+  Future<void> _loadPdfHeaders() async {
+    try {
+      final headers = await _apiService.authHeaders();
+      if (!mounted) return;
+      setState(() => _pdfHeaders = headers);
+    } catch (e) {
+      debugPrint('Publication issue PDF auth headers ignored: $e');
+    }
   }
 
   Future<void> _loadIssue() async {
@@ -1954,6 +2322,7 @@ class _PublicationIssueDetailScreenState
           child: PdfPreviewCard(
             issue: issue,
             pdfUrl: viewerPdfUrl,
+            headers: _pdfHeaders,
             onRead: viewerPdfUrl == null
                 ? null
                 : () => _openPdfViewer(issue, viewerPdfUrl),
@@ -1972,12 +2341,14 @@ class _PublicationIssueDetailScreenState
 class PdfPreviewCard extends StatefulWidget {
   final PublicationIssue issue;
   final String? pdfUrl;
+  final Map<String, String> headers;
   final VoidCallback? onRead;
 
   const PdfPreviewCard({
     super.key,
     required this.issue,
     required this.pdfUrl,
+    required this.headers,
     required this.onRead,
   });
 
@@ -2048,33 +2419,36 @@ class _PdfPreviewCardState extends State<PdfPreviewCard> {
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: IgnorePointer(
-                        child: SfPdfViewer.network(
-                          pdfUrl,
-                          canShowScrollHead: false,
-                          canShowPaginationDialog: false,
-                          pageLayoutMode: PdfPageLayoutMode.single,
-                          onDocumentLoaded: (_) {
-                            if (!mounted) return;
-                            setState(() => _isPreviewLoading = false);
-                          },
-                          onDocumentLoadFailed: (details) {
-                            if (kDebugMode) {
-                              debugPrint(
-                                'SfPdfViewer preview failed: '
-                                'url=$pdfUrl, '
-                                'error=${details.error}, '
-                                'description=${details.description}',
-                              );
-                            }
-                            if (!mounted) return;
-                            setState(() {
-                              _isPreviewLoading = false;
-                              _previewError = _pdfOpenErrorMessage;
-                            });
-                          },
-                        ),
-                      ),
+                      child: widget.headers.isEmpty
+                          ? const SizedBox.shrink()
+                          : IgnorePointer(
+                              child: SfPdfViewer.network(
+                                pdfUrl,
+                                headers: widget.headers,
+                                canShowScrollHead: false,
+                                canShowPaginationDialog: false,
+                                pageLayoutMode: PdfPageLayoutMode.single,
+                                onDocumentLoaded: (_) {
+                                  if (!mounted) return;
+                                  setState(() => _isPreviewLoading = false);
+                                },
+                                onDocumentLoadFailed: (details) {
+                                  if (kDebugMode) {
+                                    debugPrint(
+                                      'SfPdfViewer preview failed: '
+                                      'url=$pdfUrl, '
+                                      'error=${details.error}, '
+                                      'description=${details.description}',
+                                    );
+                                  }
+                                  if (!mounted) return;
+                                  setState(() {
+                                    _isPreviewLoading = false;
+                                    _previewError = _pdfOpenErrorMessage;
+                                  });
+                                },
+                              ),
+                            ),
                     ),
                     if (!_isPreviewLoading && _previewError == null)
                       Positioned.fill(
@@ -2148,8 +2522,26 @@ class PublicationIssuePdfViewerScreen extends StatefulWidget {
 
 class _PublicationIssuePdfViewerScreenState
     extends State<PublicationIssuePdfViewerScreen> {
+  final ApiService _apiService = ApiService();
   bool _isLoading = true;
   bool _hasError = false;
+  Map<String, String> _pdfHeaders = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPdfHeaders();
+  }
+
+  Future<void> _loadPdfHeaders() async {
+    try {
+      final headers = await _apiService.authHeaders();
+      if (!mounted) return;
+      setState(() => _pdfHeaders = headers);
+    } catch (e) {
+      debugPrint('Publication PDF viewer auth headers ignored: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2169,34 +2561,37 @@ class _PublicationIssuePdfViewerScreenState
               child: Stack(
                 children: [
                   Positioned.fill(
-                    child: SfPdfViewer.network(
-                      widget.pdfUrl,
-                      canShowScrollHead: true,
-                      canShowPaginationDialog: true,
-                      pageLayoutMode: PdfPageLayoutMode.continuous,
-                      onDocumentLoaded: (_) {
-                        if (!mounted) return;
-                        setState(() {
-                          _isLoading = false;
-                          _hasError = false;
-                        });
-                      },
-                      onDocumentLoadFailed: (details) {
-                        if (kDebugMode) {
-                          debugPrint(
-                            'SfPdfViewer full screen failed: '
-                            'url=${widget.pdfUrl}, '
-                            'error=${details.error}, '
-                            'description=${details.description}',
-                          );
-                        }
-                        if (!mounted) return;
-                        setState(() {
-                          _isLoading = false;
-                          _hasError = true;
-                        });
-                      },
-                    ),
+                    child: _pdfHeaders.isEmpty
+                        ? const SizedBox.shrink()
+                        : SfPdfViewer.network(
+                            widget.pdfUrl,
+                            headers: _pdfHeaders,
+                            canShowScrollHead: true,
+                            canShowPaginationDialog: true,
+                            pageLayoutMode: PdfPageLayoutMode.continuous,
+                            onDocumentLoaded: (_) {
+                              if (!mounted) return;
+                              setState(() {
+                                _isLoading = false;
+                                _hasError = false;
+                              });
+                            },
+                            onDocumentLoadFailed: (details) {
+                              if (kDebugMode) {
+                                debugPrint(
+                                  'SfPdfViewer full screen failed: '
+                                  'url=${widget.pdfUrl}, '
+                                  'error=${details.error}, '
+                                  'description=${details.description}',
+                                );
+                              }
+                              if (!mounted) return;
+                              setState(() {
+                                _isLoading = false;
+                                _hasError = true;
+                              });
+                            },
+                          ),
                   ),
                   if (_isLoading) const _PdfLoadingOverlay(),
                   if (_hasError)
@@ -2822,11 +3217,7 @@ class _PremiumPill extends StatelessWidget {
   final String? svgAsset;
   final Color color;
 
-  const _PremiumPill({
-    required this.label,
-    this.svgAsset,
-    required this.color,
-  });
+  const _PremiumPill({required this.label, this.svgAsset, required this.color});
 
   @override
   Widget build(BuildContext context) {

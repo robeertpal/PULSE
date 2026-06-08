@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Abonamente - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .subscription-form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 20px;
+        }
+
+        .subscription-form-grid .full {
+            grid-column: 1 / -1;
+        }
+
+        .subscription-code {
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .price-cell {
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 860px) {
+            .subscription-form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="header-actions">
+                <h2>Abonamente</h2>
+                <button type="button" class="btn btn-primary" onclick="newSubscriptionPlan()">Adaugă abonament</button>
+            </div>
+
+            <div id="alert-msg" class="alert"></div>
+
+            <div class="form-card" id="subscription-form-card" style="display:none; margin-bottom:24px;">
+                <form id="subscription-form">
+                    <input type="hidden" id="subscription_plan_id">
+                    <div class="subscription-form-grid">
+                        <div class="form-group">
+                            <label for="subscription_name">Nume abonament *</label>
+                            <input type="text" id="subscription_name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="subscription_code">Cod unic *</label>
+                            <input type="text" id="subscription_code" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="subscription_price">Preț *</label>
+                            <input type="number" id="subscription_price" min="0" step="0.01" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="subscription_currency">Monedă *</label>
+                            <input type="text" id="subscription_currency" maxlength="10" value="RON" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="subscription_billing_period">Perioadă facturare *</label>
+                            <select id="subscription_billing_period" required>
+                                <option value="monthly">monthly</option>
+                                <option value="yearly">yearly</option>
+                                <option value="one_time">one_time</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="subscription_scope">Tip abonament *</label>
+                            <select id="subscription_scope" required>
+                                <option value="platform">Platformă</option>
+                                <option value="publication">Revistă</option>
+                            </select>
+                        </div>
+                        <div class="form-group full" id="publication-field" style="display:none;">
+                            <label for="subscription_publication_id">Revistă/Publicație *</label>
+                            <select id="subscription_publication_id">
+                                <option value="">Se încarcă...</option>
+                            </select>
+                        </div>
+                        <div class="form-group full checkbox-group">
+                            <input type="checkbox" id="subscription_is_active" checked>
+                            <label for="subscription_is_active">Activ</label>
+                        </div>
+                    </div>
+                    <div class="header-actions" style="margin-bottom:0;">
+                        <button type="button" class="btn" onclick="cancelSubscriptionPlanEdit()">Anulează</button>
+                        <button type="button" class="btn btn-primary" onclick="saveSubscriptionPlan()">Salvează</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nume</th>
+                            <th>Cod</th>
+                            <th>Tip</th>
+                            <th>Revistă asociată</th>
+                            <th>Preț</th>
+                            <th>Monedă</th>
+                            <th>Perioadă facturare</th>
+                            <th>Status</th>
+                            <th>Creat la</th>
+                            <th>Acțiuni</th>
+                        </tr>
+                    </thead>
+                    <tbody id="subscriptions-table-body"><tr><td colspan="10">Se încarcă...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/subscriptions.js"></script>
+</body>
+</html>

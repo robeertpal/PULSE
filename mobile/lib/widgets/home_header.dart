@@ -507,7 +507,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                           ),
                           _buildDropdownItem(
                             context,
-                            'Revistele mele',
+                            'Abonamentele mele',
                             'assets/icons/books.svg',
                           ),
                           _buildDropdownItem(

@@ -8,6 +8,13 @@ class EventPaymentModal extends StatefulWidget {
   final String title;
   final double amount;
   final String currency;
+  final Color accentColor;
+  final IconData summaryIcon;
+  final String productLabel;
+  final String confirmButtonLabel;
+  final String? paymentNotice;
+  final Future<Map<String, dynamic>> Function(int paymentMethodId)?
+  paymentProcessor;
   final void Function(String?) onSuccess;
 
   const EventPaymentModal({
@@ -16,6 +23,12 @@ class EventPaymentModal extends StatefulWidget {
     required this.title,
     required this.amount,
     required this.currency,
+    this.accentColor = PulseTheme.eventContent,
+    this.summaryIcon = Icons.confirmation_num_rounded,
+    this.productLabel = 'Participare Eveniment',
+    this.confirmButtonLabel = 'Confirmă plata',
+    this.paymentNotice,
+    this.paymentProcessor,
     required this.onSuccess,
   });
 
@@ -41,6 +54,49 @@ class EventPaymentModal extends StatefulWidget {
     );
   }
 
+  static Future<void> showSubscription({
+    required BuildContext context,
+    required String title,
+    required double amount,
+    required String currency,
+    required String billingPeriod,
+    required Future<Map<String, dynamic>> Function(int paymentMethodId)
+    paymentProcessor,
+    required void Function(String?) onSuccess,
+  }) {
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => EventPaymentModal(
+        eventId: 0,
+        title: title,
+        amount: amount,
+        currency: currency,
+        accentColor: PulseTheme.magazineContent,
+        summaryIcon: Icons.auto_stories_rounded,
+        productLabel: 'Abonament revistă',
+        confirmButtonLabel: 'Activează abonamentul',
+        paymentNotice: _subscriptionPaymentNotice(billingPeriod),
+        paymentProcessor: paymentProcessor,
+        onSuccess: onSuccess,
+      ),
+    );
+  }
+
+  static String _subscriptionPaymentNotice(String billingPeriod) {
+    switch (billingPeriod) {
+      case 'monthly':
+        return 'Acest abonament este recurent. Plata se va reînnoi automat în fiecare lună, până la anulare.';
+      case 'yearly':
+        return 'Acest abonament este recurent. Plata se va reînnoi automat în fiecare an, până la anulare.';
+      case 'one_time':
+        return 'Aceasta este o plată unică. Abonamentul nu se reînnoiește automat.';
+      default:
+        return 'Verifică perioada de facturare înainte de confirmarea plății.';
+    }
+  }
+
   @override
   State<EventPaymentModal> createState() => _EventPaymentModalState();
 }
@@ -54,6 +110,8 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
   String? _errorMessage;
   List<Map<String, dynamic>> _paymentMethods = [];
   Map<String, dynamic>? _selectedMethod;
+
+  Color get _accentColor => widget.accentColor;
 
   // Add Card Form State
   final _cardNumberController = TextEditingController();
@@ -157,10 +215,13 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
     });
 
     try {
-      final res = await _apiService.payAndRegisterForEvent(
-        widget.eventId,
-        _selectedMethod!['id'],
-      );
+      final processor =
+          widget.paymentProcessor ??
+          (paymentMethodId) => _apiService.payAndRegisterForEvent(
+            widget.eventId,
+            paymentMethodId,
+          );
+      final res = await processor(_selectedMethod!['id']);
       if (!mounted) return;
       Navigator.pop(context);
       widget.onSuccess(res['ticket_code'] as String?);
@@ -184,7 +245,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
           height: 4,
           decoration: BoxDecoration(
             color: isActive
-                ? PulseTheme.eventContent
+                ? _accentColor
                 : Colors.white.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(2),
           ),
@@ -208,9 +269,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
         ),
         const SizedBox(height: 24),
         if (_isLoadingMethods)
-          const Center(
-            child: CircularProgressIndicator(color: PulseTheme.eventContent),
-          )
+          Center(child: CircularProgressIndicator(color: _accentColor))
         else ...[
           ..._paymentMethods.map((method) {
             final isSelected = _selectedMethod?['id'] == method['id'];
@@ -223,12 +282,10 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? PulseTheme.eventContent.withValues(alpha: 0.1)
+                      ? _accentColor.withValues(alpha: 0.1)
                       : Colors.white.withValues(alpha: 0.05),
                   border: Border.all(
-                    color: isSelected
-                        ? PulseTheme.eventContent
-                        : Colors.transparent,
+                    color: isSelected ? _accentColor : Colors.transparent,
                     width: 1,
                   ),
                   borderRadius: BorderRadius.circular(16),
@@ -238,7 +295,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                     Icon(
                       Icons.credit_card_rounded,
                       color: isSelected
-                          ? PulseTheme.eventContent
+                          ? _accentColor
                           : Colors.white.withValues(alpha: 0.7),
                     ),
                     const SizedBox(width: 16),
@@ -272,13 +329,13 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: PulseTheme.eventContent.withValues(alpha: 0.1),
+                          color: _accentColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text(
+                        child: Text(
                           'Implicit',
                           style: TextStyle(
-                            color: PulseTheme.eventContent,
+                            color: _accentColor,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
@@ -292,7 +349,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                         shape: BoxShape.circle,
                         border: Border.all(
                           color: isSelected
-                              ? PulseTheme.eventContent
+                              ? _accentColor
                               : Colors.white.withValues(alpha: 0.3),
                           width: 2,
                         ),
@@ -302,8 +359,8 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                               child: Container(
                                 width: 12,
                                 height: 12,
-                                decoration: const BoxDecoration(
-                                  color: PulseTheme.eventContent,
+                                decoration: BoxDecoration(
+                                  color: _accentColor,
                                   shape: BoxShape.circle,
                                 ),
                               ),
@@ -357,7 +414,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                 ? () => setState(() => _currentStep = 2)
                 : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: PulseTheme.eventContent,
+              backgroundColor: _accentColor,
               foregroundColor: Colors.black,
               disabledBackgroundColor: Colors.white.withValues(alpha: 0.1),
               disabledForegroundColor: Colors.white.withValues(alpha: 0.3),
@@ -556,7 +613,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
         ElevatedButton(
           onPressed: _isProcessing ? null : _addCard,
           style: ElevatedButton.styleFrom(
-            backgroundColor: PulseTheme.eventContent,
+            backgroundColor: _accentColor,
             foregroundColor: Colors.black,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
@@ -627,12 +684,12 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: PulseTheme.eventContent.withValues(alpha: 0.1),
+                      color: _accentColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(
-                      Icons.confirmation_num_rounded,
-                      color: PulseTheme.eventContent,
+                    child: Icon(
+                      widget.summaryIcon,
+                      color: _accentColor,
                       size: 24,
                     ),
                   ),
@@ -660,9 +717,9 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                             color: Colors.white.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Text(
-                            'Participare Eveniment',
-                            style: TextStyle(
+                          child: Text(
+                            widget.productLabel,
+                            style: const TextStyle(
                               color: Colors.white70,
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -719,8 +776,8 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                   ),
                   Text(
                     '${widget.amount.toStringAsFixed(2)} ${widget.currency}',
-                    style: const TextStyle(
-                      color: PulseTheme.eventContent,
+                    style: TextStyle(
+                      color: _accentColor,
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.5,
@@ -728,6 +785,42 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                   ),
                 ],
               ),
+              if (widget.paymentNotice != null) ...[
+                const SizedBox(height: 18),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: _accentColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: _accentColor.withValues(alpha: 0.28),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.autorenew_rounded,
+                        color: _accentColor,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          widget.paymentNotice!,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -735,7 +828,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
         ElevatedButton(
           onPressed: _isProcessing ? null : _processPayment,
           style: ElevatedButton.styleFrom(
-            backgroundColor: PulseTheme.eventContent,
+            backgroundColor: _accentColor,
             foregroundColor: Colors.black,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
@@ -758,7 +851,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                     const Icon(Icons.lock_rounded, size: 16),
                     const SizedBox(width: 8),
                     Text(
-                      'Confirmă plata',
+                      widget.confirmButtonLabel,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,

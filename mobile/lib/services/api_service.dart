@@ -30,6 +30,8 @@ class ApiService {
     return {'Authorization': 'Bearer $sessionToken'};
   }
 
+  Future<Map<String, String>> authHeaders() => _buildAuthHeaders();
+
   static String get _baseUrl {
     final configured = _configuredBaseUrl.trim();
     if (configured.isNotEmpty) {
@@ -796,6 +798,71 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> getPublicationSubscriptionStatus(
+    int publicationId,
+  ) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(
+            Uri.parse(
+              '$baseUrl/api/publications/$publicationId/subscription-status',
+            ),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut verifica abonamentul revistei.',
+          ),
+        );
+      }
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns status abonament neasteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error checking publication subscription: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> subscribeToPublication(
+    int publicationId,
+    int paymentMethodId,
+  ) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/publications/$publicationId/subscribe'),
+            headers: {...headers, 'Content-Type': 'application/json'},
+            body: json.encode({'payment_method_id': paymentMethodId}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut activa abonamentul. Te rugăm să încerci din nou.',
+          ),
+        );
+      }
+      final decoded = json.decode(response.body) as Map<String, dynamic>;
+      return decoded;
+    } catch (e) {
+      debugPrint('Error subscribing to publication: $e');
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> checkCourseEnrollment(int courseId) async {
     try {
       final headers = await _buildAuthHeaders();
@@ -865,6 +932,81 @@ class ApiService {
       return decoded.whereType<Map<String, dynamic>>().toList();
     } catch (e) {
       debugPrint('Error fetching payments: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getMySubscriptions() async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/me/subscriptions'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(response, 'Nu am putut încărca abonamentele.'),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Răspuns abonamente neașteptat.');
+      }
+      return decoded.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      debugPrint('Error fetching subscriptions: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> getMySubscriptionDetail(int id) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/me/subscriptions/$id'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut încărca detaliile abonamentului.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Răspuns detalii abonament neașteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching subscription detail: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> cancelMySubscription(int id) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/me/subscriptions/$id/cancel'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      await _handleAuthFailure(response);
+      final decoded = json.decode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200) {
+        throw Exception(decoded['detail'] ?? 'Nu am putut anula abonamentul.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error cancelling subscription: $e');
       rethrow;
     }
   }
@@ -1264,8 +1406,12 @@ class ApiService {
 
   Future<PublicationIssue> getPublicationIssueDetail(int issueId) async {
     try {
+      final headers = await _buildAuthHeaders();
       final response = await http
-          .get(Uri.parse('$_baseUrl/publication-issues/$issueId'))
+          .get(
+            Uri.parse('$_baseUrl/publication-issues/$issueId'),
+            headers: headers,
+          )
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 404) {
@@ -1316,8 +1462,9 @@ class ApiService {
   ) async {
     final url = getPublicationIssuePdfUrl(issueId);
     try {
+      final headers = await _buildAuthHeaders();
       final response = await http
-          .head(Uri.parse(url))
+          .head(Uri.parse(url), headers: headers)
           .timeout(const Duration(seconds: 12));
       final diagnostics = {
         'url': url,
@@ -1707,10 +1854,7 @@ class ApiService {
       await _handleAuthFailure(response);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(
-          _responseErrorMessage(
-            response,
-            'Nu am putut trimite raportarea.',
-          ),
+          _responseErrorMessage(response, 'Nu am putut trimite raportarea.'),
         );
       }
     } catch (e) {
