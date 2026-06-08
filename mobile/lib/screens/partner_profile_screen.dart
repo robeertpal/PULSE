@@ -93,7 +93,27 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
 
   String? get _description => _clean(_profile?['description']);
 
+  int get _followersCount {
+    final value = _profile?['followers_count'];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return 0;
+  }
 
+  String _formatFollowers(int count) {
+    // Romanian locale-style thousands separator with dot
+    final String grouped;
+    if (count >= 1000) {
+      final thousands = count ~/ 1000;
+      final remainder = count % 1000;
+      grouped = remainder == 0
+          ? '$thousands.000'
+          : '$thousands.${remainder.toString().padLeft(3, '0')}';
+    } else {
+      grouped = count.toString();
+    }
+    return count == 1 ? '$grouped urmăritor' : '$grouped urmăritori';
+  }
 
   List<ContentItem> _parseContentItems(dynamic rawContents) {
     if (rawContents is! List) return const [];
@@ -343,59 +363,65 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
   }
 
   // ── Logo ───────────────────────────────────────────────────────────────────
-  Widget _buildLogo() {
+  Widget _buildLogoImage() {
     final logoUrl = _logoUrl;
     final hasValidUrl =
         logoUrl != null &&
         (logoUrl.startsWith('http://') || logoUrl.startsWith('https://'));
 
     if (!hasValidUrl) {
-      // Fallback: initials with gradient, no outer ring
-      return Container(
-        width: 96,
-        height: 96,
-        decoration: BoxDecoration(
-          gradient: _accentGradient,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Center(
-          child: Text(
-            _initials(_displayName),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-      );
+      return _buildLogoFallback();
     }
+    return Image.network(
+      logoUrl,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) => _buildLogoFallback(),
+    );
+  }
 
-    // Raw logo — no background, no ring, no gradient wrapper
-    return SizedBox(
-      width: 96,
-      height: 96,
-      child: Image.network(
-        logoUrl,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) => Container(
-          width: 96,
-          height: 96,
-          decoration: BoxDecoration(
-            gradient: _accentGradient,
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Center(
-            child: Text(
-              _initials(_displayName),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 32,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+  Widget _buildLogoFallback() {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: _accentGradient,
+      ),
+      child: Center(
+        child: Text(
+          _initials(_displayName),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 32,
+            fontWeight: FontWeight.w900,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLogo() {
+    // Gradient ring (roz-portocaliu) — 3px ring — dark gap — logo inside
+    return Container(
+      width: 106,
+      height: 106,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: _accentGradient,
+        boxShadow: [
+          BoxShadow(
+            color: _pink.withValues(alpha: 0.26),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+            spreadRadius: -6,
+          ),
+        ],
+      ),
+      child: Container(
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          color: Color(0xFF101010), // thin dark gap between ring and logo
+        ),
+        padding: const EdgeInsets.all(4),
+        child: ClipOval(child: _buildLogoImage()),
       ),
     );
   }
@@ -566,18 +592,50 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
 
           const SizedBox(height: 18),
 
-          // ── Partner name ─────────────────────────────────────────────────
+          // ── Partner name + verified icon ────────────────────────────────
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  _displayName,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                    height: 1.1,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              ShaderMask(
+                shaderCallback: (bounds) =>
+                    _accentGradient.createShader(bounds),
+                child: const Icon(
+                  Icons.verified_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 6),
+
+          // ── Followers count ────────────────────────────────────────────
           Text(
-            _displayName,
+            _formatFollowers(_followersCount),
             textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.5,
-              height: 1.1,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.46),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.1,
             ),
           ),
 

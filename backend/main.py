@@ -2529,9 +2529,18 @@ def serialize_partner_profile(db: Session, partner: models.EventPartner, content
             and _datetime_for_comparison(item.event.start_date) >= now
         ]
     )
+    followers_count = (
+        db.query(models.Follow)
+        .filter(
+            models.Follow.target_type == "partner",
+            models.Follow.target_id == partner.id,
+        )
+        .count()
+    )
     data = serialize_event_partner(partner)
     data["content_count"] = len(unique_content_ids)
     data["upcoming_event_count"] = upcoming_count
+    data["followers_count"] = followers_count
     return data
 
 
