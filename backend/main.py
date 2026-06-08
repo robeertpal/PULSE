@@ -1100,7 +1100,7 @@ class RateLimiter:
         self._events = defaultdict(deque)
 
     def check(self, key: str, limit: int, window_seconds: int):
-        now = datetime.utcnow().timestamp()
+        now = datetime.now(timezone.utc).timestamp()
         events = self._events[key]
         while events and now - events[0] > window_seconds:
             events.popleft()
@@ -2460,9 +2460,18 @@ def serialize_partner_profile(db: Session, partner: models.EventPartner):
             if item.event and item.event.start_date and item.event.start_date >= datetime.utcnow()
         ]
     )
+    followers_count = (
+        db.query(models.Follow)
+        .filter(
+            models.Follow.target_type == "partner",
+            models.Follow.target_id == partner.id,
+        )
+        .count()
+    )
     data = serialize_event_partner(partner)
     data["content_count"] = len(unique_content_ids)
     data["upcoming_event_count"] = upcoming_count
+    data["followers_count"] = followers_count
     return data
 
 
@@ -5367,7 +5376,7 @@ def save_content(
             models.SavedContent(
                 user_id=user_id,
                 content_item_id=content_item_id,
-                saved_at=datetime.utcnow(),
+                saved_at=datetime.now(timezone.utc),
             )
         )
         db.commit()
