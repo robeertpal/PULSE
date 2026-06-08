@@ -3879,12 +3879,24 @@ def admin_update_contributor_verification(
         raise HTTPException(status_code=404, detail="Contributorul nu are profil medical.")
 
     is_verified = bool(payload.is_verified_contributor)
+    previous_verified = bool(profile.is_verified_contributor)
     profile.is_verified_contributor = is_verified
     profile.verified_contributor_at = datetime.utcnow() if is_verified else None
     profile.verified_contributor_by = None
     profile.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(profile)
+    create_admin_audit_log(
+        db,
+        action="verified_contributor_marked" if is_verified else "verified_contributor_unmarked",
+        target_type="contributor",
+        target_id=user_id,
+        details={
+            "previous_verified": previous_verified,
+            "is_verified_contributor": is_verified,
+            "name": submitter_display_name(db, user_id),
+        },
+    )
 
     return {
         "user_id": user_id,
@@ -4150,6 +4162,13 @@ def admin_approve_content_submission(
         submission = admin_mark_submission(db, submission_id, "approved", payload.review_notes)
         db.commit()
         db.refresh(submission)
+        create_admin_audit_log(
+            db,
+            action="submission_approved",
+            target_type="content_submission",
+            target_id=submission_id,
+            details={"review_notes": payload.review_notes},
+        )
         return serialize_content_submission(db, get_submission_or_404(db, submission.id))
     except Exception as e:
         db.rollback()
@@ -4168,6 +4187,13 @@ def admin_reject_content_submission(
         submission = admin_mark_submission(db, submission_id, "rejected", payload.review_notes)
         db.commit()
         db.refresh(submission)
+        create_admin_audit_log(
+            db,
+            action="submission_rejected",
+            target_type="content_submission",
+            target_id=submission_id,
+            details={"review_notes": payload.review_notes},
+        )
         return serialize_content_submission(db, get_submission_or_404(db, submission.id))
     except Exception as e:
         db.rollback()
@@ -4186,6 +4212,13 @@ def admin_needs_changes_content_submission(
         submission = admin_mark_submission(db, submission_id, "needs_changes", payload.review_notes)
         db.commit()
         db.refresh(submission)
+        create_admin_audit_log(
+            db,
+            action="submission_needs_changes",
+            target_type="content_submission",
+            target_id=submission_id,
+            details={"review_notes": payload.review_notes},
+        )
         return serialize_content_submission(db, get_submission_or_404(db, submission.id))
     except Exception as e:
         db.rollback()
@@ -4205,6 +4238,13 @@ def admin_publish_content_submission(submission_id: int, db: Session = Depends(g
         publish_submission_to_content_item(db, submission)
         db.commit()
         db.refresh(submission)
+        create_admin_audit_log(
+            db,
+            action="submission_published",
+            target_type="content_submission",
+            target_id=submission_id,
+            details={"published_content_item_id": submission.published_content_item_id},
+        )
         return serialize_content_submission(db, get_submission_or_404(db, submission.id))
     except Exception as e:
         db.rollback()
@@ -8863,6 +8903,78 @@ def admin_audit(
         )
     except Exception:
         logger.exception("Failed to append admin audit log")
+
+
+def _audit_jsonable(value):
+    if isinstance(value, dict):
+        return {key: _audit_jsonable(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_audit_jsonable(item) for item in value]
+    return serialize_value(value)
+
+
+def create_admin_audit_log(
+    db: Session,
+    action: str,
+    target_type: Optional[str] = None,
+    target_id: Optional[int] = None,
+    details: Optional[dict] = None,
+    admin_user_id: Optional[int] = None,
+) -> None:
+    try:
+        db.add(
+            models.AdminAuditLog(
+                admin_user_id=admin_user_id,
+                action=action,
+                target_type=target_type,
+                target_id=target_id,
+                details=_audit_jsonable(details or {}),
+                created_at=datetime.utcnow(),
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to create admin audit log action=%s target_type=%s target_id=%s", action, target_type, target_id)
+
+
+def serialize_admin_audit_log(row: models.AdminAuditLog) -> dict:
+    return {
+        "id": row.id,
+        "admin_user_id": row.admin_user_id,
+        "action": row.action,
+        "target_type": row.target_type,
+        "target_id": row.target_id,
+        "details": row.details or {},
+        "created_at": serialize_value(row.created_at),
+    }
+
+
+@app.get("/admin/audit-logs")
+def admin_get_audit_logs(
+    limit: int = Query(default=50, ge=1, le=200),
+    action: Optional[str] = Query(default=None),
+    target_type: Optional[str] = Query(default=None),
+    target_id: Optional[int] = Query(default=None, gt=0),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.AdminAuditLog)
+    if action:
+        query = query.filter(models.AdminAuditLog.action == action.strip())
+    if target_type:
+        query = query.filter(models.AdminAuditLog.target_type == target_type.strip())
+    if target_id is not None:
+        query = query.filter(models.AdminAuditLog.target_id == target_id)
+
+    rows = (
+        query.order_by(
+            models.AdminAuditLog.created_at.desc().nullslast(),
+            models.AdminAuditLog.id.desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+    return [serialize_admin_audit_log(row) for row in rows]
 
 
 def get_admin_user_or_404(db: Session, user_id: int):
