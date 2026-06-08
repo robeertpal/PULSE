@@ -5,8 +5,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../models/content_item.dart';
 import '../services/api_service.dart';
 import '../theme/pulse_theme.dart';
-import 'author_profile_screen.dart';
 import 'partner_profile_screen.dart';
+import 'public_author_profile_screen.dart';
 import '../widgets/ai_summary.dart';
 import '../widgets/content_card.dart';
 import '../widgets/content_type_badge.dart';
@@ -501,9 +501,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide(
-                          color: PulseTheme.borderLight,
-                        ),
+                        borderSide: BorderSide(color: PulseTheme.borderLight),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -549,9 +547,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                       alignLabelWithHint: true,
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide(
-                          color: PulseTheme.borderLight,
-                        ),
+                        borderSide: BorderSide(color: PulseTheme.borderLight),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -1173,10 +1169,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(999),
           ),
-          textStyle: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-          ),
+          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
         ),
       ),
     );
@@ -1311,15 +1304,18 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
 
   Future<void> _openAuthorProfile(ContentItem item) async {
     final authorId = item.authorId;
-    if (authorId == null) return;
+    final contributorUserId = item.contributorUserId;
+    if (authorId == null && contributorUserId == null) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => AuthorProfileScreen(
+        builder: (context) => PublicAuthorProfileScreen(
           authorId: authorId,
+          contributorUserId: contributorUserId,
           initialName: item.authorName,
         ),
       ),
     );
+    if (authorId == null) return;
     try {
       final isFollowing = await _apiService.getFollowStatus(
         targetType: 'author',
@@ -1335,11 +1331,14 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   }
 
   Widget _buildAuthorFollowCard(ContentItem item) {
-    if (item.authorId == null) return const SizedBox.shrink();
+    if (item.authorId == null && item.contributorUserId == null) {
+      return const SizedBox.shrink();
+    }
     final authorName = item.authorName?.trim().isNotEmpty == true
         ? item.authorName!.trim()
-        : 'Autor PULSE';
+        : 'Contributor PULSE';
     final accent = _accentFor(item);
+    final canFollowAuthor = item.authorId != null;
 
     return Container(
       width: double.infinity,
@@ -1418,35 +1417,41 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          OutlinedButton(
-            onPressed: _isAuthorFollowLoading
-                ? null
-                : () => _toggleAuthorFollow(item),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _isFollowingAuthor
-                  ? PulseTheme.textPrimary
-                  : accent,
-              side: BorderSide(
-                color: _isFollowingAuthor
-                    ? PulseTheme.borderLight
-                    : accent.withValues(alpha: 0.42),
+          if (canFollowAuthor)
+            OutlinedButton(
+              onPressed: _isAuthorFollowLoading
+                  ? null
+                  : () => _toggleAuthorFollow(item),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _isFollowingAuthor
+                    ? PulseTheme.textPrimary
+                    : accent,
+                side: BorderSide(
+                  color: _isFollowingAuthor
+                      ? PulseTheme.borderLight
+                      : accent.withValues(alpha: 0.42),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                ),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
-              ),
+              child: _isAuthorFollowLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      _isFollowingAuthor
+                          ? 'Urm\u0103re\u0219ti'
+                          : 'Urm\u0103re\u0219te',
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
             ),
-            child: _isAuthorFollowLoading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(
-                    _isFollowingAuthor ? 'Following' : 'Follow',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-          ),
         ],
       ),
     );
@@ -2826,7 +2831,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (item.authorId != null) ...[
+                        if (item.authorId != null ||
+                            item.contributorUserId != null) ...[
                           _buildAuthorFollowCard(item),
                           const SizedBox(height: 22),
                         ],

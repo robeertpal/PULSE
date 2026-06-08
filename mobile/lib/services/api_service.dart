@@ -1745,6 +1745,68 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> getPublicContributorProfile(int userId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/public-profiles/$userId'))
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 404) {
+        throw Exception('Profilul public nu a fost gasit.');
+      }
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut incarca profilul public.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Raspuns profil public neasteptat.');
+      }
+      return decoded;
+    } catch (e) {
+      debugPrint('Error fetching public contributor profile: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<ContentItem>> getPublicContributorContent(
+    int userId, {
+    int limit = 30,
+  }) async {
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/public-profiles/$userId/content',
+      ).replace(queryParameters: {'limit': limit.toString()});
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut incarca materialele contributorului.',
+          ),
+        );
+      }
+
+      final decoded = json.decode(response.body);
+      if (decoded is! List) {
+        throw Exception('Raspuns continut contributor neasteptat.');
+      }
+      return decoded
+          .whereType<Map<String, dynamic>>()
+          .map((json) => ContentItem.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching public contributor content: $e');
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> getPartnerProfile(int partnerId) async {
     try {
       final response = await http
