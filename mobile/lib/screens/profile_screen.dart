@@ -7,7 +7,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
-import 'content_submissions_screen.dart';
 import 'emc_activity_screen.dart';
 import 'following_screen.dart';
 import '../services/api_service.dart';
@@ -365,12 +364,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ).push(MaterialPageRoute(builder: (context) => const FollowingScreen()));
   }
 
-  Future<void> _openContentSubmissions() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const ContentSubmissionsScreen()),
-    );
-  }
-
   Future<bool> _saveProfile(Map<String, String> changes) async {
     setState(() => _errorMessage = null);
 
@@ -659,14 +652,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           subtitle:
               'Autori, publicații, parteneri, categorii și specializări urmărite.',
           onTap: _openFollowing,
-        ),
-        const SizedBox(height: 14),
-        _ProfileActionCard(
-          icon: Icons.article_outlined,
-          title: 'Contribuțiile mele',
-          subtitle:
-              'Trimite conținut editorial și urmărește statusul review-ului.',
-          onTap: _openContentSubmissions,
         ),
         const SizedBox(height: 14),
         _InfoSection(
