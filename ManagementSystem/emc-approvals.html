@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Aprobări EMC - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="header-actions">
+                <h2>Aprobări EMC</h2>
+            </div>
+
+            <div id="success-msg" class="alert success"></div>
+            <div id="error-msg" class="alert error"></div>
+
+            <section class="management-section">
+                <div class="section-header-inline">
+                    <h3>Cursuri finalizate</h3>
+                    <button class="btn btn-secondary" id="refresh-courses-btn" type="button">Reîncarcă</button>
+                </div>
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Titlu curs</th>
+                                <th>Perioadă</th>
+                                <th>Provider</th>
+                                <th>Puncte EMC</th>
+                                <th>Participanți</th>
+                                <th>EMC acordat</th>
+                                <th>Status</th>
+                                <th>Acțiuni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="courses-table-body">
+                            <tr><td colspan="8">Se încarcă...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="management-section details-section-panel" id="course-detail-panel" hidden>
+                <div class="section-header-inline">
+                    <div>
+                        <h3 id="detail-title">Detalii curs</h3>
+                        <div class="muted" id="detail-meta"></div>
+                    </div>
+                    <button class="btn btn-secondary" id="close-detail-btn" type="button">Închide</button>
+                </div>
+
+                <div class="approval-toolbar">
+                    <input id="participant-search" type="search" placeholder="Caută după nume sau email">
+                    <button class="btn btn-secondary" id="select-all-btn" type="button">Selectează toți participanții</button>
+                    <button class="btn btn-primary" id="award-selected-btn" type="button">Acordă puncte EMC</button>
+                    <button class="btn btn-primary" id="award-all-btn" type="button">Acordă pentru toți</button>
+                </div>
+
+                <div class="muted approval-selection-summary" id="selection-summary">0 selectați</div>
+
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Nume</th>
+                                <th>Email</th>
+                                <th>Data înscrierii</th>
+                                <th>Status participare</th>
+                                <th>Status EMC</th>
+                            </tr>
+                        </thead>
+                        <tbody id="participants-table-body">
+                            <tr><td colspan="6">Selectează un curs.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/emc-approvals.js"></script>
+</body>
+</html>

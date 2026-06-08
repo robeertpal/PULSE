@@ -33,6 +33,7 @@ const UI = {
                     <li><a href="articles.html" class="${activePage === 'articles' ? 'active' : ''}">Articole</a></li>
                     <li><a href="news.html" class="${activePage === 'news' ? 'active' : ''}">Știri</a></li>
                     <li><a href="courses.html" class="${activePage === 'courses' ? 'active' : ''}">Cursuri</a></li>
+                    <li><a href="emc-approvals.html" class="${activePage === 'emc-approvals' ? 'active' : ''}">Aprobări EMC</a></li>
                     <li><a href="events.html" class="${activePage === 'events' ? 'active' : ''}">Evenimente</a></li>
                     <li><a href="partners.html" class="${activePage === 'partners' ? 'active' : ''}">Parteneri</a></li>
                     <li><a href="authors.html" class="${activePage === 'authors' ? 'active' : ''}">Autori</a></li>

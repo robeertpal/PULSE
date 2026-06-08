@@ -181,6 +181,9 @@ td {
 .badge.active { background: #ECFDF5; color: var(--magazine); }
 .badge.paused { background: #FEF3C7; color: #92400E; }
 .badge.archived { background: #FEF2F2; color: var(--news); }
+.badge.emc-unprocessed { background: #F1F5F9; color: var(--text-secondary); }
+.badge.emc-partial { background: #FEF3C7; color: #92400E; }
+.badge.emc-completed { background: #ECFDF5; color: var(--magazine); }
 
 .btn {
     padding: 10px 20px;
@@ -198,6 +201,21 @@ td {
 
 .btn-primary:hover {
     background-color: var(--primary-dark);
+}
+
+.btn-secondary {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+    background-color: var(--background);
+}
+
+.btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
 }
 
 .header-actions {
@@ -1145,6 +1163,50 @@ td {
 }
 
 .muted {
+    color: var(--text-secondary);
+}
+
+.management-section {
+    margin-bottom: 28px;
+}
+
+.management-section h3 {
+    margin: 0;
+}
+
+.details-section-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.approval-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 18px 0 10px;
+}
+
+.approval-toolbar input[type="search"] {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit;
+    min-width: 260px;
+    padding: 10px 12px;
+}
+
+.approval-selection-summary {
+    font-size: 14px;
+    margin-bottom: 12px;
+}
+
+.selected-row td {
+    background: #EFF6FF;
+}
+
+.muted-row td {
     color: var(--text-secondary);
 }
 

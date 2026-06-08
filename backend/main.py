@@ -32,7 +32,7 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pypdf import PdfReader
 from sqlalchemy import bindparam, func, or_, text
 from sqlalchemy.exc import IntegrityError
@@ -6289,6 +6289,19 @@ def get_my_courses(
         )
         .all()
     )
+    course_ids = [course.id for _, course, _ in rows]
+    emc_awards_by_course_id = {}
+    if course_ids:
+        emc_logs = (
+            db.query(models.UserEmcPointLog)
+            .filter(
+                models.UserEmcPointLog.user_id == user_id,
+                models.UserEmcPointLog.source_type == "course",
+                models.UserEmcPointLog.source_id.in_(course_ids),
+            )
+            .all()
+        )
+        emc_awards_by_course_id = {log.source_id: log for log in emc_logs}
     return [
         {
             "user_course_id": user_course.id,
@@ -6306,6 +6319,13 @@ def get_my_courses(
             "hero_image_url": content_item.hero_image_url,
             "thumbnail_url": content_item.thumbnail_url,
             "content_type": serialize_value(content_item.content_type),
+            "emc_awarded": course.id in emc_awards_by_course_id,
+            "emc_awarded_points": emc_awards_by_course_id[course.id].points
+            if course.id in emc_awards_by_course_id
+            else None,
+            "emc_awarded_at": serialize_value(emc_awards_by_course_id[course.id].awarded_at)
+            if course.id in emc_awards_by_course_id
+            else None,
         }
         for user_course, course, content_item in rows
     ]
@@ -6916,6 +6936,18 @@ class AdminNotificationUpdate(BaseModel):
     content_item_id: Optional[int] = Field(default=None, gt=0)
     interest_ids: Optional[List[int]] = None
 
+
+class AdminCourseEmcAwardPayload(BaseModel):
+    user_ids: List[int] = Field(default_factory=list)
+
+    @field_validator("user_ids")
+    @classmethod
+    def validate_user_ids(cls, value):
+        unique_ids = sorted({int(item) for item in value if int(item) > 0})
+        if not unique_ids:
+            raise ValueError("Selectează cel puțin un participant.")
+        return unique_ids
+
 IMAGE_ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 IMAGE_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 PDF_ALLOWED_CONTENT_TYPES = {"application/pdf"}
@@ -7389,6 +7421,78 @@ def _content_notification_category_id(db: Session, content_type: str) -> Optiona
         {"code": content_type},
     ).first()
     return row._mapping["id"] if row is not None else None
+
+
+def _account_notification_category_id(db: Session, preferred_codes: Optional[list[str]] = None) -> Optional[int]:
+    codes = preferred_codes or []
+    if codes:
+        row = db.execute(
+            text(
+                """
+                SELECT id
+                FROM notification_categories
+                WHERE notification_type = 'account'
+                  AND code IN :codes
+                ORDER BY CASE
+                    WHEN code = 'emc' THEN 1
+                    WHEN code = 'emc_points' THEN 2
+                    WHEN code = 'account' THEN 3
+                    ELSE 4
+                END
+                LIMIT 1
+                """
+            ).bindparams(bindparam("codes", expanding=True)),
+            {"codes": codes},
+        ).first()
+        if row is not None:
+            return row._mapping["id"]
+
+    row = db.execute(
+        text(
+            """
+            SELECT id
+            FROM notification_categories
+            WHERE notification_type = 'account'
+            ORDER BY id
+            LIMIT 1
+            """
+        )
+    ).first()
+    return row._mapping["id"] if row is not None else None
+
+
+def create_account_notification_for_user(
+    db: Session,
+    user_id: int,
+    title: str,
+    description: str,
+    category_id: int,
+) -> int:
+    notification_id = db.execute(
+        text(
+            """
+            INSERT INTO notifications (notification_type, category_id, status, title, description)
+            VALUES (CAST('account' AS notification_type), :category_id, 'sent', :title, :description)
+            RETURNING id
+            """
+        ),
+        {
+            "category_id": category_id,
+            "title": title,
+            "description": description,
+        },
+    ).scalar_one()
+    db.execute(
+        text(
+            """
+            INSERT INTO user_notifications (user_id, notification_id, delivered_at)
+            VALUES (:user_id, :notification_id, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id, notification_id) DO NOTHING
+            """
+        ),
+        {"user_id": user_id, "notification_id": notification_id},
+    )
+    return notification_id
 
 
 def _content_publication_target(db: Session, item: models.ContentItem) -> Optional[dict]:
@@ -10804,6 +10908,286 @@ def admin_get_courses(db: Session = Depends(get_db)):
         if isinstance(e, HTTPException):
             raise e
         raise_safe_error(e, status_code=400)
+
+
+def course_emc_status(total_participants: int, awarded_count: int) -> str:
+    if total_participants <= 0 or awarded_count <= 0:
+        return "Neprocesat"
+    if awarded_count >= total_participants:
+        return "Finalizat"
+    return "Parțial acordat"
+
+
+def course_emc_status_code(total_participants: int, awarded_count: int) -> str:
+    if total_participants <= 0 or awarded_count <= 0:
+        return "unprocessed"
+    if awarded_count >= total_participants:
+        return "completed"
+    return "partial"
+
+
+def course_awarded_participant_count(db: Session, course_id: int) -> int:
+    return (
+        db.query(func.count(func.distinct(models.UserCourse.user_id)))
+        .join(
+            models.UserEmcPointLog,
+            and_(
+                models.UserEmcPointLog.user_id == models.UserCourse.user_id,
+                models.UserEmcPointLog.source_type == "course",
+                models.UserEmcPointLog.source_id == course_id,
+            ),
+        )
+        .filter(models.UserCourse.course_id == course_id)
+        .scalar()
+        or 0
+    )
+
+
+def serialize_admin_emc_course_summary(db: Session, course: models.Course, item: models.ContentItem) -> dict:
+    total_participants = (
+        db.query(func.count(func.distinct(models.UserCourse.user_id)))
+        .filter(models.UserCourse.course_id == course.id)
+        .scalar()
+        or 0
+    )
+    awarded_count = course_awarded_participant_count(db, course.id)
+    return {
+        "course_id": course.id,
+        "content_item_id": item.id,
+        "title": item.title,
+        "provider": course.provider,
+        "emc_credits": course.emc_credits or 0,
+        "valid_from": serialize_value(course.valid_from),
+        "valid_until": serialize_value(course.valid_until),
+        "total_participants": total_participants,
+        "awarded_count": awarded_count,
+        "pending_count": max(total_participants - awarded_count, 0),
+        "emc_status": course_emc_status(total_participants, awarded_count),
+        "emc_status_code": course_emc_status_code(total_participants, awarded_count),
+    }
+
+
+def get_finished_course_or_404(db: Session, course_id: int) -> tuple[models.Course, models.ContentItem]:
+    row = (
+        db.query(models.Course, models.ContentItem)
+        .join(models.ContentItem, models.ContentItem.id == models.Course.content_item_id)
+        .filter(models.Course.id == course_id)
+        .filter(models.ContentItem.content_type == models.ContentItemType.course)
+        .filter(models.ContentItem.deleted_at.is_(None))
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Cursul nu există.")
+    course, item = row
+    now = datetime.now(course.valid_until.tzinfo) if course.valid_until and course.valid_until.tzinfo else datetime.utcnow()
+    if course.valid_until is None or course.valid_until > now:
+        raise HTTPException(status_code=422, detail="Punctele EMC pot fi acordate doar după finalizarea cursului.")
+    return course, item
+
+
+@app.get("/admin/emc-approvals/courses")
+def admin_get_emc_approval_courses(db: Session = Depends(get_db)):
+    now = datetime.utcnow()
+    rows = (
+        db.query(models.Course, models.ContentItem)
+        .join(models.ContentItem, models.ContentItem.id == models.Course.content_item_id)
+        .filter(models.ContentItem.content_type == models.ContentItemType.course)
+        .filter(models.ContentItem.deleted_at.is_(None))
+        .filter(models.Course.valid_until.isnot(None))
+        .filter(models.Course.valid_until <= now)
+        .order_by(models.Course.valid_until.desc().nullslast(), models.ContentItem.title.asc())
+        .all()
+    )
+    return [serialize_admin_emc_course_summary(db, course, item) for course, item in rows]
+
+
+@app.get("/admin/emc-approvals/courses/{course_id}")
+def admin_get_emc_approval_course(course_id: int, db: Session = Depends(get_db)):
+    course, item = get_finished_course_or_404(db, course_id)
+    awarded_user_ids = {
+        row.user_id
+        for row in db.query(models.UserEmcPointLog.user_id)
+        .filter(
+            models.UserEmcPointLog.source_type == "course",
+            models.UserEmcPointLog.source_id == course_id,
+        )
+        .all()
+    }
+    user_model = get_user_model()
+    rows = (
+        db.query(models.UserCourse, user_model, models.UserProfile)
+        .join(user_model, user_model.id == models.UserCourse.user_id)
+        .outerjoin(models.UserProfile, models.UserProfile.user_id == user_model.id)
+        .filter(models.UserCourse.course_id == course_id)
+        .order_by(
+            models.UserCourse.enrolled_at.desc().nullslast(),
+            models.UserCourse.id.desc(),
+        )
+        .all()
+    )
+    participants = []
+    for user_course, user, profile in rows:
+        full_name = ""
+        if profile is not None:
+            full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
+        participants.append(
+            {
+                "user_course_id": user_course.id,
+                "user_id": user.id,
+                "name": full_name or user.email,
+                "email": user.email,
+                "enrolled_at": serialize_value(user_course.enrolled_at),
+                "completed_at": serialize_value(user_course.completed_at),
+                "progress_percent": user_course.progress_percent,
+                "participation_status": user_course.status.value if user_course.status else None,
+                "emc_awarded": user.id in awarded_user_ids,
+                "emc_status": "acordat" if user.id in awarded_user_ids else "neacordat",
+            }
+        )
+    return {
+        "course": serialize_admin_emc_course_summary(db, course, item),
+        "participants": participants,
+    }
+
+
+@app.post("/admin/emc-approvals/courses/{course_id}/award")
+def admin_award_course_emc_points(
+    course_id: int,
+    payload: AdminCourseEmcAwardPayload,
+    db: Session = Depends(get_db),
+):
+    course, item = get_finished_course_or_404(db, course_id)
+    points = course.emc_credits or 0
+    if points <= 0:
+        raise HTTPException(status_code=422, detail="Cursul nu are puncte EMC configurate.")
+
+    selected_user_ids = set(payload.user_ids)
+    enrolled_user_ids = {
+        row.user_id
+        for row in db.query(models.UserCourse.user_id)
+        .filter(models.UserCourse.course_id == course_id)
+        .filter(models.UserCourse.user_id.in_(selected_user_ids))
+        .all()
+    }
+    invalid_user_ids = sorted(selected_user_ids - enrolled_user_ids)
+    if invalid_user_ids:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Utilizatorii nu sunt înscriși la acest curs: {invalid_user_ids}",
+        )
+
+    already_awarded_user_ids = {
+        row.user_id
+        for row in db.query(models.UserEmcPointLog.user_id)
+        .filter(
+            models.UserEmcPointLog.source_type == "course",
+            models.UserEmcPointLog.source_id == course_id,
+            models.UserEmcPointLog.user_id.in_(selected_user_ids),
+        )
+        .all()
+    }
+    award_user_ids = sorted(enrolled_user_ids - already_awarded_user_ids)
+    if not award_user_ids:
+        return {
+            "success": True,
+            "message": "Participanții selectați au deja punctele EMC acordate.",
+            "awarded_count": 0,
+            "skipped_count": len(already_awarded_user_ids),
+            "skipped_user_ids": sorted(already_awarded_user_ids),
+            "course": serialize_admin_emc_course_summary(db, course, item),
+        }
+
+    profiles = (
+        db.query(models.UserProfile)
+        .filter(models.UserProfile.user_id.in_(award_user_ids))
+        .all()
+    )
+    profiles_by_user_id = {profile.user_id: profile for profile in profiles}
+    missing_profile_user_ids = [user_id for user_id in award_user_ids if user_id not in profiles_by_user_id]
+    if missing_profile_user_ids:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Utilizatorii nu au profil pentru actualizarea punctajului EMC: {missing_profile_user_ids}",
+        )
+
+    now = datetime.utcnow()
+    awarded_user_ids = []
+    try:
+        notification_category_id = _account_notification_category_id(
+            db,
+            ["emc", "emc_points", "account"],
+        )
+        if notification_category_id is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Nu există categorie pentru notificările de cont.",
+            )
+
+        for user_id in award_user_ids:
+            existing = (
+                db.query(models.UserEmcPointLog.id)
+                .filter(
+                    models.UserEmcPointLog.user_id == user_id,
+                    models.UserEmcPointLog.source_type == "course",
+                    models.UserEmcPointLog.source_id == course_id,
+                )
+                .first()
+            )
+            if existing is not None:
+                already_awarded_user_ids.add(user_id)
+                continue
+            db.add(
+                models.UserEmcPointLog(
+                    user_id=user_id,
+                    source_type="course",
+                    source_id=course_id,
+                    points=points,
+                    awarded_at=now,
+                )
+            )
+            profile = profiles_by_user_id[user_id]
+            profile.total_emc_points = (profile.total_emc_points or 0) + points
+            profile.updated_at = now
+            awarded_user_ids.append(user_id)
+            create_account_notification_for_user(
+                db,
+                user_id=user_id,
+                title=f"{points} puncte EMC adăugate",
+                description=f"Ți-au fost adăugate {points} puncte EMC pentru cursul «{item.title}».",
+                category_id=notification_category_id,
+            )
+
+        admin_audit(
+            db,
+            "user_emc_point_logs",
+            course_id,
+            "course_award",
+            new_data={
+                "course_id": course_id,
+                "course_title": item.title,
+                "points": points,
+                "user_ids": awarded_user_ids,
+                "skipped_user_ids": sorted(already_awarded_user_ids),
+            },
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise_safe_error(e, detail="Nu am putut acorda punctele EMC.", status_code=400)
+
+    course, item = get_finished_course_or_404(db, course_id)
+    awarded_now = sorted(awarded_user_ids)
+    return {
+        "success": True,
+        "message": f"Punctele EMC au fost acordate pentru {len(awarded_now)} participant(i).",
+        "awarded_count": len(awarded_now),
+        "awarded_user_ids": awarded_now,
+        "skipped_count": len(already_awarded_user_ids),
+        "skipped_user_ids": sorted(already_awarded_user_ids),
+        "course": serialize_admin_emc_course_summary(db, course, item),
+    }
 
 
 @app.post("/admin/courses")
