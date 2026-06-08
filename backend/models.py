@@ -92,11 +92,6 @@ class PaymentStatus(enum.Enum):
     cancelled = "cancelled"
 
 
-class SubscriptionPlanScope(enum.Enum):
-    platform = "platform"
-    publication = "publication"
-
-
 class LessonContentType(enum.Enum):
     video = "video"
     article = "article"
@@ -359,6 +354,7 @@ class ContentItem(Base):
     canonical_url = Column(Text)
     is_featured = Column(Boolean, nullable=False, default=False)
     is_active = Column(Boolean, nullable=False, default=True)
+    contributor_user_id = Column(Integer)
     created_by_user_id = Column(Integer)
     updated_by_user_id = Column(Integer)
     published_by_user_id = Column(Integer)
@@ -743,10 +739,6 @@ class SubscriptionPlan(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True))
     updated_at = Column(DateTime(timezone=True))
-    scope = Column(Enum(SubscriptionPlanScope, name="subscription_plan_scope"), nullable=False, default=SubscriptionPlanScope.platform)
-    publication_id = Column(Integer, ForeignKey("publications.id", ondelete="CASCADE"))
-
-    publication = relationship("Publication")
 
 
 class UserSubscription(Base):

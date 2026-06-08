@@ -11,6 +11,10 @@ class ContentItem {
   final int? authorId;
   final String? authorName;
   final int? contributorUserId;
+  final String? contributorName;
+  final bool contributorIsVerified;
+  final String? contributorSpecializationName;
+  final String? contributorInstitutionName;
   final bool isFeatured;
   final String? tag; // Virtual field for UI
   final int? emcCredits;
@@ -59,6 +63,10 @@ class ContentItem {
     this.authorId,
     this.authorName,
     this.contributorUserId,
+    this.contributorName,
+    this.contributorIsVerified = false,
+    this.contributorSpecializationName,
+    this.contributorInstitutionName,
     this.isFeatured = false,
     this.tag,
     this.emcCredits,
@@ -194,6 +202,18 @@ class ContentItem {
       contributorUserId: parseInt(
         json['contributor_user_id'] ?? json['public_contributor']?['user_id'],
       ),
+      contributorName:
+          json['contributor_name'] ??
+          json['public_contributor']?['display_name'],
+      contributorIsVerified:
+          json['contributor_is_verified'] == true ||
+          json['public_contributor']?['is_verified_contributor'] == true,
+      contributorSpecializationName:
+          json['contributor_specialization_name'] ??
+          json['public_contributor']?['specialization_name'],
+      contributorInstitutionName:
+          json['contributor_institution_name'] ??
+          json['public_contributor']?['institution_name'],
       isFeatured: json['is_featured'] ?? false,
       tag: derivedTag,
       emcCredits: credits,

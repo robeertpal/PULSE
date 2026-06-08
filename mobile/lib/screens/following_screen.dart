@@ -5,6 +5,7 @@ import '../theme/pulse_theme.dart';
 import 'author_profile_screen.dart';
 import 'partner_profile_screen.dart';
 import 'publication_issues_screen.dart';
+import 'public_author_profile_screen.dart';
 
 class FollowingScreen extends StatefulWidget {
   const FollowingScreen({super.key});
@@ -108,6 +109,11 @@ class _FollowingScreenState extends State<FollowingScreen> {
         partnerId: item.targetId,
         initialName: item.displayName,
       );
+    } else if (item.targetType == 'contributor') {
+      screen = PublicAuthorProfileScreen(
+        contributorUserId: item.targetId,
+        initialName: item.displayName,
+      );
     }
 
     if (screen == null) return;
@@ -119,6 +125,7 @@ class _FollowingScreenState extends State<FollowingScreen> {
       'author': [],
       'publication': [],
       'partner': [],
+      'contributor': [],
       'category': [],
       'specialization': [],
     };
@@ -164,6 +171,11 @@ class _FollowingScreenState extends State<FollowingScreen> {
         Icons.menu_book_rounded,
       ),
       _FollowSectionDefinition('partner', 'Parteneri', Icons.business_rounded),
+      _FollowSectionDefinition(
+        'contributor',
+        'Contributori',
+        Icons.person_add_alt_1_rounded,
+      ),
       _FollowSectionDefinition('category', 'Categorii', Icons.category_rounded),
       _FollowSectionDefinition(
         'specialization',
@@ -392,6 +404,28 @@ class _FollowCard extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    if (item.isVerifiedContributor) ...[
+                      const SizedBox(height: 7),
+                      const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.verified_rounded,
+                            color: PulseTheme.primaryLight,
+                            size: 14,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            'Contributor verificat',
+                            style: TextStyle(
+                              color: PulseTheme.primaryLight,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -532,6 +566,9 @@ class _FollowItem {
     required this.targetId,
     required this.displayName,
     required this.createdAt,
+    this.isVerifiedContributor = false,
+    this.specializationName,
+    this.institutionName,
   });
 
   final int id;
@@ -539,11 +576,15 @@ class _FollowItem {
   final int targetId;
   final String displayName;
   final DateTime? createdAt;
+  final bool isVerifiedContributor;
+  final String? specializationName;
+  final String? institutionName;
 
   String get key => '$targetType:$targetId';
 
   bool get isNavigable =>
       targetType == 'author' ||
+      targetType == 'contributor' ||
       targetType == 'publication' ||
       targetType == 'partner';
 
@@ -551,6 +592,8 @@ class _FollowItem {
     switch (targetType) {
       case 'author':
         return Icons.edit_rounded;
+      case 'contributor':
+        return Icons.person_add_alt_1_rounded;
       case 'publication':
         return Icons.menu_book_rounded;
       case 'partner':
@@ -568,6 +611,12 @@ class _FollowItem {
     switch (targetType) {
       case 'author':
         return 'Autor';
+      case 'contributor':
+        return [
+          'Contributor',
+          if (specializationName != null) specializationName!,
+          if (institutionName != null) institutionName!,
+        ].join(' • ');
       case 'publication':
         return 'Publicație';
       case 'partner':
@@ -597,15 +646,31 @@ class _FollowItem {
       displayName:
           _firstText([
             json['target_name'],
+            json['contributor_name'],
             json['publication_name'],
             json['category_name'],
             json['specialization_name'],
+            _nestedText(json['public_contributor'], 'display_name'),
             _nestedText(json['author'], 'full_name'),
             _nestedText(json['author'], 'name'),
             _nestedText(json['partner'], 'name'),
           ]) ??
           _fallbackName(targetType, targetId),
       createdAt: _parseDate(json['created_at']),
+      isVerifiedContributor:
+          json['is_verified_contributor'] == true ||
+          json['contributor_is_verified'] == true ||
+          json['public_contributor']?['is_verified_contributor'] == true,
+      specializationName: _firstText([
+        json['specialization_name'],
+        json['contributor_specialization_name'],
+        _nestedText(json['public_contributor'], 'specialization_name'),
+      ]),
+      institutionName: _firstText([
+        json['institution_name'],
+        json['contributor_institution_name'],
+        _nestedText(json['public_contributor'], 'institution_name'),
+      ]),
     );
   }
 
@@ -642,6 +707,8 @@ class _FollowItem {
     switch (targetType) {
       case 'author':
         return 'Autor$id';
+      case 'contributor':
+        return 'Contributor$id';
       case 'publication':
         return 'Publicație$id';
       case 'partner':
