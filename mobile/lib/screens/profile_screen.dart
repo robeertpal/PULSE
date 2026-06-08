@@ -375,10 +375,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return true;
     } catch (e) {
       if (!mounted) return false;
+      final message = e.toString().replaceFirst('Exception: ', '');
+      debugPrint(
+        'Profile save failed for fields ${changes.keys.toList()}: $message',
+      );
       setState(() {
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = message;
       });
-      _showSnack('Nu am putut salva profilul.', isError: true);
+      _showSnack(message, isError: true);
       return false;
     }
   }
