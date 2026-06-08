@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import 'emc_activity_screen.dart';
+import 'following_screen.dart';
 import '../services/api_service.dart';
 import '../theme/pulse_theme.dart';
 import '../utils/validators.dart' as validators;
@@ -357,6 +358,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _openFollowing() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (context) => const FollowingScreen()));
+  }
+
   Future<bool> _saveProfile(Map<String, String> changes) async {
     setState(() => _errorMessage = null);
 
@@ -639,6 +646,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _StatusBanner(message: _errorMessage!, isError: true),
         ],
         const SizedBox(height: 16),
+        _ProfileActionCard(
+          icon: Icons.favorite_rounded,
+          title: 'Urmăresc',
+          subtitle:
+              'Autori, publicații, parteneri, categorii și specializări urmărite.',
+          onTap: _openFollowing,
+        ),
+        const SizedBox(height: 14),
         _InfoSection(
           title: 'Date personale',
           items: _personalItems,
@@ -1994,6 +2009,89 @@ class _GlassCard extends StatelessWidget {
             ],
           ),
           child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileActionCard extends StatelessWidget {
+  const _ProfileActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(26),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(26),
+        child: _GlassCard(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  gradient: _ProfileScreenState._accentGradient,
+                  borderRadius: BorderRadius.circular(17),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _ProfileScreenState._pink.withValues(alpha: 0.22),
+                      blurRadius: 18,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Icon(icon, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: PulseTheme.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: PulseTheme.textSecondary,
+                        fontSize: 12,
+                        height: 1.35,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: PulseTheme.textTertiary,
+                size: 24,
+              ),
+            ],
+          ),
         ),
       ),
     );
