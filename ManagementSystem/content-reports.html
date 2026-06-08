@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Raportări conținut - PULSE Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .reports-filters {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 14px;
+            align-items: end;
+            margin-bottom: 22px;
+            padding: 18px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+        }
+        .reports-filters label {
+            display: grid;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 700;
+        }
+        .reports-filters input,
+        .reports-filters select {
+            width: 100%;
+        }
+        .report-details {
+            max-width: 320px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: var(--text-secondary);
+        }
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            background: rgba(148, 163, 184, 0.16);
+            color: var(--text-secondary);
+        }
+        .status-open { color: #dc2626; background: rgba(220, 38, 38, 0.12); }
+        .status-reviewed { color: #2563eb; background: rgba(37, 99, 235, 0.12); }
+        .status-dismissed { color: #64748b; background: rgba(100, 116, 139, 0.14); }
+        .status-action_taken { color: #059669; background: rgba(5, 150, 105, 0.12); }
+        .muted {
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="main-content">
+        <div class="content-wrapper">
+            <div class="header-actions">
+                <p class="muted" style="margin:0;">Raportări trimise de utilizatori pentru review editorial.</p>
+                <button class="btn btn-primary" id="refresh-btn">Reîncarcă</button>
+            </div>
+
+            <div id="error-msg" class="alert error"></div>
+
+            <section class="reports-filters">
+                <label>
+                    Status
+                    <select id="filter-status">
+                        <option value="">Toate</option>
+                        <option value="open">Open</option>
+                        <option value="reviewed">Reviewed</option>
+                        <option value="dismissed">Dismissed</option>
+                        <option value="action_taken">Action taken</option>
+                    </select>
+                </label>
+                <label>
+                    Motiv
+                    <select id="filter-reason">
+                        <option value="">Toate</option>
+                        <option value="medical_inaccuracy">Inexactitate medicală</option>
+                        <option value="outdated_information">Informație învechită</option>
+                        <option value="unsafe_advice">Recomandare nesigură</option>
+                        <option value="spam_or_irrelevant">Spam sau irelevant</option>
+                        <option value="other">Alt motiv</option>
+                    </select>
+                </label>
+                <label>
+                    Content ID
+                    <input type="number" id="filter-content-id" min="1" placeholder="ex: 123">
+                </label>
+                <label>
+                    Limit
+                    <select id="filter-limit">
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100" selected>100</option>
+                        <option value="200">200</option>
+                    </select>
+                </label>
+                <button class="btn btn-secondary" id="clear-filters-btn">Șterge filtre</button>
+            </section>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Conținut</th>
+                        <th>Reporter</th>
+                        <th>Motiv</th>
+                        <th>Detalii</th>
+                        <th>Status</th>
+                        <th>Actiuni</th>
+                    </tr>
+                </thead>
+                <tbody id="content-reports-table-body">
+                    <tr><td colspan="7">Se încarcă...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/content-reports.js"></script>
+</body>
+</html>

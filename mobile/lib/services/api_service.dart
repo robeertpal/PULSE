@@ -89,19 +89,6 @@ class ApiService {
       if (decoded is Map<String, dynamic>) {
         final detail = decoded['detail'];
         if (detail is String && detail.isNotEmpty) message = detail;
-        if (detail is List && detail.isNotEmpty) {
-          final validationMessages = detail
-              .map((item) {
-                if (item is Map<String, dynamic>) return item['msg'];
-                return item;
-              })
-              .whereType<String>()
-              .where((item) => item.trim().isNotEmpty)
-              .toList();
-          if (validationMessages.isNotEmpty) {
-            message = validationMessages.join('\n');
-          }
-        }
         final backendMessage = decoded['message'];
         if (backendMessage is String && backendMessage.isNotEmpty) {
           message = backendMessage;
@@ -116,15 +103,6 @@ class ApiService {
       return 'Emailul nu a putut fi trimis momentan. Te rugăm să încerci din nou.';
     }
     return message;
-  }
-
-  Map<String, dynamic> _debugSafePayload(Map<String, dynamic> payload) {
-    return payload.map((key, value) {
-      if (value is num || value is bool || value == null) {
-        return MapEntry(key, value);
-      }
-      return MapEntry(key, '<redacted>');
-    });
   }
 
   Exception _friendlyNetworkException(
@@ -502,13 +480,9 @@ class ApiService {
   ) async {
     try {
       final headers = await _buildAuthHeaders();
-      final url = Uri.parse('$baseUrl/api/me/profile');
-      debugPrint(
-        'Updating profile at $url with payload: ${jsonEncode(_debugSafePayload(changes))}',
-      );
       final response = await http
           .patch(
-            url,
+            Uri.parse('$baseUrl/api/me/profile'),
             headers: {...headers, 'Content-Type': 'application/json'},
             body: jsonEncode(changes),
           )
@@ -516,9 +490,6 @@ class ApiService {
 
       await _handleAuthFailure(response);
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        debugPrint(
-          'Profile update failed: status=${response.statusCode}, body=${response.body}',
-        );
         throw Exception(
           _responseErrorMessage(response, 'Nu am putut salva profilul.'),
         );
@@ -530,9 +501,7 @@ class ApiService {
       }
       return decoded;
     } catch (e) {
-      debugPrint(
-        'Error updating profile with payload ${jsonEncode(_debugSafePayload(changes))}: $e',
-      );
+      debugPrint('Error updating profile: $e');
       rethrow;
     }
   }
@@ -1712,6 +1681,40 @@ class ApiService {
       return decoded;
     } catch (e) {
       debugPrint('Error fetching content item detail: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> reportContent({
+    required int contentId,
+    required String reason,
+    String? details,
+  }) async {
+    try {
+      final headers = await _buildAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/content/$contentId/report'),
+            headers: {...headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'reason': reason,
+              if (details != null && details.trim().isNotEmpty)
+                'details': details.trim(),
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+
+      await _handleAuthFailure(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          _responseErrorMessage(
+            response,
+            'Nu am putut trimite raportarea.',
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error reporting content: $e');
       rethrow;
     }
   }

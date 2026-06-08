@@ -40,6 +40,13 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   static const String _buildingIcon = 'assets/icons/building.svg';
   static const String _walletIcon = 'assets/icons/wallet.svg';
   static const String _peopleIcon = 'assets/icons/people.svg';
+  static const Map<String, String> _contentReportReasons = {
+    'medical_inaccuracy': 'Inexactitate medicală',
+    'outdated_information': 'Informație învechită',
+    'unsafe_advice': 'Recomandare potențial nesigură',
+    'spam_or_irrelevant': 'Spam sau irelevant',
+    'other': 'Alt motiv',
+  };
 
   final ApiService _apiService = ApiService();
   ContentItem? _item;
@@ -68,6 +75,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
   bool _isCategoryFollowLoading = false;
   bool _isFollowingSpecialization = false;
   bool _isSpecializationFollowLoading = false;
+  bool _isReportSubmitting = false;
   Set<int> _followedPartnerIds = {};
   final Set<int> _partnerFollowLoadingIds = {};
 
@@ -406,6 +414,180 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
     }
+  }
+
+  Future<void> _showReportContentDialog(ContentItem item) async {
+    final detailsController = TextEditingController();
+    var selectedReason = _contentReportReasons.keys.first;
+    var isSubmitting = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: !isSubmitting,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> submitReport() async {
+              if (isSubmitting) return;
+              setDialogState(() {
+                isSubmitting = true;
+              });
+              setState(() {
+                _isReportSubmitting = true;
+              });
+
+              try {
+                await _apiService.reportContent(
+                  contentId: item.id,
+                  reason: selectedReason,
+                  details: detailsController.text,
+                );
+                if (!mounted) return;
+                Navigator.of(dialogContext).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Raportarea a fost trimisă.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              } catch (_) {
+                if (!mounted) return;
+                setDialogState(() {
+                  isSubmitting = false;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Nu am putut trimite raportarea.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              } finally {
+                if (mounted) {
+                  setState(() {
+                    _isReportSubmitting = false;
+                  });
+                }
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: PulseTheme.surfaceElevated,
+              title: const Text(
+                'Raportează conținut',
+                style: TextStyle(
+                  color: PulseTheme.textPrimary,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Alege motivul raportării. Echipa editorială va revizui conținutul.',
+                    style: TextStyle(
+                      color: PulseTheme.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedReason,
+                    dropdownColor: PulseTheme.surfaceElevated,
+                    decoration: InputDecoration(
+                      labelText: 'Motiv',
+                      labelStyle: const TextStyle(
+                        color: PulseTheme.textSecondary,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                          color: PulseTheme.borderLight,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                          color: PulseTheme.primaryLight,
+                        ),
+                      ),
+                    ),
+                    style: const TextStyle(
+                      color: PulseTheme.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    items: _contentReportReasons.entries
+                        .map(
+                          (entry) => DropdownMenuItem<String>(
+                            value: entry.key,
+                            child: Text(entry.value),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: isSubmitting
+                        ? null
+                        : (value) {
+                            if (value == null) return;
+                            setDialogState(() {
+                              selectedReason = value;
+                            });
+                          },
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: detailsController,
+                    enabled: !isSubmitting,
+                    minLines: 3,
+                    maxLines: 5,
+                    maxLength: 1000,
+                    style: const TextStyle(color: PulseTheme.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: 'Detalii opționale',
+                      labelStyle: const TextStyle(
+                        color: PulseTheme.textSecondary,
+                      ),
+                      alignLabelWithHint: true,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                          color: PulseTheme.borderLight,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                          color: PulseTheme.primaryLight,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Anulează'),
+                ),
+                FilledButton(
+                  onPressed: isSubmitting ? null : submitReport,
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Trimite'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    detailsController.dispose();
   }
 
   String? _imageUrlFor(ContentItem item) {
@@ -966,6 +1148,37 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
     return AiSummaryButton(
       isLoading: _isAiSummaryLoading,
       onGenerate: _generateAiSummary,
+    );
+  }
+
+  Widget _buildReportContentAction(ContentItem item) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: OutlinedButton.icon(
+        onPressed: _isReportSubmitting
+            ? null
+            : () => _showReportContentDialog(item),
+        icon: _isReportSubmitting
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.flag_outlined, size: 18),
+        label: const Text('Raportează conținut'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: PulseTheme.textSecondary,
+          side: BorderSide(color: PulseTheme.borderLight),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
     );
   }
 
@@ -2628,6 +2841,8 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                           _buildCourseContent(item)
                         else
                           _buildNewsContent(item),
+                        const SizedBox(height: 26),
+                        _buildReportContentAction(item),
                         _buildMoreLikeThisSection(),
                       ],
                     ),
