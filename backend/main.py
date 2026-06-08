@@ -5354,7 +5354,7 @@ def save_content(
     user_id: int = Depends(get_current_user_id),
 ):
     require_rate_limit(request, "saved_content_write", "WRITE_RATE_LIMIT_PER_MINUTE", 60)
-    get_public_content_item_or_404(db, content_item_id)
+    get_public_content_item_or_404(db, content_item_id, user_id=user_id)
 
     existing = (
         db.query(models.SavedContent)
