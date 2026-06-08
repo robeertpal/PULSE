@@ -2091,6 +2091,7 @@ def serialize_event_partner(partner: models.EventPartner):
         "name": partner.name,
         "logo_url": partner.logo_url,
         "website_url": partner.website_url,
+        "description": getattr(partner, "description", None),
         "created_at": serialize_value(partner.created_at),
         "updated_at": serialize_value(partner.updated_at),
     }
@@ -2508,20 +2509,41 @@ def public_partner_content_query(db: Session, partner_id: int):
     )
 
 
-def serialize_partner_profile(db: Session, partner: models.EventPartner):
-    items = public_partner_content_query(db, partner.id).limit(80).all()
+def serialize_partner_profile(db: Session, partner: models.EventPartner, content_items: Optional[list] = None):
+    items = content_items
+    if items is None:
+        items = (
+            public_partner_content_query(db, partner.id)
+            .order_by(*public_content_ordering())
+            .limit(80)
+            .all()
+        )
     unique_content_ids = {item.id for item in items}
+    now = _datetime_for_comparison(datetime.utcnow())
     upcoming_count = len(
         [
             item
             for item in items
-            if item.event and item.event.start_date and item.event.start_date >= datetime.utcnow()
+            if item.event
+            and item.event.start_date
+            and _datetime_for_comparison(item.event.start_date) >= now
         ]
     )
     data = serialize_event_partner(partner)
     data["content_count"] = len(unique_content_ids)
     data["upcoming_event_count"] = upcoming_count
     return data
+
+
+def unique_serialized_content_cards(items):
+    seen_ids = set()
+    result = []
+    for item in items:
+        if item.id in seen_ids:
+            continue
+        seen_ids.add(item.id)
+        result.append(serialize_content_card(item))
+    return result
 
 
 def serialize_mapping(row):
@@ -5165,6 +5187,7 @@ def get_publication_issue_detail(
     return serialize_publication_issue(issue)
 
 
+@app.get("/api/partners/{partner_id}")
 @app.get("/partners/{partner_id}")
 def get_partner_detail(
     partner_id: int,
@@ -5173,11 +5196,30 @@ def get_partner_detail(
     partner = db.query(models.EventPartner).filter(models.EventPartner.id == partner_id).first()
     if partner is None:
         raise HTTPException(status_code=404, detail="Partenerul nu a fost gasit.")
-    if public_partner_content_query(db, partner_id).first() is None:
-        raise HTTPException(status_code=404, detail="Partenerul nu are continut public.")
     return serialize_partner_profile(db, partner)
 
 
+@app.get("/api/partners/{partner_id}/profile")
+@app.get("/partners/{partner_id}/profile")
+def get_partner_profile(
+    partner_id: int,
+    db: Session = Depends(get_db),
+):
+    partner = db.query(models.EventPartner).filter(models.EventPartner.id == partner_id).first()
+    if partner is None:
+        raise HTTPException(status_code=404, detail="Partenerul nu a fost gasit.")
+    items = (
+        public_partner_content_query(db, partner_id)
+        .order_by(*public_content_ordering())
+        .limit(80)
+        .all()
+    )
+    data = serialize_partner_profile(db, partner, items)
+    data["contents"] = unique_serialized_content_cards(items)
+    return data
+
+
+@app.get("/api/partners/{partner_id}/content")
 @app.get("/partners/{partner_id}/content")
 def get_partner_content(
     partner_id: int,
@@ -5195,14 +5237,7 @@ def get_partner_content(
         .limit(limit)
         .all()
     )
-    seen_ids = set()
-    result = []
-    for item in items:
-        if item.id in seen_ids:
-            continue
-        seen_ids.add(item.id)
-        result.append(serialize_content_card(item))
-    return result
+    return unique_serialized_content_cards(items)
 
 
 @app.post("/publication-issues/{issue_id}/ai-summary")
