@@ -444,9 +444,40 @@ async def security_middleware(request: Request, call_next):
     return response
 
 
+PUBLIC_SAFE_HTTP_DETAILS = {
+    "Serviciul AI nu este configurat momentan.",
+    "Serviciul AI nu este disponibil momentan. Încearcă din nou mai târziu.",
+    "Nu există suficient conținut pentru rezumat.",
+    "Inputul AI depășește limita permisă.",
+    "PDF-ul ediției nu este disponibil momentan.",
+    "Textul PDF-ului nu a putut fi extras pentru rezumat.",
+    "PDF-ul nu conține suficient text pentru rezumat.",
+    "Documentul nu a putut fi deschis. Verifică fișierul PDF sau încearcă din nou.",
+}
+
+
+def is_public_safe_http_detail(exc: HTTPException) -> bool:
+    return isinstance(exc.detail, str) and exc.detail in PUBLIC_SAFE_HTTP_DETAILS
+
+
 @app.exception_handler(HTTPException)
 async def safe_http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code >= 500:
+        if is_public_safe_http_detail(exc):
+            logger.warning(
+                "Safe HTTP %s on %s: %s",
+                exc.status_code,
+                request.url.path,
+                exc.detail,
+            )
+            return add_cors_headers_for_origin(
+                request,
+                JSONResponse(
+                    status_code=exc.status_code,
+                    content={"detail": exc.detail},
+                    headers=exc.headers,
+                ),
+            )
         logger.exception("HTTP %s on %s: %s", exc.status_code, request.url.path, exc.detail)
         return add_cors_headers_for_origin(
             request,
