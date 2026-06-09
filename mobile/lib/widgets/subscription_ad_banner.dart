@@ -43,7 +43,7 @@ class SubscriptionAdBanner extends StatelessWidget {
                         gradient: LinearGradient(
                           colors: [
                             Color(0xFF2563EB), // PulseTheme.primary
-                            Color(0xFF1E3A8A), // Dark blue
+                            Color(0xFFFFFFFF),
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
@@ -59,8 +59,8 @@ class SubscriptionAdBanner extends StatelessWidget {
                   borderRadius: BorderRadius.circular(24),
                   gradient: LinearGradient(
                     colors: [
-                      Colors.black.withValues(alpha: 0.75),
-                      Colors.black.withValues(alpha: 0.3),
+                      Colors.white.withValues(alpha: 0.80),
+                      Colors.white.withValues(alpha: 0.30),
                       Colors.transparent,
                     ],
                     begin: Alignment.centerLeft,
@@ -92,7 +92,7 @@ class SubscriptionAdBanner extends StatelessWidget {
                       child: const Text(
                         'PULSE Premium',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: PulseTheme.textPrimary,
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.5,
@@ -105,7 +105,7 @@ class SubscriptionAdBanner extends StatelessWidget {
                     const Text(
                       'Deblochează\nPotențialul Tău Medical',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: PulseTheme.textPrimary,
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
                         height: 1.2,

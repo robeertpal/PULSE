@@ -9,10 +9,10 @@ class AuthShell {
   static const pulseOrange = Color(0xFFFF8A3D);
   static const softOrange = Color(0xFFFFB36B);
   static const pulseViolet = Color(0xFFFF6FA3);
-  static const fieldFill = Color(0x1AFFFFFF);
-  static const warmSurface = Color(0xFF0A0F1F);
-  static const textPrimary = Color(0xFFF8FBFF);
-  static const textSecondary = Color(0xFFC8BEDA);
+  static const fieldFill = Color(0xFFFFFFFF);
+  static const warmSurface = Color(0xFFFFFFFF);
+  static const textPrimary = Color(0xFF171018);
+  static const textSecondary = Color(0xFF625766);
   static const authErrorColor = Color(0xFFFF4D5E);
   static const deepGreen = deepPurple;
   static const forestGreen = pulsePurple;
@@ -29,10 +29,10 @@ class AuthShell {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          Color(0xFF020617),
-          Color(0xFF050B1A),
-          Color(0xFF0B0618),
-          Color(0xFF050B1A),
+          Color(0xFFFFFBFE),
+          Color(0xFFF8F2F8),
+          Color(0xFFFFF4F8),
+          Color(0xFFFFFFFF),
         ],
         stops: [0, 0.36, 0.72, 1],
       ),
@@ -97,8 +97,8 @@ class AuthShell {
                 begin: gradientBegin,
                 end: gradientEnd,
                 colors: [
-                  Colors.black.withValues(alpha: 0.24),
-                  Colors.black.withValues(alpha: 0.52),
+                  Colors.white.withValues(alpha: 0.20),
+                  Colors.white.withValues(alpha: 0.46),
                 ],
               ),
             ),
@@ -206,8 +206,8 @@ class _AuthAnimatedGradientBackgroundState
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withValues(alpha: 0.18),
-                  Colors.black.withValues(alpha: 0.62),
+                  Colors.white.withValues(alpha: 0.18),
+                  Colors.white.withValues(alpha: 0.56),
                 ],
               ),
             ),
@@ -238,12 +238,12 @@ class FrostedAuthCard extends StatelessWidget {
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
-            color: const Color(0xFF0B1226).withValues(alpha: 0.76),
+            color: const Color(0xFFFFFFFF).withValues(alpha: 0.84),
             borderRadius: BorderRadius.circular(34),
             border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.38),
+                color: const Color(0xFF5B475C).withValues(alpha: 0.12),
                 blurRadius: 34,
                 offset: const Offset(0, 20),
                 spreadRadius: -8,
@@ -355,10 +355,14 @@ class AuthSecondaryButton extends StatelessWidget {
       child: OutlinedButton(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.white,
-          backgroundColor: Colors.white.withValues(alpha: light ? 0.08 : 0.06),
+          foregroundColor: AuthShell.textPrimary,
+          backgroundColor: AuthShell.warmSurface.withValues(
+            alpha: light ? 0.88 : 0.82,
+          ),
           side: BorderSide(
-            color: Colors.white.withValues(alpha: light ? 0.28 : 0.18),
+            color: AuthShell.textSecondary.withValues(
+              alpha: light ? 0.28 : 0.18,
+            ),
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(999),
@@ -436,9 +440,9 @@ class AuthHeaderText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final titleColor = light ? Colors.white : AuthShell.textPrimary;
+    final titleColor = light ? AuthShell.textPrimary : AuthShell.textPrimary;
     final subtitleColor = light
-        ? Colors.white.withValues(alpha: 0.82)
+        ? AuthShell.textSecondary
         : AuthShell.textSecondary;
     return Column(
       crossAxisAlignment: align == TextAlign.center
@@ -537,7 +541,7 @@ Future<void> showPulseErrorDialog(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Închide',
-    barrierColor: Colors.black.withValues(alpha: 0.62),
+    barrierColor: const Color(0xFF5B475C).withValues(alpha: 0.28),
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (context, animation, secondaryAnimation) {
       return Center(

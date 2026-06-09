@@ -15,8 +15,8 @@ class MyPublicationsScreen extends StatefulWidget {
 }
 
 class _MyPublicationsScreenState extends State<MyPublicationsScreen> {
-  static const Color _black = Color(0xFF050505);
-  static const Color _surface = Color(0xFF101010);
+  static const Color _black = Color(0xFFFFFBFE);
+  static const Color _surface = Color(0xFFFFFFFF);
   static const Color _pink = PulseTheme.magazineContent;
   static const String _subscriptionIcon = 'assets/icons/books.svg';
   static const String _calendarIcon = 'assets/icons/calendar.svg';
@@ -418,8 +418,8 @@ class SubscriptionDetailScreen extends StatefulWidget {
 }
 
 class _SubscriptionDetailScreenState extends State<SubscriptionDetailScreen> {
-  static const Color _black = Color(0xFF050505);
-  static const Color _surface = Color(0xFF101010);
+  static const Color _black = Color(0xFFFFFBFE);
+  static const Color _surface = Color(0xFFFFFFFF);
   static const Color _pink = PulseTheme.magazineContent;
 
   final ApiService _apiService = ApiService();
@@ -611,7 +611,7 @@ class _SubscriptionDetailScreenState extends State<SubscriptionDetailScreen> {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: const Color(0xFFFFFFFF),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: _pink.withValues(alpha: 0.3)),
           ),
@@ -732,7 +732,7 @@ class _SubscriptionDetailScreenState extends State<SubscriptionDetailScreen> {
                 imageUrl,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) => Container(
-                  color: const Color(0xFF181818),
+                  color: const Color(0xFFF7F2F8),
                   child: Center(
                     child: _assetIcon(
                       'assets/icons/books.svg',

@@ -31,9 +31,9 @@ class PartnerProfileScreen extends StatefulWidget {
 class _PartnerProfileScreenState extends State<PartnerProfileScreen>
     with SingleTickerProviderStateMixin {
   // ── Design tokens ──────────────────────────────────────────────────────────
-  static const Color _black = Color(0xFF050505);
-  static const Color _surface = Color(0xFF101010);
-  static const Color _surfaceSoft = Color(0xFF181818);
+  static const Color _black = Color(0xFFFFFBFE);
+  static const Color _surface = Color(0xFFFFFFFF);
+  static const Color _surfaceSoft = Color(0xFFF7F2F8);
   static const Color _pink = Color(0xFFFF4FA3);
   static const Color _orange = Color(0xFFFF8A2A);
   static const LinearGradient _accentGradient = LinearGradient(
@@ -208,8 +208,9 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
           content: const Text('Nu am putut deschide site-ul partenerului.'),
           backgroundColor: _surfaceSoft,
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       );
     }
@@ -245,8 +246,9 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
           content: Text(wasSaved ? 'Eliminat din salvate' : 'Salvat'),
           backgroundColor: _surfaceSoft,
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       );
     } catch (_) {
@@ -263,8 +265,9 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
           content: const Text('Nu am putut actualiza salvarea'),
           backgroundColor: _surfaceSoft,
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       );
     }
@@ -300,8 +303,9 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
           ),
           backgroundColor: _surfaceSoft,
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       );
     } catch (_) {
@@ -312,8 +316,9 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
           content: const Text('Nu am putut actualiza follow-ul.'),
           backgroundColor: _surfaceSoft,
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       );
     } finally {
@@ -329,8 +334,9 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
       asset,
       width: size,
       height: size,
-      colorFilter:
-          color == null ? null : ColorFilter.mode(color, BlendMode.srcIn),
+      colorFilter: color == null
+          ? null
+          : ColorFilter.mode(color, BlendMode.srcIn),
     );
   }
 
@@ -381,9 +387,7 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
 
   Widget _buildLogoFallback() {
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: _accentGradient,
-      ),
+      decoration: const BoxDecoration(gradient: _accentGradient),
       child: Center(
         child: Text(
           _initials(_displayName),
@@ -418,7 +422,7 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
       child: Container(
         decoration: const BoxDecoration(
           shape: BoxShape.circle,
-          color: Color(0xFF101010), // thin dark gap between ring and logo
+          color: Color(0xFFFFFFFF), // thin light gap between ring and logo
         ),
         padding: const EdgeInsets.all(4),
         child: ClipOval(child: _buildLogoImage()),
@@ -436,9 +440,7 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.18),
-                ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
               ),
               child: InkWell(
                 onTap: _isFollowLoading ? null : _toggleFollow,
@@ -543,9 +545,7 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: _orange.withValues(alpha: 0.30),
-          ),
+          border: Border.all(color: _orange.withValues(alpha: 0.30)),
         ),
         child: InkWell(
           onTap: _openWebsite,
@@ -555,11 +555,7 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _svgIcon(
-                  'assets/icons/globe.svg',
-                  size: 16,
-                  color: _orange,
-                ),
+                _svgIcon('assets/icons/globe.svg', size: 16, color: _orange),
                 const SizedBox(width: 8),
                 const Text(
                   'Site partener',
@@ -657,10 +653,7 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
 
           const SizedBox(height: 24),
 
-          Divider(
-            height: 1,
-            color: Colors.white.withValues(alpha: 0.08),
-          ),
+          Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
 
           const SizedBox(height: 24),
 
@@ -718,9 +711,7 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
               decoration: BoxDecoration(
                 color: _surface,
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.08),
-                ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
               ),
               child: Center(
                 child: _svgIcon(
@@ -853,8 +844,7 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen>
                   onTap: _loadProfile,
                   borderRadius: BorderRadius.circular(16),
                   child: const Padding(
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                    padding: EdgeInsets.symmetric(horizontal: 28, vertical: 14),
                     child: Text(
                       'Încearcă din nou',
                       style: TextStyle(

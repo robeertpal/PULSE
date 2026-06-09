@@ -46,9 +46,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   static const _keyIcon = 'assets/icons/key.fill.svg';
   static const _eyeIcon = 'assets/icons/eye.fill.svg';
   static const _eyeSlashIcon = 'assets/icons/eye.slash.fill.svg';
-  static const Color _black = Color(0xFF050505);
-  static const Color _surface = Color(0xFF101010);
-  static const Color _surfaceSoft = Color(0xFF181818);
+  static const Color _black = Color(0xFFFFFBFE);
+  static const Color _surface = Color(0xFFFFFFFF);
+  static const Color _surfaceSoft = Color(0xFFF7F2F8);
   static const Color _pink = Color(0xFFFF4FA3);
   static const Color _orange = Color(0xFFFF8A2A);
   static const LinearGradient _accentGradient = LinearGradient(
@@ -1077,7 +1077,7 @@ class _EmcMetricCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF241015), Color(0xFF30170D), Color(0xFF0D0D0D)],
+          colors: [Color(0xFFFFFFFF), Color(0xFFFFF4F8), Color(0xFFF7F2F8)],
         ),
         border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
         boxShadow: [

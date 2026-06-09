@@ -2181,7 +2181,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
           : () => _handleEventRegistration(item, isFree),
       style: ElevatedButton.styleFrom(
         backgroundColor: PulseTheme.eventContent,
-        foregroundColor: Colors.black,
+        foregroundColor: PulseTheme.textPrimary,
         disabledBackgroundColor: Colors.white.withValues(alpha: 0.1),
         minimumSize: const Size(double.infinity, 56),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -2192,7 +2192,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
               height: 24,
               width: 24,
               child: CircularProgressIndicator(
-                color: Colors.black,
+                color: PulseTheme.textPrimary,
                 strokeWidth: 2,
               ),
             )
@@ -2317,14 +2317,14 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                       height: 24,
                       width: 24,
                       child: CircularProgressIndicator(
-                        color: Colors.black,
+                        color: PulseTheme.textPrimary,
                         strokeWidth: 2,
                       ),
                     )
                   : const Text(
                       'Înscrie-te',
                       style: TextStyle(
-                        color: Colors.black,
+                        color: PulseTheme.textPrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
                       ),
@@ -2344,7 +2344,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: const Color(0xFFFFFFFF),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
               color: PulseTheme.courseContent.withValues(alpha: 0.26),
@@ -2422,7 +2422,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                                 'Confirmă înscrierea',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  color: Colors.black,
+                                  color: PulseTheme.textPrimary,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -2475,7 +2475,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: const Color(0xFFFFFFFF),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
               color: PulseTheme.courseContent.withValues(alpha: 0.3),
@@ -2514,7 +2514,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: PulseTheme.courseContent,
-                  foregroundColor: Colors.black,
+                  foregroundColor: PulseTheme.textPrimary,
                   minimumSize: const Size(double.infinity, 50),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -2541,7 +2541,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: const Color(0xFFFFFFFF),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
               color: PulseTheme.eventContent.withValues(alpha: 0.3),
@@ -2624,7 +2624,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: PulseTheme.eventContent,
-                  foregroundColor: Colors.black,
+                  foregroundColor: PulseTheme.textPrimary,
                   minimumSize: const Size(double.infinity, 50),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),

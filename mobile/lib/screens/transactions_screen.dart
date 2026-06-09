@@ -14,9 +14,9 @@ class TransactionsScreen extends StatefulWidget {
 }
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
-  static const Color _black = Color(0xFF050505);
-  static const Color _surface = Color(0xFF101010);
-  static const Color _surfaceSoft = Color(0xFF181818);
+  static const Color _black = Color(0xFFFFFBFE);
+  static const Color _surface = Color(0xFFFFFFFF);
+  static const Color _surfaceSoft = Color(0xFFF7F2F8);
   static const Color _pink = Color(0xFFFF4FA3);
 
   final ApiService _apiService = ApiService();

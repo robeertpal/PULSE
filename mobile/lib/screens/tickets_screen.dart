@@ -14,8 +14,8 @@ class TicketsScreen extends StatefulWidget {
 }
 
 class _TicketsScreenState extends State<TicketsScreen> {
-  static const Color _black = Color(0xFF050505);
-  static const Color _surface = Color(0xFF101010);
+  static const Color _black = Color(0xFFFFFBFE);
+  static const Color _surface = Color(0xFFFFFFFF);
   static const Color _orange = Color(0xFFF97316);
 
   final ApiService _apiService = ApiService();

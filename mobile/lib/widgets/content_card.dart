@@ -342,7 +342,7 @@ class _ContentCardState extends State<ContentCard>
         height: 30,
         decoration: BoxDecoration(
           color: widget.darkMode
-              ? const Color(0xFF090A10).withValues(alpha: 0.72)
+              ? PulseTheme.surface.withValues(alpha: 0.72)
               : Colors.white.withValues(alpha: 0.92),
           shape: BoxShape.circle,
           border: Border.all(
@@ -352,7 +352,9 @@ class _ContentCardState extends State<ContentCard>
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: widget.darkMode ? 0.28 : 0.08),
+              color: Colors.black.withValues(
+                alpha: widget.darkMode ? 0.28 : 0.08,
+              ),
               blurRadius: 12,
               offset: const Offset(0, 6),
               spreadRadius: -6,
@@ -381,7 +383,7 @@ class _ContentCardState extends State<ContentCard>
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
               decoration: BoxDecoration(
-                color: const Color(0xFF15131B).withValues(alpha: 0.96),
+                color: PulseTheme.surface.withValues(alpha: 0.96),
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(
                   color: PulseTheme.primaryLight.withValues(alpha: 0.18),
@@ -448,12 +450,14 @@ class _ContentCardState extends State<ContentCard>
 
   Widget _buildCardBody() {
     final cardColor = widget.darkMode
-        ? const Color(0xFF17131B).withValues(alpha: 0.78)
+        ? PulseTheme.surface.withValues(alpha: 0.92)
         : PulseTheme.surface;
     final borderColor = widget.darkMode
-        ? Colors.white.withValues(alpha: 0.09)
+        ? PulseTheme.border.withValues(alpha: 0.72)
         : PulseTheme.border.withValues(alpha: 0.6);
-    final titleColor = widget.darkMode ? Colors.white : PulseTheme.textPrimary;
+    final titleColor = widget.darkMode
+        ? PulseTheme.textPrimary
+        : PulseTheme.textPrimary;
     final subtitleColor = widget.darkMode
         ? PulseTheme.textSecondary
         : PulseTheme.textSecondary;
@@ -542,7 +546,11 @@ class _ContentCardState extends State<ContentCard>
                         child: EmcBadge(points: widget.emcPoints!),
                       ),
                     Positioned(left: 10, top: 10, child: _buildSaveButton()),
-                    Positioned(right: 10, bottom: 10, child: _buildInfoButton()),
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: _buildInfoButton(),
+                    ),
                   ],
                 ),
               ),

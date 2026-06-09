@@ -826,7 +826,7 @@ class _RegisterPageState extends State<RegisterPage> {
             )
             .toList(),
         onChanged: onChanged,
-        dropdownColor: const Color(0xFF0B0F1D),
+        dropdownColor: const Color(0xFFFFFFFF),
         style: const TextStyle(
           color: AuthShell.textPrimary,
           fontSize: 15,
@@ -867,7 +867,7 @@ class _RegisterPageState extends State<RegisterPage> {
         ).copyWith(helperText: helperText, enabled: false),
         items: const [],
         onChanged: null,
-        dropdownColor: const Color(0xFF0B0F1D),
+        dropdownColor: const Color(0xFFFFFFFF),
       ),
     );
   }
@@ -900,7 +900,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 if (value == null) return;
                 setState(() => _phonePrefix = value);
               },
-              dropdownColor: const Color(0xFF0B0F1D),
+              dropdownColor: const Color(0xFFFFFFFF),
               style: const TextStyle(
                 color: AuthShell.textPrimary,
                 fontSize: 15,
@@ -1274,7 +1274,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       .toList(),
                   onChanged: (value) =>
                       setState(() => _selectedTitluUniversitar = value),
-                  dropdownColor: const Color(0xFF0B0F1D),
+                  dropdownColor: const Color(0xFFFFFFFF),
                   style: const TextStyle(
                     color: AuthShell.textPrimary,
                     fontSize: 15,
@@ -1354,10 +1354,16 @@ class _RegisterPageState extends State<RegisterPage> {
                     alignment: Alignment.centerLeft,
                     child: IconButton.filledTonal(
                       onPressed: () => Navigator.of(context).maybePop(),
-                      icon: _svgIcon(_backIcon, size: 22, color: Colors.white),
-                      color: Colors.white,
+                      icon: _svgIcon(
+                        _backIcon,
+                        size: 22,
+                        color: AuthShell.textPrimary,
+                      ),
+                      color: AuthShell.textPrimary,
                       style: IconButton.styleFrom(
-                        backgroundColor: Colors.white.withValues(alpha: 0.16),
+                        backgroundColor: AuthShell.warmSurface.withValues(
+                          alpha: 0.88,
+                        ),
                       ),
                     ),
                   ),
@@ -1379,7 +1385,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           colorScheme: Theme.of(context).colorScheme.copyWith(
                             primary: AuthShell.pulsePurple,
                             secondary: AuthShell.pulseOrange,
-                            surface: const Color(0xFF0B0F1D),
+                            surface: const Color(0xFFFFFFFF),
                             onSurface: AuthShell.textPrimary,
                           ),
                           canvasColor: Colors.transparent,
@@ -1393,7 +1399,8 @@ class _RegisterPageState extends State<RegisterPage> {
                           margin: EdgeInsets.zero,
                           currentStep: _currentStep,
                           connectorColor: WidgetStateProperty.resolveWith(
-                            (_) => Colors.white.withValues(alpha: 0.56),
+                            (_) =>
+                                AuthShell.textSecondary.withValues(alpha: 0.40),
                           ),
                           stepIconBuilder: _stepIconBuilder,
                           controlsBuilder: (context, details) {

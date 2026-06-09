@@ -16,7 +16,7 @@ class TransactionDetailScreen extends StatefulWidget {
 }
 
 class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
-  static const Color _surface = Color(0xFF101010);
+  static const Color _surface = Color(0xFFFFFFFF);
   static const Color _pink = Color(0xFFFF4FA3);
   static const Color _textDim = Colors.white70;
 
@@ -369,7 +369,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     final amountLabel = '$amountValue $currency';
 
     return Scaffold(
-      backgroundColor: const Color(0xFF050505),
+      backgroundColor: const Color(0xFFFFFBFE),
       body: SafeArea(
         child: Column(
           children: [

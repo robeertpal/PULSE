@@ -222,7 +222,9 @@ class _FeaturedSlide extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(darkMode ? 24 : 28),
           border: darkMode
-              ? Border.all(color: PulseTheme.primaryLight.withValues(alpha: 0.18))
+              ? Border.all(
+                  color: PulseTheme.primaryLight.withValues(alpha: 0.18),
+                )
               : null,
           boxShadow: [
             BoxShadow(
@@ -310,7 +312,7 @@ class _FeaturedSlide extends StatelessWidget {
                     Row(
                       children: [
                         _TypeBadge(
-                        label: _labelForType(item.contentType),
+                          label: _labelForType(item.contentType),
                           color: color,
                           contentType: item.contentType,
                           iconOnly: iconOnlyTypeBadge,
@@ -532,7 +534,7 @@ class _FeaturedInfoButton extends StatelessWidget {
         width: 30,
         height: 30,
         decoration: BoxDecoration(
-          color: const Color(0xFF090A10).withValues(alpha: 0.70),
+          color: PulseTheme.surface.withValues(alpha: 0.70),
           shape: BoxShape.circle,
           border: Border.all(
             color: PulseTheme.primaryLight.withValues(alpha: 0.28),
@@ -730,9 +732,7 @@ extension _FeaturedCardEmcBadgeContentItemX on ContentItem {
     }
 
     if (contentType == 'publication') {
-      final parsedCredits = _parsePositiveEmcCredits(
-        publicationEmcCreditsText,
-      );
+      final parsedCredits = _parsePositiveEmcCredits(publicationEmcCreditsText);
       if (parsedCredits != null) return '+$parsedCredits';
     }
 

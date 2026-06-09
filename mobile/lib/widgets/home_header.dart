@@ -59,7 +59,9 @@ class _HomeHeaderState extends State<HomeHeader> {
   @override
   Widget build(BuildContext context) {
     final isCompactMobile = MediaQuery.sizeOf(context).width < 430;
-    final primaryText = widget.darkMode ? Colors.white : PulseTheme.textPrimary;
+    final primaryText = widget.darkMode
+        ? PulseTheme.textPrimary
+        : PulseTheme.textPrimary;
     final secondaryText = widget.darkMode
         ? const Color(0xFFB9C5E4)
         : PulseTheme.textSecondary;
@@ -187,7 +189,7 @@ class _HomeHeaderState extends State<HomeHeader> {
       child: Container(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: widget.darkMode ? const Color(0xFF0B1530) : PulseTheme.surface,
+          color: widget.darkMode ? PulseTheme.surface : PulseTheme.surface,
         ),
         child: ClipOval(
           child: widget.avatarUrl.isNotEmpty
@@ -224,7 +226,9 @@ class _HomeHeaderState extends State<HomeHeader> {
   // â”€â”€ EMC Points Chip â”€â”€
   Widget _buildEmcChip() {
     final isCompactMobile = MediaQuery.sizeOf(context).width < 430;
-    final textColor = widget.darkMode ? Colors.white : PulseTheme.textPrimary;
+    final textColor = widget.darkMode
+        ? PulseTheme.textPrimary
+        : PulseTheme.textPrimary;
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -271,7 +275,9 @@ class _HomeHeaderState extends State<HomeHeader> {
     int badgeCount = 0,
   }) {
     final isCompactMobile = MediaQuery.sizeOf(context).width < 430;
-    final iconColor = widget.darkMode ? Colors.white : PulseTheme.textPrimary;
+    final iconColor = widget.darkMode
+        ? PulseTheme.textPrimary
+        : PulseTheme.textPrimary;
     final buttonSize = isCompactMobile ? 32.0 : 38.0;
     final effectiveIconSize = iconSize == 4
         ? iconSize
@@ -324,7 +330,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                     borderRadius: BorderRadius.circular(999),
                     border: Border.all(
                       color: widget.darkMode
-                          ? const Color(0xFF0B1530)
+                          ? PulseTheme.surface
                           : PulseTheme.surface,
                       width: 1.5,
                     ),
@@ -391,14 +397,18 @@ class _HomeHeaderState extends State<HomeHeader> {
           children: [
             Icon(
               Icons.tune_rounded,
-              color: widget.darkMode ? Colors.white : PulseTheme.textPrimary,
+              color: widget.darkMode
+                  ? PulseTheme.textPrimary
+                  : PulseTheme.textPrimary,
               size: isCompactMobile ? 15 : 17,
             ),
             SizedBox(width: isCompactMobile ? 5 : 7),
             Text(
               'Filtreaz\u0103',
               style: TextStyle(
-                color: widget.darkMode ? Colors.white : PulseTheme.textPrimary,
+                color: widget.darkMode
+                    ? PulseTheme.textPrimary
+                    : PulseTheme.textPrimary,
                 fontSize: isCompactMobile ? 11.5 : 12.5,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.1,

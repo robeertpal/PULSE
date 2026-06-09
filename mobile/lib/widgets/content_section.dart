@@ -108,7 +108,7 @@ class ContentSection extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: darkMode ? Colors.white : null,
+                  color: darkMode ? PulseTheme.textPrimary : null,
                   fontWeight: FontWeight.w900,
                   letterSpacing: -0.4,
                 ),

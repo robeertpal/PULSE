@@ -497,7 +497,7 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: const Color(0xFFFFFFFF),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
               color: PulseTheme.magazineContent.withValues(alpha: 0.3),
@@ -2155,7 +2155,7 @@ class _PublicationIssueDetailScreenState
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [Colors.black, Color(0xFF1E1E1E)],
+                        colors: [Color(0xFFFFFFFF), Color(0xFFF7F2F8)],
                       ),
                     ),
                     child: Row(
@@ -3038,7 +3038,7 @@ class _IssueFallback extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0D1730), Color(0xFF1A2746)],
+          colors: [Color(0xFFFFFFFF), Color(0xFFF7F2F8)],
         ),
       ),
       child: const Center(child: _BookPagesIcon(color: _medicalTeal, size: 36)),

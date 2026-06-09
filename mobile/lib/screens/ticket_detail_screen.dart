@@ -10,9 +10,9 @@ class TicketDetailScreen extends StatelessWidget {
 
   const TicketDetailScreen({super.key, required this.ticket});
 
-  static const Color _black = Color(0xFF050505);
-  static const Color _surface = Color(0xFF101010);
-  static const Color _surfaceSoft = Color(0xFF181818);
+  static const Color _black = Color(0xFFFFFBFE);
+  static const Color _surface = Color(0xFFFFFFFF);
+  static const Color _surfaceSoft = Color(0xFFF7F2F8);
   static const Color _orange = Color(0xFFF97316);
 
   String _formatDate(String? isoDate) {

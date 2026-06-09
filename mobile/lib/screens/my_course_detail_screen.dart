@@ -10,9 +10,9 @@ class MyCourseDetailScreen extends StatelessWidget {
 
   final Map<String, dynamic> course;
 
-  static const Color _black = Color(0xFF050505);
-  static const Color _surface = Color(0xFF101010);
-  static const Color _surfaceSoft = Color(0xFF181818);
+  static const Color _black = Color(0xFFFFFBFE);
+  static const Color _surface = Color(0xFFFFFFFF);
+  static const Color _surfaceSoft = Color(0xFFF7F2F8);
   static const Color _courseColor = PulseTheme.courseContent;
   static const String _courseIcon = 'assets/icons/graduation.svg';
   static const String _calendarIcon = 'assets/icons/calendar.svg';

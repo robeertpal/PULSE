@@ -415,7 +415,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                 : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: _accentColor,
-              foregroundColor: Colors.black,
+              foregroundColor: PulseTheme.textPrimary,
               disabledBackgroundColor: Colors.white.withValues(alpha: 0.1),
               disabledForegroundColor: Colors.white.withValues(alpha: 0.3),
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -614,7 +614,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
           onPressed: _isProcessing ? null : _addCard,
           style: ElevatedButton.styleFrom(
             backgroundColor: _accentColor,
-            foregroundColor: Colors.black,
+            foregroundColor: PulseTheme.textPrimary,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -626,7 +626,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                   height: 20,
                   width: 20,
                   child: CircularProgressIndicator(
-                    color: Colors.black,
+                    color: PulseTheme.textPrimary,
                     strokeWidth: 2,
                   ),
                 )
@@ -829,7 +829,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
           onPressed: _isProcessing ? null : _processPayment,
           style: ElevatedButton.styleFrom(
             backgroundColor: _accentColor,
-            foregroundColor: Colors.black,
+            foregroundColor: PulseTheme.textPrimary,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -841,7 +841,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
                   height: 20,
                   width: 20,
                   child: CircularProgressIndicator(
-                    color: Colors.black,
+                    color: PulseTheme.textPrimary,
                     strokeWidth: 2,
                   ),
                 )
@@ -876,7 +876,7 @@ class _EventPaymentModalState extends State<EventPaymentModal> {
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF101010).withValues(alpha: 0.85),
+              color: PulseTheme.surface.withValues(alpha: 0.95),
               border: Border(
                 top: BorderSide(
                   color: Colors.white.withValues(alpha: 0.1),

@@ -38,12 +38,12 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  static const Color _darkCanvas = Color(0xFF090A10);
-  static const Color _darkCanvasAlt = Color(0xFF111018);
-  static const Color _darkViolet = Color(0xFF1B1017);
-  static const Color _darkSurface = Color(0xFF15131B);
-  static const Color _darkText = Color(0xFFFFFAFC);
-  static const Color _darkMuted = Color(0xFFCFC4D0);
+  static const Color _darkCanvas = Color(0xFFFFFBFE);
+  static const Color _darkCanvasAlt = Color(0xFFF8F2F8);
+  static const Color _darkViolet = Color(0xFFFFF4F8);
+  static const Color _darkSurface = Color(0xFFFFFFFF);
+  static const Color _darkText = Color(0xFF171018);
+  static const Color _darkMuted = Color(0xFF625766);
   static const Color _neonBlue = Color(0xFFFF8A3D);
   static const Color _neonPurple = Color(0xFFFF2D72);
 
@@ -647,7 +647,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildForYouFeedbackMenu(ContentItem item) {
     return PopupMenuButton<String>(
       tooltip: 'Feedback recomandare',
-      color: const Color(0xFF15131B),
+      color: const Color(0xFFFFFFFF),
       elevation: 12,
       offset: const Offset(0, 36),
       shape: RoundedRectangleBorder(

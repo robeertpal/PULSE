@@ -1,18 +1,18 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 class PulseTheme {
   // â”€â”€ Core Palette â”€â”€
   static const Color primary = Color(0xFFFF2D72);
   static const Color primaryLight = Color(0xFFFF8A3D);
   static const Color primaryDark = Color(0xFFC91F55);
-  static const Color background = Color(0xFF090A10);
-  static const Color surface = Color(0xFF15131B);
-  static const Color surfaceElevated = Color(0xFF1E1722);
-  static const Color textPrimary = Color(0xFFFFFAFC);
-  static const Color textSecondary = Color(0xFFCFC4D0);
-  static const Color textTertiary = Color(0xFF8D8090);
-  static const Color border = Color(0xFF342632);
-  static const Color borderLight = Color(0xFF261D27);
+  static const Color background = Color(0xFFFFFBFE);
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color surfaceElevated = Color(0xFFF7F2F8);
+  static const Color textPrimary = Color(0xFF171018);
+  static const Color textSecondary = Color(0xFF625766);
+  static const Color textTertiary = Color(0xFF8A7D8D);
+  static const Color border = Color(0xFFE9DDE8);
+  static const Color borderLight = Color(0xFFF2EAF2);
 
   // â”€â”€ Category Palette â”€â”€
   static const Color magazineContent = Color(0xFFFF5DA2);
@@ -30,11 +30,7 @@ class PulseTheme {
   static const LinearGradient shimmerGradient = LinearGradient(
     begin: Alignment(-1.0, -0.3),
     end: Alignment(1.0, 0.3),
-    colors: [
-      Color(0xFF15131B),
-      Color(0xFF241A22),
-      Color(0xFF15131B),
-    ],
+    colors: [Color(0xFFF7F2F8), Color(0xFFFFFFFF), Color(0xFFF7F2F8)],
     stops: [0.0, 0.5, 1.0],
   );
 
@@ -47,7 +43,7 @@ class PulseTheme {
   // â”€â”€ Shadows â”€â”€
   static List<BoxShadow> get cardShadow => [
     BoxShadow(
-      color: Colors.black.withValues(alpha: 0.28),
+      color: const Color(0xFF5B475C).withValues(alpha: 0.12),
       blurRadius: 22,
       offset: const Offset(0, 12),
       spreadRadius: -12,
@@ -68,7 +64,7 @@ class PulseTheme {
       spreadRadius: 0,
     ),
     BoxShadow(
-      color: Colors.black.withValues(alpha: 0.32),
+      color: const Color(0xFF5B475C).withValues(alpha: 0.12),
       blurRadius: 26,
       offset: const Offset(0, 14),
       spreadRadius: -14,
@@ -95,7 +91,7 @@ class PulseTheme {
     return ThemeData(
       primaryColor: primary,
       scaffoldBackgroundColor: background,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: const ColorScheme.light(
         primary: primaryLight,
         secondary: Color(0xFFFF8A3D),
         surface: surface,
@@ -146,16 +142,8 @@ class PulseTheme {
           fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
-        bodyLarge: TextStyle(
-          color: textPrimary,
-          fontSize: 16,
-          height: 1.5,
-        ),
-        bodyMedium: TextStyle(
-          color: textSecondary,
-          fontSize: 14,
-          height: 1.45,
-        ),
+        bodyLarge: TextStyle(color: textPrimary, fontSize: 16, height: 1.5),
+        bodyMedium: TextStyle(color: textSecondary, fontSize: 14, height: 1.45),
         labelLarge: TextStyle(
           color: textPrimary,
           fontSize: 14,
@@ -174,4 +162,3 @@ class PulseTheme {
     );
   }
 }
-

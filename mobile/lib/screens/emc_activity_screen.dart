@@ -19,8 +19,8 @@ class _EmcActivityScreenState extends State<EmcActivityScreen> {
   static const _publicationIcon = 'assets/icons/book.pages.svg';
   static const _manualIcon = 'assets/icons/signature.svg';
 
-  static const Color _black = Color(0xFF050505);
-  static const Color _surface = Color(0xFF101010);
+  static const Color _black = Color(0xFFFFFBFE);
+  static const Color _surface = Color(0xFFFFFFFF);
   static const Color _pink = Color(0xFFFF4FA3);
   static const Color _orange = Color(0xFFFF8A2A);
   static const LinearGradient _accentGradient = LinearGradient(
@@ -296,10 +296,10 @@ class _GlassCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _EmcActivityScreenState._surface.withValues(alpha: 0.88),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        border: Border.all(color: PulseTheme.border.withValues(alpha: 0.90)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.34),
+            color: const Color(0xFF5B475C).withValues(alpha: 0.12),
             blurRadius: 24,
             offset: const Offset(0, 14),
             spreadRadius: -14,
@@ -321,7 +321,7 @@ class _GlassBackButton extends StatelessWidget {
     return Tooltip(
       message: 'Înapoi',
       child: Material(
-        color: Colors.black.withValues(alpha: 0.34),
+        color: PulseTheme.surfaceElevated,
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
           onTap: onPressed,
@@ -332,7 +332,7 @@ class _GlassBackButton extends StatelessWidget {
             child: Center(
               child: _SvgIcon(
                 _EmcActivityScreenState._backIcon,
-                color: Colors.white,
+                color: PulseTheme.textPrimary,
                 size: 20,
               ),
             ),

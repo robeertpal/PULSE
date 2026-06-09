@@ -108,7 +108,7 @@ class _AuthWelcomeScreenState extends State<AuthWelcomeScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF050B1A),
+      backgroundColor: const Color(0xFFFFFBFE),
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -200,10 +200,10 @@ class _AnimatedWelcomeBackground extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Color(0xFF020617),
-            Color(0xFF050B1A),
-            Color(0xFF090B18),
-            Color(0xFF050B1A),
+            Color(0xFFFFFBFE),
+            Color(0xFFF8F2F8),
+            Color(0xFFFFF4F8),
+            Color(0xFFFFFFFF),
           ],
           stops: [0, 0.42, 0.76, 1],
         ),
@@ -498,7 +498,7 @@ class _ContentPreviewCard extends StatelessWidget {
         width: width,
         height: height,
         decoration: BoxDecoration(
-          color: const Color(0xFF0B1226).withValues(alpha: 0.82),
+          color: const Color(0xFFFFFFFF).withValues(alpha: 0.88),
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: item.accent.withValues(alpha: 0.28)),
           boxShadow: [
@@ -578,7 +578,7 @@ class _ContentPreviewCard extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: Colors.white,
+                              color: PulseTheme.textPrimary,
                               fontSize: width < 200 ? 10.5 : 11,
                               fontWeight: FontWeight.w900,
                               letterSpacing: 0,
@@ -594,7 +594,7 @@ class _ContentPreviewCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: PulseTheme.textPrimary,
                       fontSize: 14.5,
                       height: 1.16,
                       fontWeight: FontWeight.w900,
@@ -624,9 +624,9 @@ class _ContentPreviewImageFallback extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFF111A33),
+            const Color(0xFFFFFFFF),
             accent.withValues(alpha: 0.34),
-            const Color(0xFF070B18),
+            const Color(0xFFF7F2F8),
           ],
         ),
       ),
@@ -707,7 +707,7 @@ class _WelcomeCopy extends StatelessWidget {
         Text(
           'Educație medicală.',
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.96),
+            color: PulseTheme.textPrimary,
             fontSize: 39,
             height: 1.04,
             fontWeight: FontWeight.w900,
@@ -733,7 +733,7 @@ class _WelcomeCopy extends StatelessWidget {
         Text(
           'Articole, reviste, cursuri și evenimente într-o experiență calmă, profesională, creată pentru ritmul tău medical.',
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.72),
+            color: PulseTheme.textSecondary,
             fontSize: 15.5,
             height: 1.5,
             fontWeight: FontWeight.w600,

@@ -239,11 +239,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         icon: _svgIcon(
                           _backIcon,
                           size: 22,
-                          color: Colors.white,
+                          color: AuthShell.textPrimary,
                         ),
-                        color: Colors.white,
+                        color: AuthShell.textPrimary,
                         style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.16),
+                          backgroundColor: AuthShell.warmSurface.withValues(
+                            alpha: 0.88,
+                          ),
                         ),
                       ),
                     ),
