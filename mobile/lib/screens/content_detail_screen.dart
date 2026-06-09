@@ -386,7 +386,7 @@ class _ContentDetailScreenState extends State<ContentDetailScreen> {
       '',
     );
     return message.trim().isEmpty
-        ? 'Serviciul AI nu este disponibil momentan.'
+        ? 'Serviciul AI nu este disponibil momentan. Încearcă din nou mai târziu.'
         : message;
   }
 
