@@ -1471,6 +1471,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildCenteredPulseLogo() {
+    return IgnorePointer(
+      child: Semantics(
+        label: 'PULSE',
+        image: true,
+        child: Image.asset(
+          'assets/images/logo.png',
+          width: 46,
+          height: 30,
+          fit: BoxFit.contain,
+        ),
+      ),
+    );
+  }
+
   Widget _buildStickyHomeHeader() {
     return ClipRRect(
       borderRadius: const BorderRadius.only(
@@ -1505,27 +1520,36 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 7, 14, 2),
-                child: Row(
-                  children: [
-                    _buildHeaderAvatar(),
-                    const Spacer(),
-                    _buildHeaderIconButton(
-                      iconAsset: 'assets/icons/bell.svg',
-                      onTap: _openNotifications,
-                      badgeCount: _unreadNotificationsCount,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildHeaderIconButton(
-                      icon: Icons.tune_rounded,
-                      onTap: _showFilterDropdown,
-                      badgeCount: _activeFilterCount,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildHeaderIconButton(
-                      icon: Icons.more_horiz_rounded,
-                      onTap: _showCompactHomeMenu,
-                    ),
-                  ],
+                child: SizedBox(
+                  height: 36,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      _buildCenteredPulseLogo(),
+                      Row(
+                        children: [
+                          _buildHeaderAvatar(),
+                          const Spacer(),
+                          _buildHeaderIconButton(
+                            iconAsset: 'assets/icons/bell.svg',
+                            onTap: _openNotifications,
+                            badgeCount: _unreadNotificationsCount,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildHeaderIconButton(
+                            icon: Icons.tune_rounded,
+                            onTap: _showFilterDropdown,
+                            badgeCount: _activeFilterCount,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildHeaderIconButton(
+                            icon: Icons.more_horiz_rounded,
+                            onTap: _showCompactHomeMenu,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
               _buildHomeTabSwitch(),
