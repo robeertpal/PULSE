@@ -105,7 +105,8 @@ PULSE/
 ├── .github/
 │   └── workflows/
 │       ├── firebase-hosting-merge.yml
-│       └── firebase-hosting-pull-request.yml
+│       ├── firebase-hosting-pull-request.yml
+│       └── security-ci.yml
 └── README.md
 ```
 
@@ -581,7 +582,7 @@ Dacă se adaugă un domeniu nou pentru frontend sau admin, actualizează `ALLOWE
 - Credentialele Azure Blob Storage aparțin backend-ului.
 - Service account-ul Firebase aparține secretelor GitHub Actions.
 - Variabilele de producție Render trebuie configurate în dashboard-ul Render.
-- Checklist-ul complet de hardening, variabile și setări manuale este în `docs/security-hardening.md`.
+- Verificările automate de securitate sunt documentate în `docs/pipeline_ci_cd.md` și configurate în `.github/workflows/security-ci.yml`.
 
 ---
 

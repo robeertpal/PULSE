@@ -111,7 +111,8 @@ class SecurityTests(unittest.TestCase):
             content_type=main.models.ContentItemType.article,
         )
         with patch("main.get_public_content_item_or_404", lambda db, content_item_id: item):
-            response = client.post("/content-items/1/ai-summary")
+            with patch.object(main, "AI_MAX_INPUT_CHARS", 100):
+                response = client.post("/content-items/1/ai-summary")
 
         self.assertEqual(response.status_code, 413)
 
