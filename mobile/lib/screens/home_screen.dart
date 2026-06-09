@@ -1476,11 +1476,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: Semantics(
         label: 'PULSE',
         image: true,
-        child: Image.asset(
-          'assets/images/logo.png',
-          width: 46,
-          height: 30,
-          fit: BoxFit.contain,
+        child: ShaderMask(
+          blendMode: BlendMode.srcIn,
+          shaderCallback: (bounds) => const LinearGradient(
+            colors: [_neonPurple, _neonBlue],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ).createShader(bounds),
+          child: SvgPicture.asset(
+            'assets/images/logo.svg',
+            width: 54,
+            height: 32,
+            fit: BoxFit.contain,
+            colorFilter: const ColorFilter.mode(
+              Colors.white,
+              BlendMode.srcIn,
+            ),
+          ),
         ),
       ),
     );

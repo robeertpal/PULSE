@@ -873,8 +873,6 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      _HeroLogo(logoUrl: _publicationLogoUrl),
                     ],
                   ),
                   if (_publicationDescription != null) ...[
@@ -900,30 +898,15 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                         _PremiumPill(
                           label:
                               'Publicat ${_formatDate(_publicationPublishedAt)!}',
-                          svgAsset: _calendarIconAsset,
                           color: PulseTheme.magazineContent,
                         ),
                       _PremiumPill(
                         label: _issueCountLabel,
-                        svgAsset: _bookPagesIconAsset,
                         color: PulseTheme.magazineContent,
                       ),
                       if (_hasPdfIssues)
                         _PremiumPill(
                           label: 'PDF disponibil',
-                          svgAsset: _globeIconAsset,
-                          color: PulseTheme.magazineContent,
-                        ),
-                      if (_creditationText != null)
-                        _PremiumPill(
-                          label: _creditationText!,
-                          svgAsset: _checkmarkIconAsset,
-                          color: PulseTheme.magazineContent,
-                        ),
-                      if (_indexingText != null)
-                        _PremiumPill(
-                          label: _indexingText!,
-                          svgAsset: _globeIconAsset,
                           color: PulseTheme.magazineContent,
                         ),
                     ],
@@ -1230,7 +1213,7 @@ class _PublicationIssuesScreenState extends State<PublicationIssuesScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.fromLTRB(0, 34, 0, 34),
                     decoration: const BoxDecoration(
-                      color: Colors.white,
+                      color: PulseTheme.background,
                       borderRadius: BorderRadius.only(
                         topLeft: Radius.circular(36),
                         topRight: Radius.circular(36),
@@ -2476,7 +2459,7 @@ class _PdfPreviewCardState extends State<PdfPreviewCard> {
               child: FilledButton(
                 onPressed: widget.onRead,
                 style: FilledButton.styleFrom(
-                  backgroundColor: PulseTheme.textPrimary,
+                  backgroundColor: PulseTheme.magazineContent,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(vertical: 16),
