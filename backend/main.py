@@ -12,6 +12,7 @@ import html
 import enum
 import hashlib
 import hmac
+import inspect
 from io import BytesIO
 import json
 import logging
@@ -1554,6 +1555,30 @@ def get_public_content_item_or_404(db: Session, content_item_id: int):
     if item is None:
         raise HTTPException(status_code=404, detail="Content item not found")
     return item
+
+
+def get_public_content_item_or_404_for_user(
+    db: Session,
+    content_item_id: int,
+    user_id: int,
+):
+    """Pass authenticated user context when the visibility helper supports it."""
+    try:
+        parameters = inspect.signature(get_public_content_item_or_404).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+
+    supports_user_id = "user_id" in parameters or any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    )
+    if supports_user_id:
+        return get_public_content_item_or_404(
+            db,
+            content_item_id,
+            user_id=user_id,
+        )
+    return get_public_content_item_or_404(db, content_item_id)
 
 
 CONTENT_REPORT_REASONS = {
@@ -5380,7 +5405,7 @@ def save_content(
     user_id: int = Depends(get_current_user_id),
 ):
     require_rate_limit(request, "saved_content_write", "WRITE_RATE_LIMIT_PER_MINUTE", 60)
-    get_public_content_item_or_404(db, content_item_id)
+    get_public_content_item_or_404_for_user(db, content_item_id, user_id)
 
     existing = (
         db.query(models.SavedContent)
