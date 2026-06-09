@@ -84,6 +84,11 @@ class SubscriptionStatus(enum.Enum):
     suspended = "suspended"
 
 
+class SubscriptionPlanScope(enum.Enum):
+    platform = "platform"
+    publication = "publication"
+
+
 class PaymentStatus(enum.Enum):
     pending = "pending"
     paid = "paid"
@@ -736,6 +741,8 @@ class SubscriptionPlan(Base):
     price = Column(Numeric(10, 2), nullable=False)
     currency = Column(String(10), nullable=False, default="RON")
     billing_period = Column(String(20), nullable=False)
+    scope = Column(Enum(SubscriptionPlanScope, name="subscription_plan_scope"), nullable=False, default=SubscriptionPlanScope.platform)
+    publication_id = Column(Integer, ForeignKey("publications.id"), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True))
     updated_at = Column(DateTime(timezone=True))
