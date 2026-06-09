@@ -59,6 +59,7 @@ class _PublicAuthorProfileScreenState extends State<PublicAuthorProfileScreen> {
 
   String get _displayName =>
       _clean(_profile?['display_name']) ??
+      _clean(_profile?['name']) ??
       _clean(_profile?['full_name']) ??
       _clean(widget.initialName) ??
       'Contributor PULSE';
@@ -70,6 +71,7 @@ class _PublicAuthorProfileScreenState extends State<PublicAuthorProfileScreen> {
 
   String? get _role =>
       _clean(_profile?['public_role']) ??
+      _clean(_profile?['role']) ??
       _clean(_profile?['title']) ??
       _clean(_profile?['occupation_name']);
 
@@ -80,15 +82,29 @@ class _PublicAuthorProfileScreenState extends State<PublicAuthorProfileScreen> {
   bool get _isVerified => _profile?['is_verified_contributor'] == true;
 
   int? get _followersCount {
-    final value = _profile?['follower_count'];
+    final value = _profile?['followers_count'] ?? _profile?['follower_count'];
     if (value == null) return null;
     return _asInt(value);
   }
 
-  int get _publishedCount =>
-      _asInt(_profile?['published_content_count'], fallback: _items.length);
+  int get _publishedCount => _asInt(
+    _profile?['published_count'] ?? _profile?['published_content_count'],
+    fallback: _items.length,
+  );
 
-  bool get _canFollowAuthor => widget.authorId != null;
+  String? get _followTargetType {
+    if (widget.contributorUserId != null) return 'contributor';
+    if (widget.authorId != null) return 'author';
+    return null;
+  }
+
+  int? get _followTargetId => widget.contributorUserId ?? widget.authorId;
+
+  bool get _canFollowProfile =>
+      _followTargetType != null && _followTargetId != null;
+
+  String get _followTargetLabel =>
+      _followTargetType == 'contributor' ? 'contributor' : 'autor';
 
   List<String> _stringList(String key) {
     final raw = _profile?[key];
@@ -110,6 +126,12 @@ class _PublicAuthorProfileScreenState extends State<PublicAuthorProfileScreen> {
 
   List<String> get _categories => _stringList('category_names');
 
+  List<String> get _editorialAreas {
+    final explicit = _stringList('editorial_areas');
+    if (explicit.isNotEmpty) return explicit;
+    return [..._specializations, ..._categories].toSet().toList();
+  }
+
   Future<void> _loadProfile() async {
     setState(() {
       _isLoading = true;
@@ -119,17 +141,19 @@ class _PublicAuthorProfileScreenState extends State<PublicAuthorProfileScreen> {
     try {
       final authorId = widget.authorId;
       final contributorUserId = widget.contributorUserId;
-      final profileFuture = authorId != null
-          ? _apiService.getAuthorProfile(authorId)
-          : _apiService.getPublicContributorProfile(contributorUserId!);
-      final contentFuture = authorId != null
-          ? _apiService.getAuthorContent(authorId)
-          : _apiService.getPublicContributorContent(contributorUserId!);
+      final profileFuture = contributorUserId != null
+          ? _apiService.getPublicContributorProfile(contributorUserId)
+          : _apiService.getAuthorProfile(authorId!);
+      final contentFuture = contributorUserId != null
+          ? _apiService.getPublicContributorContent(contributorUserId)
+          : _apiService.getAuthorContent(authorId!);
       final savedFuture = _apiService.getSavedContentIds();
-      final followFuture = authorId != null
+      final followTargetType = _followTargetType;
+      final followTargetId = _followTargetId;
+      final followFuture = followTargetType != null && followTargetId != null
           ? _apiService.getFollowStatus(
-              targetType: 'author',
-              targetId: authorId,
+              targetType: followTargetType,
+              targetId: followTargetId,
             )
           : Future<bool>.value(false);
 
@@ -222,24 +246,36 @@ class _PublicAuthorProfileScreenState extends State<PublicAuthorProfileScreen> {
 
   Future<void> _toggleFollow() async {
     if (_isFollowLoading) return;
-    final authorId = widget.authorId;
-    if (authorId == null) return;
+    final targetType = _followTargetType;
+    final targetId = _followTargetId;
+    if (targetType == null || targetId == null) return;
     final wasFollowing = _isFollowing;
+    final previousFollowersCount = _followersCount;
     setState(() {
       _isFollowing = !wasFollowing;
       _isFollowLoading = true;
+      if (previousFollowersCount != null && _profile != null) {
+        final nextFollowersCount = wasFollowing
+            ? (previousFollowersCount > 0 ? previousFollowersCount - 1 : 0)
+            : previousFollowersCount + 1;
+        _profile = {
+          ..._profile!,
+          'follower_count': nextFollowersCount,
+          'followers_count': nextFollowersCount,
+        };
+      }
     });
 
     try {
       if (wasFollowing) {
         await _apiService.unfollowTarget(
-          targetType: 'author',
-          targetId: authorId,
+          targetType: targetType,
+          targetId: targetId,
         );
       } else {
         await _apiService.followTarget(
-          targetType: 'author',
-          targetId: authorId,
+          targetType: targetType,
+          targetId: targetId,
         );
       }
       if (!mounted) return;
@@ -247,8 +283,8 @@ class _PublicAuthorProfileScreenState extends State<PublicAuthorProfileScreen> {
         SnackBar(
           content: Text(
             wasFollowing
-                ? 'Nu mai urmărești acest contributor.'
-                : 'Urmărești acest contributor.',
+                ? 'Nu mai urmărești acest $_followTargetLabel.'
+                : 'Urmărești acest $_followTargetLabel.',
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -257,6 +293,13 @@ class _PublicAuthorProfileScreenState extends State<PublicAuthorProfileScreen> {
       if (!mounted) return;
       setState(() {
         _isFollowing = wasFollowing;
+        if (previousFollowersCount != null && _profile != null) {
+          _profile = {
+            ..._profile!,
+            'follower_count': previousFollowersCount,
+            'followers_count': previousFollowersCount,
+          };
+        }
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -351,7 +394,7 @@ class _PublicAuthorProfileScreenState extends State<PublicAuthorProfileScreen> {
   }
 
   Widget _buildFollowButton() {
-    if (!_canFollowAuthor) return const SizedBox.shrink();
+    if (!_canFollowProfile) return const SizedBox.shrink();
     return OutlinedButton.icon(
       onPressed: _isFollowLoading ? null : _toggleFollow,
       style: OutlinedButton.styleFrom(
@@ -443,8 +486,9 @@ class _PublicAuthorProfileScreenState extends State<PublicAuthorProfileScreen> {
             const SizedBox(height: 4),
             Text(
               label,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: const TextStyle(
                 color: PulseTheme.textTertiary,
                 fontSize: 11,
@@ -461,7 +505,6 @@ class _PublicAuthorProfileScreenState extends State<PublicAuthorProfileScreen> {
     final bio = _bio;
     final role = _role;
     final chips = [
-      if (role != null) (role, Icons.badge_outlined),
       if (_specializationName != null)
         (_specializationName!, Icons.medical_services_outlined),
       if (_institutionName != null) (_institutionName!, Icons.apartment),
@@ -544,19 +587,24 @@ class _PublicAuthorProfileScreenState extends State<PublicAuthorProfileScreen> {
           const SizedBox(height: 18),
           Row(
             children: [
-              _buildStat('$_publishedCount', 'publicate'),
+              _buildStat(
+                '$_publishedCount',
+                _publishedCount == 1
+                    ? 'contribuție publicată'
+                    : 'contribuții publicate',
+              ),
               if (_followersCount != null) ...[
                 const SizedBox(width: 10),
-                _buildStat('${_followersCount!}', 'urmăritori'),
+                _buildStat(
+                  '${_followersCount!}',
+                  _followersCount == 1 ? 'urmăritor' : 'urmăritori',
+                ),
               ],
               const SizedBox(width: 10),
-              _buildStat(
-                '${_specializations.length + _categories.length}',
-                'arii',
-              ),
+              _buildStat('${_editorialAreas.length}', 'arii editoriale'),
             ],
           ),
-          if (_canFollowAuthor) ...[
+          if (_canFollowProfile) ...[
             const SizedBox(height: 18),
             _buildFollowButton(),
           ],

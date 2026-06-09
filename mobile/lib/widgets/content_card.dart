@@ -235,28 +235,47 @@ class _ContentCardState extends State<ContentCard>
   }
 
   Widget _buildIconPlaceholder() {
-    final backgroundColor = widget.darkMode
-        ? Colors.white.withValues(alpha: 0.08)
-        : widget.categoryColor.withValues(alpha: 0.12);
+    final decoration = widget.darkMode
+        ? BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                widget.categoryColor.withValues(alpha: 0.26),
+                PulseTheme.primary.withValues(alpha: 0.20),
+                Colors.white.withValues(alpha: 0.07),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+            boxShadow: [
+              BoxShadow(
+                color: widget.categoryColor.withValues(alpha: 0.18),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+                spreadRadius: -10,
+              ),
+            ],
+          )
+        : BoxDecoration(
+            color: widget.categoryColor.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(18),
+          );
 
     return Center(
       child: Container(
         width: 56,
         height: 56,
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(18),
-          border: widget.darkMode
-              ? Border.all(color: Colors.white.withValues(alpha: 0.10))
-              : null,
-        ),
+        decoration: decoration,
         child: Center(
           child: SvgPicture.asset(
             widget.iconAsset,
             width: 28,
             height: 28,
             colorFilter: ColorFilter.mode(
-              widget.categoryColor,
+              widget.darkMode
+                  ? Colors.white.withValues(alpha: 0.88)
+                  : widget.categoryColor,
               BlendMode.srcIn,
             ),
           ),
@@ -352,7 +371,9 @@ class _ContentCardState extends State<ContentCard>
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: widget.darkMode ? 0.28 : 0.08),
+              color: Colors.black.withValues(
+                alpha: widget.darkMode ? 0.28 : 0.08,
+              ),
               blurRadius: 12,
               offset: const Offset(0, 6),
               spreadRadius: -6,
@@ -542,7 +563,11 @@ class _ContentCardState extends State<ContentCard>
                         child: EmcBadge(points: widget.emcPoints!),
                       ),
                     Positioned(left: 10, top: 10, child: _buildSaveButton()),
-                    Positioned(right: 10, bottom: 10, child: _buildInfoButton()),
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: _buildInfoButton(),
+                    ),
                   ],
                 ),
               ),

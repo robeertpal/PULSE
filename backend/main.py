@@ -1100,7 +1100,7 @@ class RateLimiter:
         self._events = defaultdict(deque)
 
     def check(self, key: str, limit: int, window_seconds: int):
-        now = datetime.now(timezone.utc).timestamp()
+        now = datetime.utcnow().timestamp()
         events = self._events[key]
         while events and now - events[0] > window_seconds:
             events.popleft()
@@ -2181,15 +2181,42 @@ def serialize_public_contributor_profile(
     occupation_name = profile.occupation.name if profile.occupation else None
     specialization_name = profile.specialization.name if profile.specialization else None
     institution_name = profile.institution.name if profile.institution else None
+    display_name = _profile_public_display_name(profile)
+    public_role = profile.titlu_universitar or occupation_name
+    published_count = len({item.id for item in content_items})
+    followers_count = (
+        db.query(models.Follow)
+        .filter(models.Follow.target_type == "contributor")
+        .filter(models.Follow.target_id == profile.user_id)
+        .count()
+    )
+    editorial_areas = sorted(set(specialization_names + category_names))
+    content_summaries = [
+        {
+            "id": item.id,
+            "title": item.title,
+            "content_type": item.content_type,
+            "short_description": item.short_description,
+            "category_name": item.category.name if item.category else None,
+            "specialization_name": item.specialization.name if item.specialization else None,
+            "published_at": serialize_value(item.published_at),
+            "thumbnail_url": item.thumbnail_url,
+            "hero_image_url": item.hero_image_url,
+        }
+        for item in content_items[:20]
+    ]
 
     return {
         "id": profile.user_id,
         "user_id": profile.user_id,
-        "display_name": _profile_public_display_name(profile),
-        "full_name": _profile_public_display_name(profile),
+        "contributor_user_id": profile.user_id,
+        "display_name": display_name,
+        "name": display_name,
+        "full_name": display_name,
         "photo_url": profile.photo_url,
         "bio": None,
-        "public_role": profile.titlu_universitar or occupation_name,
+        "public_role": public_role,
+        "role": public_role,
         "occupation_name": occupation_name,
         "specialization_name": specialization_name,
         "institution_name": institution_name,
@@ -2197,14 +2224,13 @@ def serialize_public_contributor_profile(
         "verified_contributor_at": serialize_value(profile.verified_contributor_at),
         "specialization_names": specialization_names,
         "category_names": category_names,
-        "content_count": len({item.id for item in content_items}),
-        "published_content_count": len({item.id for item in content_items}),
-        "follower_count": (
-            db.query(models.Follow)
-            .filter(models.Follow.target_type == "contributor")
-            .filter(models.Follow.target_id == profile.user_id)
-            .count()
-        ),
+        "editorial_areas": editorial_areas,
+        "content_count": published_count,
+        "published_content_count": published_count,
+        "published_count": published_count,
+        "follower_count": followers_count,
+        "followers_count": followers_count,
+        "content_items": content_summaries,
     }
 
 
@@ -2460,18 +2486,9 @@ def serialize_partner_profile(db: Session, partner: models.EventPartner):
             if item.event and item.event.start_date and item.event.start_date >= datetime.utcnow()
         ]
     )
-    followers_count = (
-        db.query(models.Follow)
-        .filter(
-            models.Follow.target_type == "partner",
-            models.Follow.target_id == partner.id,
-        )
-        .count()
-    )
     data = serialize_event_partner(partner)
     data["content_count"] = len(unique_content_ids)
     data["upcoming_event_count"] = upcoming_count
-    data["followers_count"] = followers_count
     return data
 
 
@@ -5363,7 +5380,7 @@ def save_content(
     user_id: int = Depends(get_current_user_id),
 ):
     require_rate_limit(request, "saved_content_write", "WRITE_RATE_LIMIT_PER_MINUTE", 60)
-    get_public_content_item_or_404(db, content_item_id, user_id=user_id)
+    get_public_content_item_or_404(db, content_item_id)
 
     existing = (
         db.query(models.SavedContent)
@@ -5376,7 +5393,7 @@ def save_content(
             models.SavedContent(
                 user_id=user_id,
                 content_item_id=content_item_id,
-                saved_at=datetime.now(timezone.utc),
+                saved_at=datetime.utcnow(),
             )
         )
         db.commit()
