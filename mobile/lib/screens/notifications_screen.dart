@@ -3,15 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/api_service.dart';
 import '../services/auth_storage.dart';
-import '../widgets/home_header.dart';
 import '../theme/pulse_theme.dart';
 import '../widgets/emc_badge.dart';
 import 'content_detail_screen.dart';
-import 'login_screen.dart';
 import 'profile_screen.dart';
-import 'saved_content_screen.dart';
-import 'transactions_screen.dart';
-import 'tickets_screen.dart';
 
 enum NotificationType {
   emc,
@@ -269,6 +264,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     await _openProfile();
   }
 
+  Future<void> _openProfile() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ProfileScreen()),
+    );
+  }
+
   Future<void> _markRead(int userNotificationId) async {
     final idx = _allNotifications.indexWhere((n) => n.id == userNotificationId);
     if (idx == -1 || _allNotifications[idx].isRead) return;
@@ -280,49 +282,6 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     } catch (e) {
       debugPrint('Nu am putut marca notificarea citită: $e');
     }
-  }
-
-  Future<void> _openSavedContent() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const SavedContentScreen()),
-    );
-  }
-
-  Future<void> _openTransactions() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const TransactionsScreen()),
-    );
-  }
-
-  Future<void> _openTickets() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const TicketsScreen()),
-    );
-  }
-
-  Future<void> _openProfile() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const ProfileScreen()),
-    );
-  }
-
-  Future<void> _logout() async {
-    try {
-      await _apiService.logout();
-    } catch (e) {
-      debugPrint('Logout request failed: $e');
-    }
-
-    await _authStorage.clearSession();
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
-    );
   }
 
   void _toggleExpand(int id) {
@@ -362,6 +321,21 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
     return Scaffold(
       backgroundColor: PulseTheme.background,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        toolbarHeight: 76,
+        leadingWidth: 72,
+        titleSpacing: 0,
+        centerTitle: false,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 18),
+          child: ProfileBackButton(
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+        ),
+        title: const ProfileGradientHeading('Notificări'),
+      ),
       body: Stack(
         children: [
           // Background ambient elements
@@ -400,61 +374,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             ),
           ),
           SafeArea(
+            top: false,
             bottom: false,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                HomeHeader(
-                  doctorName: _doctorName,
-                  avatarUrl: '',
-                  emcPoints: _emcPoints,
-                  onNotificationsTap: () {},
-                  onSavedTap: _openSavedContent,
-                  onTransactionsTap: _openTransactions,
-                  onTicketsTap: _openTickets,
-                  onProfileTap: _openProfile,
-                  onLogoutTap: _logout,
-                  darkMode: true,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24.0,
-                    vertical: 8.0,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        behavior: HitTestBehavior.opaque,
-                        child: SvgPicture.asset(
-                          'assets/icons/arrow.backward.svg',
-                          width: 18,
-                          height: 18,
-                          colorFilter: const ColorFilter.mode(
-                            PulseTheme.textPrimary,
-                            BlendMode.srcIn,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ShaderMask(
-                        shaderCallback: (bounds) =>
-                            PulseTheme.primaryGradient.createShader(bounds),
-                        child: const Text(
-                          'Notificări',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -1.0,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
                 // Conținutul paginii cu scroll
                 Expanded(
                   child: RefreshIndicator(

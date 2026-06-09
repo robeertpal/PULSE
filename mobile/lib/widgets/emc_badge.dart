@@ -14,7 +14,7 @@ class EmcBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.only(left: 10, right: 14, top: 8, bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.95),
+        color: Colors.black.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(40),
         boxShadow: [
           BoxShadow(
