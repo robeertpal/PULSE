@@ -21,6 +21,12 @@ class ApiService {
   static String get baseUrl => _baseUrl;
 
   final AuthStorage _authStorage = AuthStorage();
+  static const String _genericServiceUnavailableFallback =
+      'Solicitarea nu a putut fi procesată momentan. Te rugăm să încerci din nou.';
+  static const String _emailServiceUnavailableFallback =
+      'Emailul nu a putut fi trimis momentan. Te rugăm să încerci din nou.';
+  static const String _aiServiceUnavailableFallback =
+      'Serviciul AI nu este disponibil momentan. Încearcă din nou mai târziu.';
 
   Future<Map<String, String>> _buildAuthHeaders() async {
     final sessionToken = await _authStorage.getSessionToken();
@@ -88,7 +94,11 @@ class ApiService {
     return 'URL apelat: $url\nStatus code: $statusCode\nBody backend: ${trimmedBody.isEmpty ? '(gol)' : trimmedBody}';
   }
 
-  String _responseErrorMessage(http.Response response, String fallback) {
+  String _responseErrorMessage(
+    http.Response response,
+    String fallback, {
+    String? serviceUnavailableFallback,
+  }) {
     final url = response.request?.url.toString() ?? baseUrl;
     var message = fallback;
     debugPrint(
@@ -109,8 +119,8 @@ class ApiService {
     } catch (_) {
       // Keep the caller's friendly fallback when the backend body is not JSON.
     }
-    if (response.statusCode == 503) {
-      return 'Emailul nu a putut fi trimis momentan. Te rugăm să încerci din nou.';
+    if (response.statusCode == 503 && message == fallback) {
+      return serviceUnavailableFallback ?? _genericServiceUnavailableFallback;
     }
     return message;
   }
@@ -287,7 +297,13 @@ class ApiService {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(_responseErrorMessage(response, 'Verificare eșuată'));
+      throw Exception(
+        _responseErrorMessage(
+          response,
+          'Verificare eșuată',
+          serviceUnavailableFallback: _emailServiceUnavailableFallback,
+        ),
+      );
     }
 
     final decoded = json.decode(response.body);
@@ -312,7 +328,13 @@ class ApiService {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(_responseErrorMessage(response, 'Retrimitere eșuată'));
+      throw Exception(
+        _responseErrorMessage(
+          response,
+          'Retrimitere eșuată',
+          serviceUnavailableFallback: _emailServiceUnavailableFallback,
+        ),
+      );
     }
 
     final decoded = json.decode(response.body);
@@ -340,7 +362,11 @@ class ApiService {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
-        _responseErrorMessage(response, 'Nu am putut trimite codul.'),
+        _responseErrorMessage(
+          response,
+          'Nu am putut trimite codul.',
+          serviceUnavailableFallback: _emailServiceUnavailableFallback,
+        ),
       );
     }
 
@@ -369,7 +395,13 @@ class ApiService {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(_responseErrorMessage(response, 'Verificare eșuată'));
+      throw Exception(
+        _responseErrorMessage(
+          response,
+          'Verificare eșuată',
+          serviceUnavailableFallback: _emailServiceUnavailableFallback,
+        ),
+      );
     }
 
     final decoded = json.decode(response.body);
@@ -402,7 +434,13 @@ class ApiService {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(_responseErrorMessage(response, 'Resetare eșuată'));
+      throw Exception(
+        _responseErrorMessage(
+          response,
+          'Resetare eșuată',
+          serviceUnavailableFallback: _emailServiceUnavailableFallback,
+        ),
+      );
     }
 
     final decoded = json.decode(response.body);
@@ -1954,7 +1992,8 @@ class ApiService {
         throw Exception(
           _responseErrorMessage(
             response,
-            'Serviciul AI nu este disponibil momentan.',
+            _aiServiceUnavailableFallback,
+            serviceUnavailableFallback: _aiServiceUnavailableFallback,
           ),
         );
       }
@@ -1966,7 +2005,7 @@ class ApiService {
 
       final summary = decoded['summary'];
       if (summary is! String || summary.trim().isEmpty) {
-        throw Exception('Serviciul AI nu este disponibil momentan.');
+        throw Exception(_aiServiceUnavailableFallback);
       }
 
       return decoded;
@@ -1993,7 +2032,8 @@ class ApiService {
         throw Exception(
           _responseErrorMessage(
             response,
-            'Rezumatul nu a putut fi generat. Încearcă din nou.',
+            _aiServiceUnavailableFallback,
+            serviceUnavailableFallback: _aiServiceUnavailableFallback,
           ),
         );
       }
@@ -2005,7 +2045,7 @@ class ApiService {
 
       final summary = decoded['summary'];
       if (summary is! String || summary.trim().isEmpty) {
-        throw Exception('Rezumatul nu a putut fi generat. Încearcă din nou.');
+        throw Exception(_aiServiceUnavailableFallback);
       }
 
       return decoded;
