@@ -5,17 +5,13 @@
 <h1 align="center">PULSE</h1>
 
 <p align="center">
-  Platforma medicala digitala MedicHub pentru continut editorial, reviste, stiri, evenimente, cursuri si administrare integrata.
+  Platformă medicală digitală pentru conținut editorial, reviste, știri, evenimente, cursuri și administrare integrată.
 </p>
 
 <p align="center">
-  <strong>Live app:</strong>
-  <a href="https://pulse-medichub.web.app">https://pulse-medichub.web.app</a>
-</p>
-
-<p align="center">
-  <strong>Demo::</strong>
-  <a href="[https://pulse-medichub.web.ap](https://drive.google.com/file/d/1jR6u5zu427KVzr64m0zkq1o9vvNOb6NE/view?usp=sharing)</a>
+  <a href="https://pulse-medichub.web.app"><strong>Live App</strong></a>
+  ·
+  <a href="https://drive.google.com/file/d/1jR6u5zu427KVzr64m0zkq1o9vvNOb6NE/view?usp=sharing"><strong>Demo Video</strong></a>
 </p>
 
 ---
