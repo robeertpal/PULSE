@@ -13,6 +13,11 @@
   <a href="https://pulse-medichub.web.app">https://pulse-medichub.web.app</a>
 </p>
 
+<p align="center">
+  <strong>Demo::</strong>
+  <a href="[https://pulse-medichub.web.ap](https://drive.google.com/file/d/1jR6u5zu427KVzr64m0zkq1o9vvNOb6NE/view?usp=sharing)</a>
+</p>
+
 ---
 
 ## Despre Proiect
